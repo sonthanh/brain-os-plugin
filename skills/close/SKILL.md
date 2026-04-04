@@ -4,14 +4,14 @@ description: "Use when ending the day, wrapping up a work session, or needing to
 ---
 
 ## Vault Location
-The vault is at `/Users/thanhdo/work/brain/`
+**Vault path:** Read from `${CLAUDE_PLUGIN_ROOT}/brain-os.config.md`
 
 # /close -- End of Day Processing
 
 ## Behavior
 When I type `/close`, run end-of-day processing:
 
-1. **Review today's daily note** at `/Users/thanhdo/work/brain/daily/YYYY-MM-DD.md` -- what was planned vs what happened
+1. **Review today's daily note** at `{vault}/daily/YYYY-MM-DD.md` -- what was planned vs what happened
 2. **Extract action items** -- find any unfinished tasks, promises, or follow-ups
 3. **Surface vault connections** -- identify new links between today's work and existing vault files
 4. **Log decisions** -- if any decisions were made today across sessions, ensure they are saved

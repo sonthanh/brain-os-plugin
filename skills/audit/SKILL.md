@@ -9,7 +9,7 @@ Independent verification of self-learn knowledge. Runs 50 fresh questions agains
 
 ## Configuration
 ```yaml
-obsidian_vault: /Users/thanhdo/work/brain/knowledge/raw
+obsidian_vault: "{vault}/knowledge/raw"  # Read {vault} from ${CLAUDE_PLUGIN_ROOT}/brain-os.config.md
 notebooklm_bin: ~/.local/bin/notebooklm
 ```
 
@@ -29,13 +29,13 @@ Stored in `{book_vault}/_validation/audit-flag.json`.
 
 ```bash
 # Run audit
-python3 ${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.py /Users/thanhdo/work/brain/knowledge/raw <optional-fuzzy-name>
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.py {vault}/knowledge/raw <optional-fuzzy-name>
 
 # Check status
-python3 ${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.py /Users/thanhdo/work/brain/knowledge/raw --status
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.py {vault}/knowledge/raw --status
 
 # Set flag
-python3 ${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.py /Users/thanhdo/work/brain/knowledge/raw --set-flag <true|false|manual> <optional-fuzzy-name>
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.py {vault}/knowledge/raw --set-flag <true|false|manual> <optional-fuzzy-name>
 ```
 
 ## How Audit Runs

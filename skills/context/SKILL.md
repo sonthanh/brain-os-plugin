@@ -4,17 +4,17 @@ description: "Use when needing to load full context about the user — identity,
 ---
 
 ## Vault Location
-The vault is at `/Users/thanhdo/work/brain/`
+**Vault path:** Read from `${CLAUDE_PLUGIN_ROOT}/brain-os.config.md`
 
 # /context -- Load Full Context
 
 ## Behavior
 When I type `/context`, load comprehensive context about me:
 
-1. Read ALL files in `/Users/thanhdo/work/brain/context/` to understand who I am, my business, strategy, ICP, brand, team, preferences, and goals
-2. Read the latest 3-5 daily notes from `/Users/thanhdo/work/brain/daily/` to understand my current state
-3. Scan `/Users/thanhdo/work/brain/business/tasks/inbox.md` for pending items
-4. Check `/Users/thanhdo/work/brain/thinking/ideas/` for any active ideas
+1. Read ALL files in `{vault}/context/` to understand who I am, my business, strategy, ICP, brand, team, preferences, and goals
+2. Read the latest 3-5 daily notes from `{vault}/daily/` to understand my current state
+3. Scan `{vault}/business/tasks/inbox.md` for pending items
+4. Check `{vault}/thinking/ideas/` for any active ideas
 5. Summarize what you now know:
    - Who I am and what I do
    - Current priorities and focus areas

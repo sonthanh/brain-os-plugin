@@ -12,7 +12,7 @@ description: "Use when mastering a book's content through autonomous extraction,
 ## Configuration
 
 ```yaml
-obsidian_vault: /Users/thanhdo/work/brain/knowledge/raw
+obsidian_vault: "{vault}/knowledge/raw"  # Read {vault} from ${CLAUDE_PLUGIN_ROOT}/brain-os.config.md
 notebooklm_bin: ~/.local/bin/notebooklm
 scripts_dir: ${CLAUDE_PLUGIN_ROOT}/skills/self-learn/scripts
 ```
@@ -127,9 +127,9 @@ Phase 2 must reach 100% pass at ≥95 before `/ingest` triggers. See `/chain` fo
 
 ### Status — always run the script, never generate manually
 ```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/skills/self-learn/scripts/summary.py /Users/thanhdo/work/brain/knowledge/raw/the-road-less-stupid --status
-python3 ${CLAUDE_PLUGIN_ROOT}/skills/self-learn/scripts/summary.py /Users/thanhdo/work/brain/knowledge/raw/the-road-less-stupid --phase3
-python3 ${CLAUDE_PLUGIN_ROOT}/skills/self-learn/scripts/summary.py /Users/thanhdo/work/brain/knowledge/raw/the-road-less-stupid
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/self-learn/scripts/summary.py {vault}/knowledge/raw/the-road-less-stupid --status
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/self-learn/scripts/summary.py {vault}/knowledge/raw/the-road-less-stupid --phase3
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/self-learn/scripts/summary.py {vault}/knowledge/raw/the-road-less-stupid
 ```
 
 ### Available Books

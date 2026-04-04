@@ -9,7 +9,7 @@ Auto-commit and push all vault changes to git remote. Safe, fast, and descriptiv
 
 ## Configuration
 ```yaml
-vault_path: /Users/thanhdo/work/brain
+vault_path: "{vault}"  # Read {vault} from ${CLAUDE_PLUGIN_ROOT}/brain-os.config.md
 remote: origin
 branch: main
 ```
@@ -17,7 +17,7 @@ branch: main
 ## Behavior
 
 ### `/sync` — Full sync
-1. `cd /Users/thanhdo/work/brain`
+1. `cd {vault}`
 2. Run `git status` to see what changed
 3. If no changes: report "Nothing to sync" and exit
 4. Stage all changes: `git add -A` (`.gitignore` protects `private/`)
@@ -43,11 +43,11 @@ branch: main
 
 ### For full sync:
 ```bash
-cd /Users/thanhdo/work/brain && git add -A && git status
+cd {vault} && git add -A && git status
 ```
 Then generate commit message based on output, then:
 ```bash
-cd /Users/thanhdo/work/brain && git commit -m "$(cat <<'EOF'
+cd {vault} && git commit -m "$(cat <<'EOF'
 <generated message>
 
 Co-Authored-By: Claude <noreply@anthropic.com>
@@ -57,7 +57,7 @@ EOF
 
 ### For status only:
 ```bash
-cd /Users/thanhdo/work/brain && git status && git diff --stat
+cd {vault} && git status && git diff --stat
 ```
 
 ## Commit Message Format

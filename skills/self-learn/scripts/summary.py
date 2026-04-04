@@ -3,7 +3,7 @@
 
 Usage:
   python3 summary.py <vault_path>
-  python3 summary.py /Users/thanhdo/work/brain/knowledge/raw/the-road-less-stupid
+  python3 summary.py <vault_path>/knowledge/raw/<book-slug>
   python3 summary.py <vault_path> --phase3   # Phase 3 only
   python3 summary.py <vault_path> --status   # Quick status
 """

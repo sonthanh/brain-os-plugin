@@ -4,15 +4,15 @@ description: "Use when ideas in daily notes or agent-output have matured enough 
 ---
 
 ## Vault Location
-The vault is at `/Users/thanhdo/work/brain/`
+**Vault path:** Read from `${CLAUDE_PLUGIN_ROOT}/brain-os.config.md`
 
 # /graduate
 
 ## Behavior
 When I type `/graduate`, extract ideas from daily notes and agent-output that deserve standalone files:
 
-1. **Scan recent daily notes** (last 7-14 days) from `/Users/thanhdo/work/brain/daily/` for ideas, insights, and tagged items (#idea, #pattern, #insight)
-2. **Scan `/Users/thanhdo/work/brain/thinking/agent-output/`** for analysis that should be promoted
+1. **Scan recent daily notes** (last 7-14 days) from `{vault}/daily/` for ideas, insights, and tagged items (#idea, #pattern, #insight)
+2. **Scan `{vault}/thinking/agent-output/`** for analysis that should be promoted
 3. **Cross-reference with existing vault** -- does this idea already have a standalone note?
 4. **Present candidates** for graduation:
    - What the idea is

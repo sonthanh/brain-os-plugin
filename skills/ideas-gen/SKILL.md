@@ -4,7 +4,7 @@ description: "Use when wanting to brainstorm or generate new ideas by scanning a
 ---
 
 ## Vault Location
-The vault is at `/Users/thanhdo/work/brain/`
+**Vault path:** Read from `${CLAUDE_PLUGIN_ROOT}/brain-os.config.md`
 
 # /ideas
 
@@ -12,8 +12,8 @@ The vault is at `/Users/thanhdo/work/brain/`
 When I type `/ideas`, run a comprehensive idea generation:
 
 1. **Gather vault structure** -- understand all files, connections, orphans, dead ends
-2. **Read context files** -- `/Users/thanhdo/work/brain/context/`, recent `/Users/thanhdo/work/brain/daily/`, active `/Users/thanhdo/work/brain/business/projects/`
-3. **Scan thinking zone** -- `/Users/thanhdo/work/brain/thinking/ideas/`, `/Users/thanhdo/work/brain/thinking/patterns/`, `/Users/thanhdo/work/brain/thinking/connections/`
+2. **Read context files** -- `{vault}/context/`, recent `{vault}/daily/`, active `{vault}/business/projects/`
+3. **Scan thinking zone** -- `{vault}/thinking/ideas/`, `{vault}/thinking/patterns/`, `{vault}/thinking/connections/`
 4. **Cross-domain analysis** -- find patterns across different areas of the vault
 5. **Generate ideas** organized by category:
    - Tools to build
@@ -27,4 +27,4 @@ When I type `/ideas`, run a comprehensive idea generation:
 ## Format
 
 
-Write the full report to `/Users/thanhdo/work/brain/thinking/agent-output/YYYY-MM-DD-ideas.md`
+Write the full report to `{vault}/thinking/agent-output/YYYY-MM-DD-ideas.md`

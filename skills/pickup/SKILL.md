@@ -9,7 +9,7 @@ description: "Use when starting a new session and wanting to resume unfinished w
 
 ### `/pickup` — Auto-find and resume unfinished work
 
-1. **Scan backlog** — read `/Users/thanhdo/work/brain/business/tasks/inbox.md`
+1. **Scan backlog** — read `{vault}/business/tasks/inbox.md`
 2. **Find unchecked handover tasks** — lines matching `- [ ] [Handover]`
 3. **If one task**: load its handover doc and start
 4. **If multiple tasks**: show list, ask user which one to pick up

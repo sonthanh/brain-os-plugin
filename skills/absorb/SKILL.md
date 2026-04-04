@@ -4,19 +4,19 @@ description: "Use when extracting deep insights from a book and connecting them 
 ---
 
 ## Pre-Absorb Check
-Run: `python3 ${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.py /Users/thanhdo/work/brain/knowledge/raw --status`
+Run: `python3 ${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.py {vault}/knowledge/raw --status`
 - ❌ (false): BLOCK — "Run /audit first before absorbing."
 - 👁️ (manual): Run WITH approval prompt — show each proposal, ask "Approve? (all / pick numbers / skip)"
 - ✅ (true): Run autonomously, bypass approval.
 
 ## Vault Location
-`/Users/thanhdo/work/brain/`
+**Vault path:** Read from `${CLAUDE_PLUGIN_ROOT}/brain-os.config.md`
 
 ## Behavior
 
 ### If `/absorb [book-name]` — Deep dive on one book
-1. **Read the book note** from `/Users/thanhdo/work/brain/knowledge/books/[book].md`
-2. **Read your current context** — `/Users/thanhdo/work/brain/context/strategy.md`, `/Users/thanhdo/work/brain/context/goals.md`, `/Users/thanhdo/work/brain/context/business.md`
+1. **Read the book note** from `{vault}/knowledge/books/[book].md`
+2. **Read your current context** — `{vault}/context/strategy.md`, `{vault}/context/goals.md`, `{vault}/context/business.md`
 3. **Cross-reference** book insights against your actual situation
 4. **Generate absorption report** with 3 sections:
 
@@ -31,7 +31,7 @@ Run: `python3 ${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.py /Users/thanhdo
 
 #### Section 3: Thinking Seeds
 - What new ideas does this book seed?
-- What existing ideas in `/Users/thanhdo/work/brain/thinking/ideas/` does this reinforce or challenge?
+- What existing ideas in `{vault}/thinking/ideas/` does this reinforce or challenge?
 - What connections to other books or knowledge emerge?
 
 5. **Propose vault updates**:
@@ -48,8 +48,8 @@ Run: `python3 ${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.py /Users/thanhdo
    - Common threads across your reading
    - Contradictions between authors
    - The strongest actionable insights (backed by multiple sources)
-   - Suggested `/Users/thanhdo/work/brain/thinking/patterns/` entries for recurring themes
-5. **Save report** to `/Users/thanhdo/work/brain/thinking/agent-output/YYYY-MM-DD-absorption-synthesis.md`
+   - Suggested `{vault}/thinking/patterns/` entries for recurring themes
+5. **Save report** to `{vault}/thinking/agent-output/YYYY-MM-DD-absorption-synthesis.md`
 
 ## Output Format (Single Book)
 

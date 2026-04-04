@@ -4,7 +4,7 @@ description: "Use when wanting to find connections, bridges, or shared patterns 
 ---
 
 ## Vault Location
-The vault is at `/Users/thanhdo/work/brain/`
+**Vault path:** Read from `${CLAUDE_PLUGIN_ROOT}/brain-os.config.md`
 
 # /connect [domain1] [domain2]
 
@@ -20,4 +20,4 @@ When I type `/connect [domain1] [domain2]`, find connections between two domains
 ## Format
 
 
-Write the connection analysis to `/Users/thanhdo/work/brain/thinking/agent-output/YYYY-MM-DD-connect-[d1]-[d2].md`
+Write the connection analysis to `{vault}/thinking/agent-output/YYYY-MM-DD-connect-[d1]-[d2].md`

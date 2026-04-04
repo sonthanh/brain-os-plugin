@@ -50,7 +50,7 @@ Run the `/ingest` skill on the book's raw notes folder.
 
 ### Step 3: Audit
 ```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.py /Users/thanhdo/work/brain/knowledge/raw --status
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.py {vault}/knowledge/raw --status
 ```
 If flag is `false`, run `/audit` with 50 fresh questions.
 If flag is already `true` (from self-learn validation), proceed.

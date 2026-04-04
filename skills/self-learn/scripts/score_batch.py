@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """Score agent answers vs NLM answers. Outputs JSONL with scores."""
 
-import json, os, re
+import json, os, re, sys
 
-base = '/Users/thanhdo/work/brain/knowledge/raw/the-road-less-stupid'
+base = os.environ.get('VAULT_PATH', os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+base = os.path.join(base, 'knowledge', 'raw', 'the-road-less-stupid') if 'knowledge' not in base else base
+# Override: pass vault path as first CLI arg, e.g. python3 score_batch.py /path/to/book-vault
+if len(sys.argv) > 1:
+    base = sys.argv[1]
 
 # Load notes
 notes = {}

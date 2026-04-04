@@ -12,8 +12,8 @@ Creates a handover document and writes a task to the vault backlog. The next ses
 ### `/handover` — Save session state + create backlog task
 
 1. **Scan the current session** — what was discussed, decided, built, still pending
-2. **Create handover file** at `/Users/thanhdo/work/brain/daily/handovers/YYYY-MM-DD-topic.md`
-3. **Write a task to backlog** at `/Users/thanhdo/work/brain/business/tasks/inbox.md`:
+2. **Create handover file** at `{vault}/daily/handovers/YYYY-MM-DD-topic.md`
+3. **Write a task to backlog** at `{vault}/business/tasks/inbox.md`:
    ```
    - [ ] [Handover] Topic description → [[daily/handovers/YYYY-MM-DD-topic]] (status: ready-to-continue)
    ```

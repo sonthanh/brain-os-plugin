@@ -4,7 +4,7 @@ description: "Use when wanting to track how an idea, belief, or interest evolved
 ---
 
 ## Vault Location
-The vault is at `/Users/thanhdo/work/brain/`
+**Vault path:** Read from `${CLAUDE_PLUGIN_ROOT}/brain-os.config.md`
 
 # /trace [topic]
 
@@ -20,4 +20,4 @@ When I type `/trace [topic]`, track how this idea evolved over time:
 ## Format
 
 
-Write the trace to `/Users/thanhdo/work/brain/thinking/agent-output/YYYY-MM-DD-trace-[topic].md`
+Write the trace to `{vault}/thinking/agent-output/YYYY-MM-DD-trace-[topic].md`

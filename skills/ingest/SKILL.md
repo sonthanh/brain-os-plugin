@@ -4,12 +4,12 @@ description: "Use when processing raw knowledge input (book notes, highlights, r
 ---
 
 ## Vault Location
-`/Users/thanhdo/work/brain/`
+**Vault path:** Read from `${CLAUDE_PLUGIN_ROOT}/brain-os.config.md`
 
 ## Behavior
 
 ### If `/ingest` (no argument) — Process all raw files
-1. **Scan `/Users/thanhdo/work/brain/knowledge/raw/`** for unprocessed files
+1. **Scan `{vault}/knowledge/raw/`** for unprocessed files
 2. For each file, determine the source type (book, article, podcast, course)
 3. Process each one (see processing steps below)
 4. After processing, add `processed: true` to the raw file's frontmatter
@@ -27,12 +27,12 @@ description: "Use when processing raw knowledge input (book notes, highlights, r
 3. **Extract actionable insights**: things I can apply to my life/business
 4. **Extract memorable quotes**: max 3-5 short quotes (under 15 words each)
 5. **Identify vault connections**: which existing vault files relate to this content?
-6. **Create or update** the book note at `/Users/thanhdo/work/brain/knowledge/books/[book-slug].md` using the Book Note Template below
-7. **Update `/Users/thanhdo/work/brain/knowledge/books/_index.md`** — add/update the book entry
+6. **Create or update** the book note at `{vault}/knowledge/books/[book-slug].md` using the Book Note Template below
+7. **Update `{vault}/knowledge/books/_index.md`** — add/update the book entry
 8. **Create wiki-links** to related vault files
 
 ### For Articles/Podcasts/Courses:
-Same process, saved to respective `/Users/thanhdo/work/brain/knowledge/[type]/` folder.
+Same process, saved to respective `{vault}/knowledge/[type]/` folder.
 
 ## Book Note Template
 

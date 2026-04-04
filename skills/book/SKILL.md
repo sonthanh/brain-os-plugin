@@ -4,7 +4,7 @@ description: "Use when capturing book knowledge through conversation, without ra
 ---
 
 ## Vault Location
-`/Users/thanhdo/work/brain/`
+**Vault path:** Read from `${CLAUDE_PLUGIN_ROOT}/brain-os.config.md`
 
 ## Behavior
 
@@ -39,8 +39,8 @@ Ask focused questions one at a time. Adapt based on the book type:
 ### Phase 3: Build the Note
 1. From our conversation, construct the full book note using the template from `/ingest`
 2. Show me the draft before saving
-3. After approval, save to `/Users/thanhdo/work/brain/knowledge/books/[book-slug].md`
-4. Update `/Users/thanhdo/work/brain/knowledge/books/_index.md`
+3. After approval, save to `{vault}/knowledge/books/[book-slug].md`
+4. Update `{vault}/knowledge/books/_index.md`
 5. Ask: "Want me to run `/absorb [book]` to connect these insights to your vault?"
 
 ## Conversation Rules
