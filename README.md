@@ -2,6 +2,8 @@
 
 A Claude Code plugin for managing a second brain powered by Obsidian. 25 skills for knowledge management, deep thinking, and vault operations.
 
+**[Subscribe on Substack](https://thanhdo.substack.com/)** for detailed walkthroughs on building this plugin, the self-learn pipeline, and how to build your own second brain with Claude Code.
+
 ## Quick Start
 
 ### 1. Clone
