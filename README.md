@@ -101,7 +101,6 @@ your-vault/
 | Skill | Description |
 |-------|-------------|
 | **eval** | Run eval checks on skills to catch regressions |
-| **writing-skills** | Guide for creating and testing new skills (from [superpowers](https://github.com/obra/superpowers)) |
 
 ## Dependencies
 
@@ -149,35 +148,37 @@ Add to `~/.claude/settings.json`:
 
 ### Layer 2: Eval checks (on-demand)
 
-Pipeline skills have `eval.md` files with grep-based assertions:
+Pipeline skills have `evals/evals.json` following the [Agent Skills](https://agentskills.io/skill-creation/evaluating-skills) standard:
 
 ```
 /eval self-learn
-
-Self-Learn Eval (7 checks)
-  ✓ Q1: Autoresearch Architecture
-  ✓ Q2: NotebookLM Setup
-  ✓ Q3: Question Distribution
-  ✓ Q4: Script References
-  ✓ Q5: Stopping Condition
-  ✓ Q6: Phase Structure
-  ✓ Q7: Note Template
-7/7 passed
 ```
 
 ### Adding evals to your skill
 
-Create `eval.md` in your skill directory:
+Create `evals/evals.json` in your skill directory following the [standard schema](https://agentskills.io/skill-creation/evaluating-skills):
 
-```markdown
-## Q1: Descriptive Name
-type: grep
-patterns:
-  - "pattern to find"
-  - "another pattern"
-pass: all patterns found
-why: Explain why this matters
+```json
+{
+  "skill_name": "my-skill",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "User task to test",
+      "expected_output": "What success looks like",
+      "expectations": ["Verifiable assertion 1", "Verifiable assertion 2"]
+    }
+  ]
+}
 ```
+
+### Creating and improving skills
+
+Use the official tooling:
+- **`/grill-me`** — stress-test your skill design before building
+- **`/skill-creator`** — create, evaluate, and iterate on skills with structured evals
+- **[Agent Skills spec](https://agentskills.io/specification)** — the open format standard
+- **[Best practices](https://agentskills.io/skill-creation/best-practices)** — official skill creation guide
 
 ## Updating
 

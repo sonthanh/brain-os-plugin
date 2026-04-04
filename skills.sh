@@ -20,7 +20,6 @@ ALL_SKILLS=(
   absorb audit book chain challenge close connect context
   drift emerge eval ghost graduate handover ideas-gen ingest
   personal pickup self-learn sync think today trace work
-  writing-skills
 )
 
 clone_or_update() {
