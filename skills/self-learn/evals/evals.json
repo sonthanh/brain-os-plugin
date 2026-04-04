@@ -1,0 +1,82 @@
+{
+  "skill_name": "self-learn",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Explain the Phase 2 validation architecture. What are the independent roles and what information barrier rules apply?",
+      "expected_output": "Lists 4 roles with clear information barriers between them",
+      "expectations": [
+        "Mentions Question Generator that creates questions without seeing answers",
+        "Mentions Knowledge Agent that answers ONLY from Obsidian notes",
+        "Mentions Oracle/NotebookLM that answers from full book",
+        "Mentions Judge that scores without knowing which answer is agent vs oracle",
+        "Describes information barriers preventing knowledge leaking between roles"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "What CLI commands are needed to interact with NotebookLM in this skill?",
+      "expected_output": "Two commands: notebooklm use and notebooklm ask",
+      "expectations": [
+        "Mentions notebooklm use {notebook_id} to set the active notebook",
+        "Mentions notebooklm ask to query questions",
+        "Shows the correct order: use first, then ask"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "How are Phase 2 validation questions distributed across types? What's the total count formula?",
+      "expected_output": "50/30/20 split with max(100, topics*3) formula",
+      "expectations": [
+        "States 50% topic-based questions",
+        "States 30% blind/cross-cutting questions",
+        "States 20% adversarial questions",
+        "Mentions total formula: max(100, num_topics * 3)"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "What Python scripts does this skill use? List each one and its purpose.",
+      "expected_output": "Lists all 5+ scripts with their roles",
+      "expectations": [
+        "Mentions epub_parser.py for parsing epub files",
+        "Mentions note_writer.py for writing Obsidian notes",
+        "Mentions question_gen.py for generating validation questions",
+        "Mentions judge.py for scoring similarity",
+        "Mentions summary.py for status and reporting"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "When does Phase 2 validation stop? What is the quality threshold?",
+      "expected_output": "100% pass rate at ≥95, wrong concepts are catastrophic",
+      "expectations": [
+        "States 100% pass rate requirement",
+        "States ≥95 score threshold",
+        "States that wrong concepts are catastrophic",
+        "Prioritizes fixing conceptual errors before missing details"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "What is the note template format for Phase 1 extraction?",
+      "expected_output": "Markdown template with frontmatter and sections",
+      "expectations": [
+        "Includes source, author, chapter in frontmatter",
+        "Has Key Insight section",
+        "Has Related section with wikilinks",
+        "Notes are ~100 words each"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "What happens after all 3 phases complete?",
+      "expected_output": "Pipeline continues with ingest, audit, absorb, sync",
+      "expectations": [
+        "Mentions /ingest as next step",
+        "Mentions /audit follows ingest",
+        "Mentions Phase 2 must reach 100% pass at ≥95 before /ingest triggers"
+      ]
+    }
+  ]
+}

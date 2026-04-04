@@ -5,83 +5,75 @@ description: "Use when testing skill correctness after editing, or wanting to ve
 
 # Skill Eval
 
-Run eval checks against brain-os skills to catch regressions.
+Run eval checks against brain-os skills to catch regressions. Uses the standard `evals/evals.json` format from the skill-creator framework.
 
 ## Usage
 
 ```
-/eval                    # Quick summary: which skills have eval.md, last results
+/eval                    # List which skills have evals
 /eval self-learn         # Run eval on specific skill
-/eval --all              # Run eval on all skills that have eval.md
+/eval --all              # Run eval on all skills with evals/evals.json
 ```
 
 ## How It Works
 
-1. Find `eval.md` in the target skill directory
-2. Parse each `## Q` section for `type`, `patterns`, and `pass` criteria
-3. Run grep checks against the skill's `SKILL.md`
+1. Find `evals/evals.json` in the target skill directory
+2. For each eval entry, read the `prompt` and `expectations`
+3. Read the skill's `SKILL.md` and check each expectation against its content
 4. Report results in unit-test style
-
-## Eval Runner Logic
-
-For each question in `eval.md`:
-
-```
-Read the ## Q section
-Extract patterns list
-For each pattern:
-  grep -qiF "$pattern" SKILL.md → found/not found
-Check pass criteria:
-  "all patterns found" → every pattern must match
-  "at least one pattern found" → any pattern must match
-Report ✓ or ✗ with the question title
-```
 
 ## Output Format
 
 ```
-Self-Learn Eval (7 checks)
-  ✓ Q1: Autoresearch Architecture
-  ✓ Q2: NotebookLM Setup
-  ✗ Q3: Question Distribution — missing: "30%"
-  ✓ Q4: Script References
-  ✓ Q5: Stopping Condition
-  ✓ Q6: Phase Structure
-  ✓ Q7: Note Template
+self-learn (7 evals)
+  ✓ #1 Phase 2 validation architecture
+  ✓ #2 NotebookLM CLI commands
+  ✗ #3 Question distribution — FAILED: "States 30% blind/cross-cutting questions"
+  ✓ #4 Script references
+  ✓ #5 Quality threshold
+  ✓ #6 Note template format
+  ✓ #7 Post-completion pipeline
 
 6/7 passed. 1 FAILED.
+```
+
+## evals.json Format
+
+Standard schema from skill-creator. Located at `evals/evals.json` inside each skill directory:
+
+```json
+{
+  "skill_name": "self-learn",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Explain the Phase 2 validation architecture",
+      "expected_output": "Lists 4 roles with information barriers",
+      "expectations": [
+        "Mentions Question Generator that creates questions without seeing answers",
+        "Mentions Knowledge Agent that answers ONLY from Obsidian notes",
+        "Describes information barriers preventing knowledge leaking"
+      ]
+    }
+  ]
+}
 ```
 
 ## Implementation
 
 When `/eval <skill-name>` is invoked:
 
-1. Read `${CLAUDE_PLUGIN_ROOT}/skills/<skill-name>/eval.md`
-2. If no eval.md: report "No eval.md found for <skill-name>"
+1. Read `${CLAUDE_PLUGIN_ROOT}/skills/<skill-name>/evals/evals.json`
+2. If not found: report "No evals found for <skill-name>"
 3. Read `${CLAUDE_PLUGIN_ROOT}/skills/<skill-name>/SKILL.md`
-4. For each `## Q` block, parse and run grep checks
-5. Print results with ✓/✗ per check
-6. Print summary: `X/Y passed`
+4. For each eval, check each expectation against SKILL.md content
+5. Print ✓/✗ per eval with summary
 
 When `/eval --all`:
-1. Scan all skill dirs for eval.md
+1. Scan all skill dirs for `evals/evals.json`
 2. Run eval on each
 3. Print combined summary
 
 ## Adding Evals to a Skill
 
-Create `eval.md` in the skill directory:
-
-```markdown
-## Q1: Descriptive Name
-type: grep
-patterns:
-  - "pattern one"
-  - "pattern two"
-pass: all patterns found
-why: Explain why these patterns matter
-```
-
-Supported pass criteria:
-- `all patterns found` — every pattern must exist in SKILL.md
-- `at least one pattern found` — any pattern must exist
+Create `evals/evals.json` in your skill directory following the schema above. Each eval should test a critical aspect of the skill that would break if removed.

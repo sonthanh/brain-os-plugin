@@ -1,0 +1,32 @@
+{
+  "skill_name": "ingest",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "What are the input and output paths for the ingest skill?",
+      "expected_output": "Reads from knowledge/raw, writes to knowledge/books",
+      "expectations": [
+        "Mentions {vault}/knowledge/raw as input source",
+        "Mentions {vault}/knowledge/books as output destination",
+        "Mentions _index.md for tracking processed books"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "What is the structure of the book note template?",
+      "expected_output": "Structured markdown with key sections",
+      "expectations": [
+        "Has a template with Key Insights or Frameworks section",
+        "Includes frontmatter with book metadata"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "How does ingest track which books have been processed?",
+      "expected_output": "Uses processed flag or index file",
+      "expectations": [
+        "Mentions a mechanism to avoid re-processing (index or processed flag)"
+      ]
+    }
+  ]
+}

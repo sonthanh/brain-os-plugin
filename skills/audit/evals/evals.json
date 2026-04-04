@@ -1,0 +1,38 @@
+{
+  "skill_name": "audit",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Explain the 3-state audit flag system. What does each state mean for /think and /absorb?",
+      "expected_output": "Describes true/false/manual flags with their effects on other skills",
+      "expectations": [
+        "Describes true flag: verified, no warning on /think, auto-absorb",
+        "Describes false flag: unverified, warning on /think, blocked on /absorb",
+        "Describes manual flag: re-review, warning on /think, approval prompt on /absorb",
+        "Mentions audit-flag.json as storage location"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "What are the 3 modes of the audit.py script? Show the commands.",
+      "expected_output": "Run audit, check status, set flag — with script commands",
+      "expectations": [
+        "Shows audit.py command for running an audit",
+        "Shows --status flag for checking audit status",
+        "Shows --set-flag for changing the flag",
+        "Mentions fuzzy name matching for book selection"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "How does the audit generate and evaluate questions?",
+      "expected_output": "50 fresh questions across 3 types, scored at ≥95",
+      "expectations": [
+        "States 50 fresh questions (not reused from self-learn)",
+        "Mentions topic-based, cross-cutting, and adversarial question types",
+        "Mentions ≥95 scoring threshold",
+        "States 100% pass leads to audited: true, any fail to audited: false"
+      ]
+    }
+  ]
+}
