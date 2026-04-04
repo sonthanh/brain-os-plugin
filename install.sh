@@ -9,7 +9,7 @@
 #   ./install.sh --force             # Replace real directories with symlinks
 #
 # Full plugin mode (alternative):
-#   cc --plugin-dir ~/work/brain/plugins/brain-os
+#   cc --plugin-dir ~/work/brain-os-plugin
 
 set -euo pipefail
 
