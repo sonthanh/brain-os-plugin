@@ -6,27 +6,34 @@ A Claude Code plugin for managing a second brain powered by Obsidian. 25 skills 
 
 ## Installation
 
-### Claude Code (via Marketplace)
+### All skills (one line)
+
+```bash
+curl -sSL https://raw.githubusercontent.com/sonthanh/brain-os-plugin/main/skills.sh | bash
+```
+
+### Pick specific skills
+
+```bash
+curl -sSL https://raw.githubusercontent.com/sonthanh/brain-os-plugin/main/skills.sh | bash -s self-learn audit today
+```
+
+### Via Claude Code Marketplace
 
 ```bash
 /plugin marketplace add sonthanh/brain-os-marketplace
 /plugin install brain-os@brain-os-marketplace
 ```
 
-### Individual Skills Only
+### Uninstall
 
 ```bash
-git clone https://github.com/sonthanh/brain-os-plugin.git ~/brain-os-plugin
-cd ~/brain-os-plugin
-./install.sh                           # install all skills
-./install.sh self-learn audit today    # or pick specific ones
-./install.sh --list                    # see available skills
-./install.sh --uninstall               # remove all
+curl -sSL https://raw.githubusercontent.com/sonthanh/brain-os-plugin/main/skills.sh | bash -s -- --uninstall
 ```
 
 ### After Install
 
-Edit `brain-os.config.md` in the plugin directory and set your vault path:
+Edit `~/.brain-os/brain-os.config.md` and set your vault path:
 
 ```
 vault_path: /path/to/your/obsidian/vault
