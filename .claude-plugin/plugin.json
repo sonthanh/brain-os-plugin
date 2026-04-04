@@ -1,0 +1,15 @@
+{
+  "name": "brain-os",
+  "version": "1.0.0",
+  "description": "Second Brain Operating System — 23 skills for knowledge management, deep thinking, and vault operations powered by Obsidian.",
+  "author": {
+    "name": "Thanh Do"
+  },
+  "keywords": [
+    "second-brain",
+    "obsidian",
+    "knowledge-management",
+    "self-learn",
+    "thinking"
+  ]
+}
