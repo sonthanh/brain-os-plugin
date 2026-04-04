@@ -4,82 +4,37 @@ A Claude Code plugin for managing a second brain powered by Obsidian. 25 skills 
 
 **[Subscribe on Substack](https://thanhdo.substack.com/)** for detailed walkthroughs on building this plugin, the self-learn pipeline, and how to build your own second brain with Claude Code.
 
-## Quick Start
+## Installation
 
-### 1. Clone
+### Claude Code (via Marketplace)
 
 ```bash
-git clone https://github.com/sonthanh/brain-os-plugin.git ~/work/brain-os-plugin
+/plugin marketplace add sonthanh/brain-os-marketplace
+/plugin install brain-os@brain-os-marketplace
 ```
 
-### 2. Configure vault path
+### Individual Skills Only
 
-Edit `brain-os.config.md` and set your Obsidian vault location:
+```bash
+git clone https://github.com/sonthanh/brain-os-plugin.git ~/brain-os-plugin
+cd ~/brain-os-plugin
+./install.sh                           # install all skills
+./install.sh self-learn audit today    # or pick specific ones
+./install.sh --list                    # see available skills
+./install.sh --uninstall               # remove all
+```
+
+### After Install
+
+Edit `brain-os.config.md` in the plugin directory and set your vault path:
 
 ```
 vault_path: /path/to/your/obsidian/vault
 ```
 
-### 3. Install
-
-**Option A: Full plugin** (all 25 skills, auto-discovered by Claude Code)
-
-```bash
-# Create local marketplace and symlink
-mkdir -p ~/.claude/plugins/marketplaces/local/plugins
-ln -s ~/work/brain-os-plugin ~/.claude/plugins/marketplaces/local/plugins/brain-os
-```
-
-Then add `local` to `~/.claude/plugins/known_marketplaces.json`:
-
-```json
-{
-  "local": {
-    "source": { "source": "local", "repo": "local" },
-    "installLocation": "~/.claude/plugins/marketplaces/local"
-  }
-}
-```
-
-Restart Claude Code. All skills are available.
-
-**Option B: Individual skills** (symlink only what you need)
-
-```bash
-cd ~/work/brain-os-plugin
-./install.sh self-learn audit today    # install selected skills
-./install.sh                           # install all
-./install.sh --list                    # see available skills
-./install.sh --uninstall               # remove all symlinks
-```
-
-### 4. Set up eval hook (recommended)
-
-Add to `~/.claude/settings.json` under `hooks`:
-
-```json
-{
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash /path/to/brain-os-plugin/evals/smart-diff-check.sh"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-This auto-checks for regressions whenever a SKILL.md is edited.
-
 ## Vault Structure
 
-Brain OS expects an Obsidian vault with this structure:
+Brain OS expects an Obsidian vault with this layout:
 
 ```
 your-vault/
@@ -147,12 +102,10 @@ your-vault/
 - [Claude Code](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview)
 - An Obsidian vault (or any markdown-based vault with the expected structure)
 
-**Required for self-learn and audit skills:**
+**Required for self-learn and audit skills only:**
 - Python 3.12+
 - [notebooklm-py](https://github.com/nicholasgasior/notebooklm-py) CLI at `~/.local/bin/notebooklm`
 - Python packages: `pip install ebooklib beautifulsoup4`
-
-To set up the Python environment for self-learn:
 
 ```bash
 cd brain-os-plugin/skills/self-learn/scripts
@@ -167,18 +120,29 @@ Brain OS includes a two-layer eval system to catch regressions when editing skil
 
 ### Layer 1: Smart Diff Check (automatic)
 
-A PostToolUse hook that runs on every SKILL.md edit. It diffs against the git baseline and warns if critical content was removed:
+A PostToolUse hook that runs on every SKILL.md edit. Diffs against git baseline and warns if critical content was removed.
 
-```
-⚠️ SKILL.md changed: self-learn
-  ✗ Removed key term: "information barriers"
-  ✓ All script references preserved
-1 issue(s) detected. Edit blocked.
+Add to `~/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [{
+          "type": "command",
+          "command": "bash ~/brain-os-plugin/evals/smart-diff-check.sh"
+        }]
+      }
+    ]
+  }
+}
 ```
 
 ### Layer 2: Eval checks (on-demand)
 
-Pipeline skills (self-learn, audit, chain, ingest) have `eval.md` files with grep-based assertions:
+Pipeline skills have `eval.md` files with grep-based assertions:
 
 ```
 /eval self-learn
@@ -191,7 +155,7 @@ Self-Learn Eval (7 checks)
   ✓ Q5: Stopping Condition
   ✓ Q6: Phase Structure
   ✓ Q7: Note Template
-7/7 passed ✓
+7/7 passed
 ```
 
 ### Adding evals to your skill
@@ -208,11 +172,11 @@ pass: all patterns found
 why: Explain why this matters
 ```
 
-## Learn More
+## Updating
 
-For detailed walkthroughs on building this plugin, the self-learn pipeline, and how to build your own second brain with Claude Code:
-
-**[Subscribe on Substack](https://thanhdo.substack.com/)**
+```bash
+/plugin update brain-os
+```
 
 ## License
 
