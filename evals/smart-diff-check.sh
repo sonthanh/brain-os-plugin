@@ -8,7 +8,7 @@
 #   0 = pass (or not a SKILL.md file)
 #   2 = blocked (critical removals detected)
 
-set -euo pipefail
+set -uo pipefail
 
 # Read tool input from stdin (Claude Code passes JSON)
 INPUT=$(cat)
@@ -60,7 +60,7 @@ if [[ "$OLD_WORDS" -gt 0 ]]; then
 fi
 
 # 2. Script references (*.py files)
-OLD_SCRIPTS=$(echo "$OLD" | grep -oE '[a-z_]+\.py' | sort -u)
+OLD_SCRIPTS=$(echo "$OLD" | grep -oE '[a-z_]+\.py' | sort -u || true)
 MISSING_SCRIPTS=()
 if [[ -n "$OLD_SCRIPTS" ]]; then
   while IFS= read -r script; do
@@ -81,7 +81,7 @@ else
 fi
 
 # 3. Section headers (## lines)
-OLD_SECTIONS=$(echo "$OLD" | grep '^## ' | sort -u)
+OLD_SECTIONS=$(echo "$OLD" | grep '^## ' | sort -u || true)
 MISSING_SECTIONS=()
 if [[ -n "$OLD_SECTIONS" ]]; then
   while IFS= read -r section; do
@@ -102,7 +102,7 @@ else
 fi
 
 # 4. Key terms (important concepts/tools that shouldn't disappear)
-OLD_TERMS=$(echo "$OLD" | grep -oiE 'notebooklm use|notebooklm ask|information barriers|autoresearch|audit-flag\.json|obsidian_vault|notebooklm_bin|scripts_dir|knowledge/raw' | sort -u)
+OLD_TERMS=$(echo "$OLD" | grep -oiE 'notebooklm use|notebooklm ask|information barriers|autoresearch|audit-flag\.json|obsidian_vault|notebooklm_bin|scripts_dir|knowledge/raw' | sort -u || true)
 MISSING_TERMS=()
 if [[ -n "$OLD_TERMS" ]]; then
   while IFS= read -r term; do
@@ -123,7 +123,7 @@ else
 fi
 
 # 5. Numeric thresholds (≥ 95, 100%, 50%, etc.)
-OLD_NUMBERS=$(echo "$OLD" | grep -oE '≥\s*[0-9]+|[0-9]+%' | sort -u)
+OLD_NUMBERS=$(echo "$OLD" | grep -oE '≥\s*[0-9]+|[0-9]+%' | sort -u || true)
 MISSING_NUMBERS=()
 if [[ -n "$OLD_NUMBERS" ]]; then
   while IFS= read -r num; do

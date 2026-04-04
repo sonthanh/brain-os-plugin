@@ -25,6 +25,6 @@ type: grep
 patterns:
   - "FAIL"
   - "PASS"
-  - "audit.*false"
+  - "audited: false"
 pass: all patterns found
 why: Pipeline must handle audit failures by stopping and notifying, not continuing blindly
