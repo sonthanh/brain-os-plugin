@@ -206,6 +206,12 @@ pass: all patterns found
 why: Explain why this matters
 ```
 
+## Learn More
+
+For detailed walkthroughs on building this plugin, the self-learn pipeline, and how to build your own second brain with Claude Code:
+
+**[Subscribe on Substack](https://thanhdo.substack.com/)**
+
 ## License
 
 MIT
