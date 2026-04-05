@@ -8,7 +8,7 @@
  * Outputs: {vault}/business/intelligence/gmail-rules.md
  */
 
-import { google } from "googleapis";
+import { gmail_v1, auth } from "@googleapis/gmail";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -42,16 +42,16 @@ function loadCredentials() {
 
 function getGmailClient() {
   const creds = loadCredentials();
-  const auth = new google.auth.OAuth2(
+  const oauth2 = new auth.OAuth2(
     creds.client_id,
     creds.client_secret,
     "http://localhost:3000/callback"
   );
-  auth.setCredentials({
+  oauth2.setCredentials({
     refresh_token: creds.refresh_token,
     access_token: creds.access_token,
   });
-  return google.gmail({ version: "v1", auth });
+  return new gmail_v1.Gmail({ auth: oauth2 });
 }
 
 function extractEmail(from: string): string {
@@ -65,7 +65,7 @@ function extractName(from: string): string {
 }
 
 async function fetchAllMessages(
-  gmail: ReturnType<typeof google.gmail>,
+  gmail: gmail_v1.Gmail,
   query: string
 ): Promise<Array<{ id: string; threadId: string }>> {
   const messages: Array<{ id: string; threadId: string }> = [];

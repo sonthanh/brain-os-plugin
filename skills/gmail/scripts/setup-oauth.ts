@@ -7,7 +7,7 @@
  * Usage: tsx setup-oauth.ts
  */
 
-import { google } from "googleapis";
+import { auth } from "@googleapis/gmail";
 import { createServer } from "http";
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { resolve, dirname } from "path";
@@ -48,9 +48,9 @@ async function main() {
   const { client_id, client_secret } =
     clientCreds.installed || clientCreds.web;
 
-  const auth = new google.auth.OAuth2(client_id, client_secret, REDIRECT_URI);
+  const oauth2 = new auth.OAuth2(client_id, client_secret, REDIRECT_URI);
 
-  const authUrl = auth.generateAuthUrl({
+  const authUrl = oauth2.generateAuthUrl({
     access_type: "offline",
     scope: SCOPES,
     prompt: "consent",
@@ -75,7 +75,7 @@ async function main() {
       }
 
       try {
-        const { tokens } = await auth.getToken(code);
+        const { tokens } = await oauth2.getToken(code);
 
         const credentials = {
           client_id,
