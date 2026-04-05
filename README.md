@@ -1,8 +1,8 @@
 # Brain OS
 
-A Claude Code plugin for managing a second brain powered by Obsidian. 25 skills for knowledge management, deep thinking, and vault operations.
+A Claude Code plugin for managing a second brain powered by Obsidian. 25 skills for knowledge management, deep thinking, web research, and vault operations.
 
-**[Subscribe on Substack](https://thanhdo.substack.com/)** for detailed walkthroughs on building this plugin, the self-learn pipeline, and how to build your own second brain with Claude Code.
+**[Documentation](https://aileadersvietnam.mintlify.app/)** | **[Subscribe on Substack](https://thanhdo.substack.com/)** for detailed walkthroughs on building this plugin, the self-learn pipeline, and how to build your own second brain with Claude Code.
 
 ## Installation
 
@@ -51,7 +51,10 @@ your-vault/
 ├── thinking/         # Ideas, patterns, reflections, connections
 ├── knowledge/        # Books, articles, raw input
 │   ├── raw/          # Unprocessed book extractions
-│   └── books/        # Structured book notes
+│   ├── books/        # Structured book notes
+│   └── research/     # Web research outputs
+│       ├── reports/  # Synthesized research reports
+│       └── findings/ # Atomic ingested findings
 ├── daily/            # Daily notes, handovers
 └── private/          # Git-ignored confidential data
 ```
@@ -67,6 +70,8 @@ your-vault/
 | **ingest** | Process raw knowledge into structured vault notes |
 | **absorb** | Extract deep insights from books, connect to vault zones |
 | **book** | Interactive book knowledge capture through conversation |
+
+| **research** | Web research agent: multi-platform search → synthesize into cited bullet points → optionally ingest to vault |
 
 ### Daily Operations
 | Skill | Description |
