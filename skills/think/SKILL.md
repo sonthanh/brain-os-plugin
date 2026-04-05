@@ -1,31 +1,95 @@
 ---
 name: think
-description: "Use when entering deep thinking mode, exploring ideas, finding patterns, or reflecting on vault content"
+description: "Use when entering deep thinking mode, exploring ideas, finding patterns, or reflecting on vault content. Also triggers on: challenge, stress-test, emerge, drift, trace, connect, ideas, ghost, brainstorm, what if, poke holes"
 ---
 
 ## Pre-Think Check
-**IMPORTANT: Before starting a Thinking Time session, check for un-audited knowledge.**
+**IMPORTANT: Before starting, check for un-audited knowledge.**
 Run: `python3 ${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.py {vault}/knowledge/raw --status`
-If any book shows ❌ or 👁️, warn the user:
-"⚠️ Un-audited knowledge: [book] ([flag]). Run /audit to verify, or /audit true to trust."
+If any book shows ❌ or 👁️, warn: "⚠️ Un-audited knowledge: [book]. Run /audit to verify."
 
 ## Vault Location
 **Vault path:** Read from `${CLAUDE_PLUGIN_ROOT}/brain-os.config.md`
 
 # /think — Deep Thinking Mode
 
-## Behavior
-When I type `/think`, enter deep thinking mode:
+## Usage
+```
+/think                        Open-ended reflection and exploration
+/think challenge <topic>      Stress-test a belief against vault evidence
+/think emerge                 Surface ideas the vault implies but never stated
+/think drift                  Compare stated goals vs actual behavior (30-60 days)
+/think trace <topic>          Track how an idea evolved over time
+/think connect <A> <B>        Find bridges between two domains
+/think ideas                  Brainstorm across all vault domains
+/think ghost <question>       Answer a question as the user would
+```
 
-1. **Focus shifts to the thinking zone** — prioritize reading from `{vault}/thinking/`, `{vault}/daily/` (reflections sections), and `{vault}/context/about-me.md`
-2. **Minimize business framing** — don't proactively reference business metrics, KPIs, or operational context unless I bring it up
-3. **Be a thinking partner** — ask probing questions, challenge assumptions, surface connections
-4. **Write output to `{vault}/thinking/agent-output/`** unless I explicitly direct you elsewhere
-5. **Acknowledge the mode switch**: "Entering thinking mode. I'll focus on your ideas, patterns, and reflections."
+If no angle given, show the menu above and ask: "What's on your mind?"
 
-## Thinking Partner Behaviors
-- Ask "why" and "what if" questions
-- Connect ideas across different domains
-- Surface contradictions in my thinking
-- Suggest new angles I haven't considered
-- Reference my past reflections and patterns when relevant
+## General Behaviors (all angles)
+- Focus on `{vault}/thinking/`, `{vault}/daily/`, and `{vault}/context/`
+- Minimize business framing unless user brings it up
+- Be a thinking partner — ask probing questions, challenge assumptions
+- Write output to `{vault}/thinking/agent-output/YYYY-MM-DD-<angle>-<topic>.md`
+- Ask "why" and "what if" questions, surface contradictions, suggest new angles
+
+---
+
+## Angles
+
+### challenge <topic>
+Pressure-test a belief or decision:
+1. **Find current position** — scan vault for what user believes about this topic
+2. **Find contradictions** — stated beliefs that conflict with actions or other beliefs
+3. **Present counter-evidence** — arguments, data, perspectives that challenge the view
+4. **Track belief shifts** — has user changed mind on this before?
+5. **Ask hard questions** — 3-5 questions probing the weakest parts
+
+### emerge
+Surface ideas the vault implies but user never explicitly stated:
+1. **Deep scan** — read across thinking/, daily/, personal/research/, context/
+2. **Find scattered premises** — ideas in different contexts that form a larger conclusion
+3. **Identify unnamed patterns** — recurring themes not yet named or formalized
+4. **Surface unarticulated directions** — where actions/interests point that user hasn't consciously decided
+
+### drift
+Compare stated intentions vs actual behavior:
+1. **Read goals** — context/goals.md, context/strategy.md
+2. **Read 30-60 days of daily notes** — what was actually spent time on
+3. **Compare** — where do goals align with activity? Where do they diverge?
+4. **Surface avoidance** — goals set but consistently not worked on
+5. **Surface hidden priorities** — things done repeatedly but not in stated goals
+
+### trace <topic>
+Track how an idea evolved over time:
+1. **Build vocabulary map** — search vault for all mentions and related terms
+2. **Create timeline** — order mentions chronologically
+3. **Identify phases** — discovery, skepticism, adoption, mastery, etc.
+4. **Show evolution** — how understanding or position changed
+5. **Current state** — where is the user now with this idea?
+
+### connect <domain1> <domain2>
+Find bridges between two domains:
+1. **Scan domain 1** — find all vault files related
+2. **Scan domain 2** — find all vault files related
+3. **Find bridges** — shared themes, patterns, insights
+4. **Generate novel connections** — non-obvious links based on vault evidence
+5. **Suggest actions** — what could be done with these connections?
+
+### ideas
+Comprehensive idea generation:
+1. **Gather vault structure** — files, connections, orphans, dead ends
+2. **Read context** — context/, recent daily/, active projects/
+3. **Scan thinking zone** — ideas/, patterns/, connections/
+4. **Cross-domain analysis** — patterns across different vault areas
+5. **Generate ideas**: tools to build, content to create, systems to implement, conversations to have, subjects to investigate
+6. **Rank by impact** — top 5 "do now" items
+
+### ghost <question>
+Answer a question as the user would:
+1. **Build voice profile** — read about-me.md, preferences.md, recent daily notes, reflections/
+2. **Scan relevant vault files** for actual opinions on the topic
+3. **Write answer in user's voice** — matching tone, vocabulary, reasoning, values
+4. **Rate fidelity** — confidence 1-10 that this matches how user would respond
+5. **Flag gaps** — where vault lacks data on this topic

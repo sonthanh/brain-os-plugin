@@ -1,15 +1,15 @@
 ---
-name: chain
+name: study
 description: "Use when running the complete knowledge pipeline for a book, from self-learn through ingestion, audit, absorption, and sync"
 ---
 
-# Chain — Full Knowledge Pipeline Orchestrator
+# Study — Full Knowledge Pipeline Orchestrator
 
 ## Usage
 ```
-/chain <epub_path> --notebook-id <nlm_id>
-/chain --resume              Resume a pipeline that was interrupted
-/chain --status              Show pipeline status for all books
+/study <epub_path> --notebook-id <nlm_id>
+/study --resume              Resume a pipeline that was interrupted
+/study --status              Show pipeline status for all books
 ```
 
 ## Full Pipeline
@@ -27,7 +27,7 @@ Step 3: /audit (50 fresh questions vs NotebookLM → audit flag)
         ↓
 Step 4: /absorb (book note → vault connections, bypass approval since audited: true)
         ↓
-Step 5: /sync (git commit + push all changes)
+Step 5: commit + push (git commit + push all changes)
         ↓
 Step 6: Notify all 3 channels
   ├── Obsidian task in business/tasks/inbox.md
@@ -58,8 +58,8 @@ If flag is already `true` (from self-learn validation), proceed.
 ### Step 4: Absorb
 Run the `/absorb` skill. Since audit is true, bypass approval — apply all vault connections automatically.
 
-### Step 5: Sync
-Run `/sync` to commit and push all changes to git.
+### Step 5: Commit + Push
+Commit and push all vault changes to git.
 
 ### Step 6: Notify
 - Add review task to `business/tasks/inbox.md`
@@ -80,7 +80,7 @@ Each book's pipeline state is tracked in `_validation/audit-flag.json`:
 ```
 
 ## Resume
-If pipeline is interrupted, `/chain --resume` checks audit-flag.json to determine which step to resume from.
+If pipeline is interrupted, `/study --resume` checks audit-flag.json to determine which step to resume from.
 
 ## Error Handling
 - **Phase 2 fails (< 100% pass)**: Loop continues fixing until 100%. No timeout.

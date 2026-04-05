@@ -113,8 +113,8 @@ Extension notes use same template but different source tags.
 
 ## After Completion
 
-Pipeline continues autonomously: `/ingest` → `/audit` → `/absorb` → `/sync` → notify.
-Phase 2 must reach 100% pass at ≥95 before `/ingest` triggers. See `/chain` for full pipeline.
+Pipeline continues autonomously: `/ingest` → `/audit` → `/absorb` → commit + push → notify.
+Phase 2 must reach 100% pass at ≥95 before `/ingest` triggers. See `/study` for full pipeline.
 
 ## Usage
 
