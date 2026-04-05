@@ -1,0 +1,19 @@
+{
+  "name": "brain-os-plugin",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "gmail:clean": "tsx skills/gmail/scripts/gmail-clean.ts",
+    "gmail:bootstrap": "tsx skills/gmail-bootstrap/scripts/gmail-bootstrap.ts",
+    "gmail:setup": "tsx skills/gmail/scripts/setup-oauth.ts"
+  },
+  "dependencies": {
+    "googleapis": "^144.0.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "@types/node": "^22.0.0"
+  }
+}

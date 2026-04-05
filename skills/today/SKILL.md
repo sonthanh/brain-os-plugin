@@ -23,8 +23,21 @@ When I type `/today`, create a prioritized plan for the day:
 6. **Create/update today's daily note** at `{vault}/daily/YYYY-MM-DD.md` with the plan
 7. Ask: "Does this plan look right? Want to adjust priorities?"
 
+## Gmail Triage Status
+Check `{vault}/daily/gmail-triage/` for unprocessed triage reports (files with unchecked `- [ ]` actions).
+If any exist, include in the daily plan:
+- Count of pending actions by type (archive, delete, needs-reply, etc.)
+- List subject lines of any `needs-reply` emails
+- Prompt: "Run `/gmail` to process pending email actions."
+
 ## Knowledge Pipeline Status
 Run: `python3 ${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.py {vault}/knowledge/raw --status`
 Include in today's summary if any books are pending audit or recently absorbed.
 Also run: `python3 ${CLAUDE_PLUGIN_ROOT}/skills/self-learn/scripts/summary.py {vault}/knowledge/raw/the-road-less-stupid --status`
 Show latest self-learn pipeline status.
+
+## Auto-Schedule
+This skill is designed to run as a **scheduled remote task at 7:00 AM Europe/Zurich** daily.
+It pushes the daily plan to the vault on main and sends a Telegram summary.
+Read Telegram chat ID from `{vault}/context/about-me.md`.
+Set up via `/schedule` or `claude.ai/code/scheduled`.

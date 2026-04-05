@@ -1,6 +1,6 @@
 # Brain OS
 
-A Claude Code plugin for managing a second brain powered by Obsidian. 25 skills for knowledge management, deep thinking, web research, and vault operations.
+A Claude Code plugin for managing a second brain powered by Obsidian. 28 skills for knowledge management, deep thinking, web research, Gmail automation, and vault operations.
 
 **[Documentation](https://aileadersvietnam.mintlify.app/)** | **[Subscribe on Substack](https://thanhdo.substack.com/)** for detailed walkthroughs on building this plugin, the self-learn pipeline, and how to build your own second brain with Claude Code.
 
@@ -73,11 +73,18 @@ your-vault/
 
 | **research** | Web research agent: multi-platform search → synthesize into cited bullet points → optionally ingest to vault |
 
+### Gmail Automation
+| Skill | Description |
+|-------|-------------|
+| **gmail** | Execute triage actions — cleanup inbox, draft replies, process reports |
+| **gmail-bootstrap** | One-time: scan 3 months of inbox to build email rules |
+| **grill** | Interview relentlessly about a topic until reaching a bulletproof plan |
+
 ### Daily Operations
 | Skill | Description |
 |-------|-------------|
-| **today** | Morning review: calendar + tasks + recent notes → prioritized plan |
-| **close** | End of day: extract action items, surface connections |
+| **today** | Morning review: calendar + tasks + gmail triage → prioritized plan (auto-scheduled 7AM) |
+| **close** | End of day: extract action items, surface connections (auto-scheduled 10:30PM) |
 | **handover** | Create handover doc for next session with decisions and next steps |
 | **pickup** | Resume unfinished work from a previous handover |
 | **sync** | Git commit and push all vault changes |
