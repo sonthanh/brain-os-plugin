@@ -4,6 +4,8 @@ import { readFileSync, writeFileSync, existsSync } from "fs";
 import { resolve } from "path";
 
 const CREDENTIALS_PATH = process.env.GMAIL_CREDENTIALS_PATH || resolve(process.cwd(), ".credentials.json");
+const CONCURRENCY = 10;
+const REDIRECT_URI = "http://localhost:3000/callback";
 
 interface Action {
   done: boolean;
@@ -14,7 +16,7 @@ interface Action {
 
 function getGmailClient(): gmail_v1.Gmail {
   const creds = JSON.parse(readFileSync(CREDENTIALS_PATH, "utf-8"));
-  const oauth2 = new auth.OAuth2(creds.client_id, creds.client_secret, "http://localhost:3000/callback");
+  const oauth2 = new auth.OAuth2(creds.client_id, creds.client_secret, REDIRECT_URI);
   oauth2.setCredentials({ refresh_token: creds.refresh_token, access_token: creds.access_token });
   return new gmail_v1.Gmail({ auth: oauth2 });
 }
@@ -29,47 +31,66 @@ function parseReport(filePath: string): Action[] {
   return actions;
 }
 
-async function msgExists(gmail: gmail_v1.Gmail, id: string): Promise<boolean> {
-  try { await gmail.users.messages.get({ userId: "me", id, format: "minimal" }); return true; } catch { return false; }
+function extractSender(value: string): string | undefined {
+  return (value.match(/<([^>]+)>/) || value.match(/(\S+@\S+)/))?.[1];
 }
 
-async function execute(gmail: gmail_v1.Gmail, a: Action): Promise<{ ok: boolean; skip: boolean; reason?: string }> {
-  if (!(await msgExists(gmail, a.msgId))) return { ok: false, skip: true, reason: "not found" };
+async function execute(
+  gmail: gmail_v1.Gmail,
+  a: Action,
+  labelCache: Map<string, string>
+): Promise<{ ok: boolean; skip: boolean; reason?: string }> {
+  try {
+    if (a.type === "archive") {
+      await gmail.users.messages.modify({ userId: "me", id: a.msgId, requestBody: { removeLabelIds: ["INBOX"] } });
+      return { ok: true, skip: false };
+    }
+    if (a.type === "delete") {
+      await gmail.users.messages.trash({ userId: "me", id: a.msgId });
+      return { ok: true, skip: false };
+    }
+    if (a.type.startsWith("label:")) {
+      const name = a.type.slice(6);
+      let labelId = labelCache.get(name);
+      if (!labelId) {
+        const created = await gmail.users.labels.create({ userId: "me", requestBody: { name } });
+        labelId = created.data.id!;
+        labelCache.set(name, labelId);
+      }
+      await gmail.users.messages.modify({ userId: "me", id: a.msgId, requestBody: { addLabelIds: [labelId] } });
+      return { ok: true, skip: false };
+    }
+    if (a.type === "star") {
+      await gmail.users.messages.modify({ userId: "me", id: a.msgId, requestBody: { addLabelIds: ["STARRED"] } });
+      return { ok: true, skip: false };
+    }
+    if (a.type === "mark-important") {
+      await gmail.users.messages.modify({ userId: "me", id: a.msgId, requestBody: { addLabelIds: ["IMPORTANT"] } });
+      return { ok: true, skip: false };
+    }
+    if (a.type === "unsubscribe") {
+      const msg = await gmail.users.messages.get({ userId: "me", id: a.msgId, format: "metadata", metadataHeaders: ["From"] });
+      const from = msg.data.payload?.headers?.find((h) => h.name === "From");
+      const sender = from?.value ? extractSender(from.value) : undefined;
+      await gmail.users.messages.trash({ userId: "me", id: a.msgId });
+      if (sender) try { await gmail.users.settings.filters.create({ userId: "me", requestBody: { criteria: { from: sender }, action: { removeLabelIds: ["INBOX"], addLabelIds: ["TRASH"] } } }); } catch {}
+      return { ok: true, skip: false };
+    }
+    if (a.type === "needs-reply") return { ok: false, skip: true, reason: "manual" };
+    return { ok: false, skip: true, reason: `unknown: ${a.type}` };
+  } catch (e: any) {
+    if (e?.code === 404) return { ok: false, skip: true, reason: "not found" };
+    throw e;
+  }
+}
 
-  if (a.type === "archive") {
-    await gmail.users.messages.modify({ userId: "me", id: a.msgId, requestBody: { removeLabelIds: ["INBOX"] } });
-    return { ok: true, skip: false };
+async function runBatch<T, R>(items: T[], concurrency: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = [];
+  for (let i = 0; i < items.length; i += concurrency) {
+    const batch = items.slice(i, i + concurrency);
+    results.push(...await Promise.all(batch.map(fn)));
   }
-  if (a.type === "delete") {
-    await gmail.users.messages.trash({ userId: "me", id: a.msgId });
-    return { ok: true, skip: false };
-  }
-  if (a.type.startsWith("label:")) {
-    const name = a.type.slice(6);
-    const labels = await gmail.users.labels.list({ userId: "me" });
-    let label = labels.data.labels?.find((l) => l.name === name);
-    if (!label) { const c = await gmail.users.labels.create({ userId: "me", requestBody: { name } }); label = c.data; }
-    await gmail.users.messages.modify({ userId: "me", id: a.msgId, requestBody: { addLabelIds: [label!.id!] } });
-    return { ok: true, skip: false };
-  }
-  if (a.type === "star") {
-    await gmail.users.messages.modify({ userId: "me", id: a.msgId, requestBody: { addLabelIds: ["STARRED"] } });
-    return { ok: true, skip: false };
-  }
-  if (a.type === "mark-important") {
-    await gmail.users.messages.modify({ userId: "me", id: a.msgId, requestBody: { addLabelIds: ["IMPORTANT"] } });
-    return { ok: true, skip: false };
-  }
-  if (a.type === "unsubscribe") {
-    const msg = await gmail.users.messages.get({ userId: "me", id: a.msgId, format: "metadata", metadataHeaders: ["From"] });
-    const from = msg.data.payload?.headers?.find((h) => h.name === "From");
-    const sender = (from?.value?.match(/<([^>]+)>/) || from?.value?.match(/(\S+@\S+)/))?.[1];
-    await gmail.users.messages.trash({ userId: "me", id: a.msgId });
-    if (sender) try { await gmail.users.settings.filters.create({ userId: "me", requestBody: { criteria: { from: sender }, action: { removeLabelIds: ["INBOX"], addLabelIds: ["TRASH"] } } }); } catch {}
-    return { ok: true, skip: false };
-  }
-  if (a.type === "needs-reply") return { ok: false, skip: true, reason: "manual" };
-  return { ok: false, skip: true, reason: `unknown: ${a.type}` };
+  return results;
 }
 
 async function main() {
@@ -82,14 +103,25 @@ async function main() {
   const pending = parseReport(fullPath).filter((a) => !a.done && a.type !== "needs-reply");
   if (!pending.length) { console.log("No pending actions."); return; }
 
-  console.log(`Processing ${pending.length} actions...`);
+  // Cache labels upfront
+  const labelCache = new Map<string, string>();
+  const labelsNeeded = new Set(pending.filter((a) => a.type.startsWith("label:")).map((a) => a.type.slice(6)));
+  if (labelsNeeded.size > 0) {
+    const existing = await gmail.users.labels.list({ userId: "me" });
+    for (const l of existing.data.labels || []) {
+      if (l.name && l.id && labelsNeeded.has(l.name)) labelCache.set(l.name, l.id);
+    }
+  }
+
+  console.log(`Processing ${pending.length} actions (${CONCURRENCY} concurrent)...`);
   const stats: Record<string, number> = {};
   let skipped = 0;
   const done = new Set<string>();
 
-  for (const a of pending) {
-    const r = await execute(gmail, a);
-    if (r.ok) { stats[a.type] = (stats[a.type] || 0) + 1; done.add(a.msgId); }
+  const results = await runBatch(pending, CONCURRENCY, (a) => execute(gmail, a, labelCache));
+  for (let i = 0; i < pending.length; i++) {
+    const r = results[i];
+    if (r.ok) { stats[pending[i].type] = (stats[pending[i].type] || 0) + 1; done.add(pending[i].msgId); }
     else if (r.skip) { skipped++; }
   }
 
