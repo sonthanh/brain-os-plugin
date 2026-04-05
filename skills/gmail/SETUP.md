@@ -47,7 +47,8 @@ Repo: your brain vault repo. Timezone: Europe/Zurich.
 | 8:00–22:00 every 2h | `0 8-22/2 * * *` | `newer_than:2h` + all unread |
 
 **Prompt:** See `remote-triage-prompt.md` — copy the prompt section.
-**Connectors:** Gmail, (Telegram via script in repo).
+**Connectors:** Gmail only.
+**Environment secrets:** Add `TELEGRAM_BOT_TOKEN` to the remote task environment — Telegram is sent via direct `curl` to Bot API, no connector needed.
 
 ### /today (daily)
 

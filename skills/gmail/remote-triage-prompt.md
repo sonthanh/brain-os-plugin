@@ -54,8 +54,17 @@ You are a Gmail triage agent running on a schedule. Your job is to scan my inbox
    N emails processed. X archived, Y deleted, Z starred, W need reply.
    ```
 
-6. Send Telegram notification (read chat ID from `context/about-me.md`):
+6. Send Telegram notification (no connector needed — use curl directly):
+   - Read chat ID from `context/about-me.md`
+   - Read bot token from env var `TELEGRAM_BOT_TOKEN` (set in remote task environment secrets)
    - Only if there are actionable items (skip spam-only runs)
+   - Send via bash:
+     ```bash
+     curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+       -d chat_id="<CHAT_ID>" \
+       -d parse_mode="Markdown" \
+       -d text="<MESSAGE>"
+     ```
    - Format:
      ```
      📬 Gmail Triage — HH:00
