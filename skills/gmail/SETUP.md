@@ -39,12 +39,12 @@ npm run gmail:bootstrap -- /Users/thanhdo/work/brain
 Set up via `claude.ai/code/scheduled` or `/schedule` in Claude Code.
 Repo: your brain vault repo. Timezone: Europe/Zurich.
 
-### Gmail Triage (9 runs/day)
+### Gmail Triage
 
-| Time | Cron | Query |
-|---|---|---|
-| 6:00 AM | `0 6 * * *` | `newer_than:8h` + all unread |
-| 8:00–22:00 every 2h | `0 8-22/2 * * *` | `newer_than:2h` + all unread |
+Set to **hourly** on claude.ai/code/scheduled. The prompt self-regulates:
+- 11PM–5AM: exits immediately (no cost)
+- 6AM–7AM: overnight catch-up
+- 8AM–10PM: normal triage
 
 **Prompt:** See `remote-triage-prompt.md` — copy the prompt section.
 **Connectors:** Gmail only.
