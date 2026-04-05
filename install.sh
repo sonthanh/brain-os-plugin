@@ -21,9 +21,8 @@ TARGET_DIR="$HOME/.claude/skills"
 
 # All available skills
 ALL_SKILLS=(
-  absorb audit book chain challenge close connect context
-  drift emerge eval ghost graduate handover ideas-gen ingest
-  personal pickup self-learn sync think today trace work
+  absorb aha audit eval gmail gmail-bootstrap handover ingest
+  journal pickup research self-learn status study think triggers
 )
 
 list_skills() {
