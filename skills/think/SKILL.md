@@ -61,15 +61,15 @@ Review agent-output files and promote insights to proper thinking/ zones:
    - Update frontmatter: add `promoted: YYYY-MM-DD`, update `zone` field
    - Add wiki-links from related existing vault files → the promoted file
    - Add wiki-links from the promoted file → related vault files
-6. **For skipped files** — leave in agent-output (user may revisit later)
-7. **For files older than 14 days** — ask: "These are stale. Archive or delete?"
-8. **Summary** — report what was promoted where, with link count
+6. **Clear agent-output** — after all files are processed (promoted, merged, or skipped), delete ALL processed files from agent-output/. This folder is a staging area, not storage. Knowledge already lives in its destination.
+7. **Summary** — report what was promoted where, with link count
 
 **Rules:**
 - NEVER auto-promote without user confirmation — this is the human's thinking zone
 - Suggest zones based on content type: recurring theme → patterns/, novel idea → ideas/, bridge between domains → connections/, personal observation → reflections/, reusable principle → principles/
-- If an insight overlaps with an existing vault file, suggest merging instead of creating a new file
+- If an insight overlaps with an existing vault file, suggest merging instead of creating a new file — then delete the agent-output file
 - Keep promoted filenames clean: `YYYY-MM-DD-topic.md` (drop the `grill-insights-` prefix)
+- agent-output/ must be empty (except README.md) after digest completes — no exceptions
 
 ### challenge <topic>
 Pressure-test a belief or decision:
