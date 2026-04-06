@@ -32,13 +32,21 @@ Reads the latest triage report from the vault, executes cleanup actions, and dra
 5. **Update report**: Check off completed actions in the triage file
 6. **Report summary**: "Processed 12 actions: 5 archived, 3 deleted, 2 labeled, 1 starred, 1 unsubscribed. 2 skipped (already handled)."
 
-### `/gmail draft` — Draft replies for flagged emails
+### `/gmail draft` — Draft replies for flagged emails (interactive)
 
 1. Read triage report for `needs-reply` actions
 2. For each, read the full email thread via Gmail
 3. Read `{vault}/context/about-me.md` and `{vault}/context/business.md` for voice/context
 4. Draft a reply — show it to the user for approval before creating in Gmail
 5. Create draft in Gmail via `gmail_create_draft` with the approved text
+
+### `/gmail auto-draft` — Autonomously draft replies (no approval needed)
+
+Fully autonomous mode — reads needs-reply queue, generates drafts, creates them in Gmail. Safe because drafts are never sent.
+
+1. Follow the command spec at `{vault}/commands/gmail-auto-draft.md`
+2. Execute all steps end-to-end without user interaction
+3. Report results when done
 
 ### `/gmail status` — Show pending actions
 
