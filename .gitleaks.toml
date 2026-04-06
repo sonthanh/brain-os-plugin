@@ -1,0 +1,40 @@
+# Gitleaks configuration for brain-os-plugin
+# Extends default rules + custom rules for Telegram and bot tokens
+
+[extend]
+useDefault = true
+
+# --- Custom rules ---
+
+[[rules]]
+id = "telegram-bot-token"
+description = "Telegram Bot Token"
+regex = '''[0-9]{8,10}:[A-Za-z0-9_-]{35}'''
+tags = ["telegram", "bot", "token"]
+
+[[rules]]
+id = "telegram-chat-id-assignment"
+description = "Telegram Chat ID assigned in code"
+regex = '''(?i)(chat[_-]?id|CHAT[_-]?ID)\s*[:=]\s*-?[0-9]{6,}'''
+tags = ["telegram", "chat-id"]
+
+[[rules]]
+id = "bot-token-generic"
+description = "Generic bot token pattern"
+regex = '''(?i)(bot[_-]?token|BOT[_-]?TOKEN)\s*[:=]\s*["']?[A-Za-z0-9_-]{20,}["']?'''
+tags = ["bot", "token"]
+
+# --- Global allowlist ---
+
+[allowlist]
+paths = [
+  '''.obsidian/''',
+  '''.gitleaks\.toml''',
+  '''.gitleaksignore''',
+  '''node_modules/''',
+]
+regexes = [
+  '''noreply@anthropic\.com''',
+  '''noreply@github\.com''',
+  '''github-actions\[bot\]''',
+]

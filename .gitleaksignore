@@ -1,0 +1,3 @@
+# Gitleaks false positive fingerprints
+# Add fingerprints from `gitleaks detect --redact --verbose` output here
+# Format: one fingerprint per line
