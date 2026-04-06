@@ -16,6 +16,7 @@ If any book shows ❌ or 👁️, warn: "⚠️ Un-audited knowledge: [book]. Ru
 ## Usage
 ```
 /think                        Open-ended reflection and exploration
+/think digest                 Review agent-output, promote insights to proper vault zones
 /think challenge <topic>      Stress-test a belief against vault evidence
 /think emerge                 Surface ideas the vault implies but never stated
 /think drift                  Compare stated goals vs actual behavior (30-60 days)
@@ -37,6 +38,38 @@ If no angle given, show the menu above and ask: "What's on your mind?"
 ---
 
 ## Angles
+
+### digest
+Review agent-output files and promote insights to proper thinking/ zones:
+1. **Scan** — read all files in `{vault}/thinking/agent-output/` (skip README.md)
+2. **Summarize each file** — 2-3 line summary per file, grouped by theme
+3. **Present for review** — show the user what's there:
+   ```
+   📂 Agent Output (N files)
+
+   1. [filename] — summary
+      → Suggested zone: patterns/ | ideas/ | connections/ | reflections/ | principles/
+      → Key insight: one-liner
+
+   2. [filename] — summary
+      → Suggested zone: ...
+      → Key insight: ...
+   ```
+4. **Ask user** — "Which insights to promote? (all / numbers / skip)" 
+5. **For each promoted insight:**
+   - Move file from `agent-output/` to the target zone (rename if needed for clarity)
+   - Update frontmatter: add `promoted: YYYY-MM-DD`, update `zone` field
+   - Add wiki-links from related existing vault files → the promoted file
+   - Add wiki-links from the promoted file → related vault files
+6. **For skipped files** — leave in agent-output (user may revisit later)
+7. **For files older than 14 days** — ask: "These are stale. Archive or delete?"
+8. **Summary** — report what was promoted where, with link count
+
+**Rules:**
+- NEVER auto-promote without user confirmation — this is the human's thinking zone
+- Suggest zones based on content type: recurring theme → patterns/, novel idea → ideas/, bridge between domains → connections/, personal observation → reflections/, reusable principle → principles/
+- If an insight overlaps with an existing vault file, suggest merging instead of creating a new file
+- Keep promoted filenames clean: `YYYY-MM-DD-topic.md` (drop the `grill-insights-` prefix)
 
 ### challenge <topic>
 Pressure-test a belief or decision:
