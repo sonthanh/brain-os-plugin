@@ -9,19 +9,36 @@ description: "Use when starting a new session and wanting to resume unfinished w
 
 Before anything else, every `/pickup` call does this:
 
-1. Read `{vault}/business/tasks/inbox.md`
-2. Read timezone from `{vault}/context/preferences.md`
-3. For each Backlog task, check if ALL blockers are resolved (⛓️ slugs and `blocked-by` in Done)
-4. Move unblocked tasks to Ready
-5. Report promotions only if something moved: "Promoted: [task names] → Ready"
+1. Read `{vault}/business/tasks/inbox.md` and `{vault}/context/preferences.md` (timezone)
+2. For each Backlog task, assess readiness:
+   - **Blocked?** Check ⛓️ slugs and `blocked-by` — if any blocker is NOT in Done → stays in Backlog
+   - **Clear to execute?** Does the task have enough context to act on? Consider:
+     - 🤖 tasks: is there a skill, detail file, or clear instruction? → Ready
+     - 👤 tasks: is the next action obvious from the description? → Ready
+     - Vague tasks (no clear next step, needs scoping): → stays in Backlog
+3. Move clear + unblocked tasks to Ready
+4. Report promotions: "Promoted: [task names] → Ready"
+5. If vague tasks remain in Backlog, append: "N tasks need context — run `/pickup groom` to classify them"
 
-This is invisible plumbing — the user never invokes it separately.
+## `/pickup groom` — Interactive backlog classification
 
-## `/pickup groom` — Explicit backlog review
+For tasks that Step 0 couldn't auto-classify (vague, needs scoping, unclear priority):
 
-Runs the same Step 0 grooming but with **verbose output**: lists every backlog task, its blockers, and whether each blocker is resolved. Reports what moved and what's still blocked.
-
-For now this is identical to the silent groom — reserved for future interactive grooming (e.g., re-classify tasks, suggest priority, split large tasks).
+1. List each remaining Backlog task with current assessment:
+   ```
+   Backlog (N tasks):
+   1. 👤 Fix pointer/duplicate violation enforcement
+      Status: UNCLEAR — what exactly should be built? Hook? Eval? Lint rule?
+      Need: user to define scope → then move to Ready
+   2. ...
+   ```
+2. For each unclear task, ask the user targeted questions to classify it:
+   - What's the concrete next step?
+   - Is this 🤖 auto or 👤 manual?
+   - Weight: ⚡ quick or 🏋️ heavy?
+   - Any blockers?
+3. Update the task in inbox.md with the classification
+4. Move newly-classified tasks to Ready
 
 ## `/pickup` — Resume handover tasks (default)
 
