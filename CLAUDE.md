@@ -2,30 +2,13 @@
 
 Claude Code plugin for managing a second brain powered by Obsidian. 16 skills across Learn, Think, and Act.
 
-## Repo Structure
+## Key Paths
 
-```
-brain-os-plugin/
-├── skills/               # Each skill = one directory with SKILL.md + optional scripts/
-│   ├── self-learn/       # Knowledge extraction pipeline (Python scripts)
-│   ├── audit/            # NotebookLM validation pipeline (Python scripts)
-│   ├── study/            # Orchestrator: self-learn → ingest → audit → absorb
-│   ├── think/            # Deep thinking mode (includes emerge, challenge, drift, connect, trace, ghost)
-│   ├── gmail/            # Gmail automation (TypeScript, OAuth, runs on cron)
-│   └── ...               # 16 skills total
-├── hooks/                # Plugin hooks (auto-registered on install)
-│   └── hooks.json        # Hook definitions (SessionStart, SessionEnd, PostToolUse)
-├── evals/                # Eval system
-│   └── smart-diff-check.sh  # PostToolUse hook: validates SKILL.md changes
-├── .claude-plugin/
-│   └── plugin.json       # Plugin metadata
-├── install.sh            # Unified installer (curl or local)
-├── setup-vault.sh        # Vault structure creator (called by install.sh)
-├── skills.sh             # Legacy remote installer (kept for backwards compat)
-├── brain-os.config.md    # User config — vault_path lives here
-├── .github/workflows/    # CI: release tagging, gitleaks
-└── package.json          # Node deps for gmail skills (tsx, googleapis)
-```
+- `skills/<name>/SKILL.md` — Skill logic (+ optional `scripts/`, `references/`, `evals/`)
+- `hooks/hooks.json` — Plugin hooks (auto-registered on install)
+- `evals/smart-diff-check.sh` — PostToolUse hook: validates SKILL.md changes
+- `brain-os.config.md` — User config (vault_path)
+- `install.sh` — Unified installer
 
 ## Key Conventions
 
