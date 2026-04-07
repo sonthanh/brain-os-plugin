@@ -9,8 +9,13 @@ import os
 
 NLM_BIN = os.path.expanduser("~/.local/bin/notebooklm")
 
-def ask_nlm(question: str, retries: int = 2) -> str:
-    """Ask NotebookLM a question, return answer text."""
+MIN_DELAY = int(os.environ.get("NLM_MIN_DELAY", 5))
+MAX_DELAY = int(os.environ.get("NLM_MAX_DELAY", 120))
+
+
+def ask_nlm(question: str, retries: int = 3) -> str:
+    """Ask NotebookLM a question with exponential backoff on rate limits."""
+    delay = MIN_DELAY
     for attempt in range(retries + 1):
         try:
             result = subprocess.run(
@@ -21,19 +26,25 @@ def ask_nlm(question: str, retries: int = 2) -> str:
                 output = result.stdout
                 if "Answer:" in output:
                     answer = output.split("Answer:", 1)[1]
-                    # Remove conversation footer
                     if "Conversation:" in answer:
                         answer = answer.rsplit("Conversation:", 1)[0]
                     return answer.strip()
                 return output.strip()
             else:
-                if attempt < retries:
-                    time.sleep(3)
+                stderr = result.stderr.strip()
+                is_rate_limit = "rate limit" in stderr.lower()
+                if attempt < retries and is_rate_limit:
+                    print(f" RATE LIMITED, waiting {delay}s...", end="", flush=True)
+                    time.sleep(delay)
+                    delay = min(delay * 2, MAX_DELAY)
                     continue
-                return f"ERROR: {result.stderr.strip()}"
+                elif attempt < retries:
+                    time.sleep(MIN_DELAY)
+                    continue
+                return f"ERROR: {stderr}"
         except subprocess.TimeoutExpired:
             if attempt < retries:
-                time.sleep(3)
+                time.sleep(MIN_DELAY)
                 continue
             return "ERROR: Timeout"
         except Exception as e:
@@ -92,9 +103,9 @@ def main():
             status = "ERR" if is_error else f"OK ({len(answer)} chars)"
             print(status)
 
-            # Small delay to avoid rate limiting
+            # Delay between questions to avoid rate limiting
             if not is_error:
-                time.sleep(1)
+                time.sleep(MIN_DELAY)
 
     # Summary
     total_ok = 0
