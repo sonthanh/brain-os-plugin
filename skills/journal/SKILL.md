@@ -80,14 +80,37 @@ These are the implementation shortcuts people pay for.]
 - **Hormozi principle:** [which principle this leverages]
 ```
 
+## Default Mode: Backfill
+
+When `/journal` is invoked **without arguments** (or with just "backfill"):
+
+1. **Scan** `{vault}/daily/journal/` for existing `YYYY-MM-DD-journey.md` files
+2. **Determine Day 1** from the earliest journal file's date
+3. **Check every date** from Day 1 through yesterday for missing journals
+4. **List status** of all days:
+   ```
+   OK       Day 1 — 2026-04-04 — Day 1 — I Taught an AI to Read a Book Better Than I Can
+   MISSING  Day 4 — 2026-04-07
+   OK       Day 5 — 2026-04-08 — Day 5 — ...
+   ```
+5. **For each missing day**, create the journal using the full process above (data sources → output format)
+6. **Skip days with no data** — if a date has zero commits across all repos AND no session files, write a minimal journal noting it was a rest day
+
+This means running `/journal` always catches up all missing days automatically.
+
+### Explicit date mode
+
+When invoked with a specific date or day number (e.g., `/journal day 3` or `/journal 2026-04-06`):
+- Create only that specific day's journal
+- Still determine the correct day number from the journal directory
+
 ## Rules
 - **Narrative over list** — tell a story, don't just list commits
 - **Real examples are gold** — include actual code, actual prompts, actual error messages
 - **Failures are content** — "I tried X and it broke" is more valuable than "I did X"
 - **Hormozi lens**: best stuff goes in the free Facebook post (the decision, the insight, the result). Implementation detail goes in paid Substack (the exact prompts, the code, the config).
 - **Don't fabricate** — every claim must trace to a git commit, aha moment, or grill session
-- **Default to today** — if no date specified, use today's date
-- **Day numbering** — check `{vault}/daily/journal/` for the latest day number and increment
+- **Day numbering** — check `{vault}/daily/journal/` for the earliest file to determine Day 1, then count sequentially
 
 ## Integration with ai-leaders-vietnam
 The journey doc is INPUT for the writing pipeline:
