@@ -3,40 +3,44 @@ name: pickup
 description: "Use when starting a new session and wanting to resume unfinished work from a previous handover"
 ---
 
-# Pickup — Resume From Backlog
+# Pickup — Resume Work
 
-## Behavior
+## Step 0: Groom Backlog (runs on every invocation, silently)
 
-### `/pickup` — Resume handover tasks (default)
+Before anything else, every `/pickup` call does this:
 
-1. **Scan backlog** — read `{vault}/business/tasks/inbox.md`
-2. **Find unchecked handover tasks** — lines matching `- [ ] [Handover]` or `📋` tag
-3. **If one task**: load its handover doc and start
-4. **If multiple tasks**: show list, ask user which one to pick up
-5. **If zero tasks**: "No pending handover tasks. All caught up."
+1. Read `{vault}/business/tasks/inbox.md`
+2. Read timezone from `{vault}/context/preferences.md`
+3. For each Backlog task, check if ALL blockers are resolved (⛓️ slugs and `blocked-by` in Done)
+4. Move unblocked tasks to Ready
+5. Report promotions only if something moved: "Promoted: [task names] → Ready"
 
-### `/pickup auto` — Execute next 🤖 auto task autonomously
+This is invisible plumbing — the user never invokes it separately.
 
-Fully autonomous mode. No stopping, no asking, just execute and report.
+## `/pickup` — Resume handover tasks (default)
 
-1. **Check current time** — read timezone from `{vault}/context/preferences.md` (Timezone section)
-2. **Scan inbox** — read `{vault}/business/tasks/inbox.md`
-3. **Groom Backlog (always runs first)**:
-   - For each task in Backlog, check if ALL blockers are resolved (⛓️ slugs and `blocked-by` in Done column)
-   - **Unblocked 🤖 tasks** → move to Ready automatically
-   - **Unblocked 👤 tasks** → move to Ready + report to user ("👤 task X is now unblocked and ready for you")
-   - Report all promotions: "Promoted N tasks from Backlog → Ready"
-4. **Find 🤖 tasks in Ready column** — lines matching `🤖` in the Ready section
-5. **Apply time-aware filtering**:
+After grooming:
+
+1. Find unchecked handover tasks — lines matching `📋` tag in Ready
+2. **If one task**: load its handover doc and start
+3. **If multiple tasks**: show list, ask user which one to pick up
+4. **If zero handover tasks**: show all Ready tasks as a summary so user can decide
+
+## `/pickup auto` — Execute next 🤖 auto task autonomously
+
+After grooming:
+
+1. **Find 🤖 tasks in Ready column**
+2. **Apply time-aware filtering**:
    - **Work hours (09:00–22:00)**: only pick `⚡` (quick) tasks. Skip `🏋️` (heavy) and untagged tasks.
    - **Off-hours (22:00–09:00) or weekends**: pick any 🤖 task including `🏋️` and untagged.
    - If no eligible 🤖 tasks: report "No eligible auto tasks for current time window."
-6. **Pick the first eligible one** (top = highest priority)
-7. **Move it to In Progress** in inbox.md
-8. **If task has a detail file** (`[[slug|Name]]`): read it for context
-9. **If task references a skill** (e.g., "self-learn pipeline"): invoke that skill
-10. **Execute the task end-to-end** — do NOT stop to ask permission, do NOT ask for confirmation
-11. **When done**:
+3. **Pick the first eligible one** (top = highest priority)
+4. **Move it to In Progress** in inbox.md
+5. **If task has a detail file** (`[[slug|Name]]`): read it for context
+6. **If task references a skill** (e.g., "self-learn pipeline"): invoke that skill
+7. **Execute the task end-to-end** — do NOT stop to ask permission, do NOT ask for confirmation
+8. **When done**:
     - Move task to Done: `- [x] 🤖 ... ✅ YYYY-MM-DD`
     - Update detail file if it exists (log entry + status)
     - Report completion status to user:
@@ -44,7 +48,7 @@ Fully autonomous mode. No stopping, no asking, just execute and report.
       ✅ Completed: [task name]
       Summary: [what was done, 2-3 lines]
       ```
-12. **If task fails or is blocked**: report the blocker, move task back to Ready, do NOT attempt next task
+9. **If task fails or is blocked**: report the blocker, move task back to Ready, do NOT attempt next task
 
 #### Weight tags
 - `⚡` — quick task (< 30 min), safe to run anytime
