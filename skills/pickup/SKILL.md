@@ -21,16 +21,16 @@ Fully autonomous mode. No stopping, no asking, just execute and report.
 
 1. **Check current time** — read timezone from `{vault}/context/preferences.md` (Timezone section)
 2. **Scan inbox** — read `{vault}/business/tasks/inbox.md`
-3. **Find 🤖 tasks in Ready column** — lines matching `🤖` in the Ready section
-4. **If no 🤖 tasks in Ready → scan Backlog for promotable tasks**:
-   - Find 🤖 tasks in Backlog that have NO unresolved blockers (all `⛓️` deps and `blocked-by` slugs are in Done)
-   - Move unblocked 🤖 tasks to Ready
-   - Also flag any 👤 tasks that got unblocked: report them to user but don't pick them up
-   - If still no eligible 🤖 tasks: report "No eligible auto tasks."
+3. **Groom Backlog (always runs first)**:
+   - For each task in Backlog, check if ALL blockers are resolved (⛓️ slugs and `blocked-by` in Done column)
+   - **Unblocked 🤖 tasks** → move to Ready automatically
+   - **Unblocked 👤 tasks** → move to Ready + report to user ("👤 task X is now unblocked and ready for you")
+   - Report all promotions: "Promoted N tasks from Backlog → Ready"
+4. **Find 🤖 tasks in Ready column** — lines matching `🤖` in the Ready section
 5. **Apply time-aware filtering**:
    - **Work hours (09:00–22:00)**: only pick `⚡` (quick) tasks. Skip `🏋️` (heavy) and untagged tasks.
    - **Off-hours (22:00–09:00) or weekends**: pick any 🤖 task including `🏋️` and untagged.
-   - If no eligible tasks after filtering: report "No eligible auto tasks for current time window."
+   - If no eligible 🤖 tasks: report "No eligible auto tasks for current time window."
 6. **Pick the first eligible one** (top = highest priority)
 7. **Move it to In Progress** in inbox.md
 8. **If task has a detail file** (`[[slug|Name]]`): read it for context
