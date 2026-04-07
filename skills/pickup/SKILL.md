@@ -19,19 +19,24 @@ description: "Use when starting a new session and wanting to resume unfinished w
 
 Fully autonomous mode. No stopping, no asking, just execute and report.
 
-1. **Check current time** (Vietnam timezone, UTC+7)
+1. **Check current time** — read timezone from `{vault}/context/preferences.md` (Timezone section)
 2. **Scan inbox** — read `{vault}/business/tasks/inbox.md`
 3. **Find 🤖 tasks in Ready column** — lines matching `🤖` in the Ready section
-4. **Apply time-aware filtering**:
-   - **Work hours (09:00–22:00 VN)**: only pick `⚡` (quick) tasks. Skip `🏋️` (heavy) tasks.
-   - **Off-hours (22:00–09:00 VN) or weekends**: pick any 🤖 task including `🏋️`.
+4. **If no 🤖 tasks in Ready → scan Backlog for promotable tasks**:
+   - Find 🤖 tasks in Backlog that have NO unresolved blockers (all `⛓️` deps and `blocked-by` slugs are in Done)
+   - Move unblocked 🤖 tasks to Ready
+   - Also flag any 👤 tasks that got unblocked: report them to user but don't pick them up
+   - If still no eligible 🤖 tasks: report "No eligible auto tasks."
+5. **Apply time-aware filtering**:
+   - **Work hours (09:00–22:00)**: only pick `⚡` (quick) tasks. Skip `🏋️` (heavy) and untagged tasks.
+   - **Off-hours (22:00–09:00) or weekends**: pick any 🤖 task including `🏋️` and untagged.
    - If no eligible tasks after filtering: report "No eligible auto tasks for current time window."
-5. **Pick the first eligible one** (top = highest priority)
-6. **Move it to In Progress** in inbox.md
-7. **If task has a detail file** (`[[slug|Name]]`): read it for context
-8. **If task references a skill** (e.g., "self-learn pipeline"): invoke that skill
-9. **Execute the task end-to-end** — do NOT stop to ask permission, do NOT ask for confirmation
-10. **When done**:
+6. **Pick the first eligible one** (top = highest priority)
+7. **Move it to In Progress** in inbox.md
+8. **If task has a detail file** (`[[slug|Name]]`): read it for context
+9. **If task references a skill** (e.g., "self-learn pipeline"): invoke that skill
+10. **Execute the task end-to-end** — do NOT stop to ask permission, do NOT ask for confirmation
+11. **When done**:
     - Move task to Done: `- [x] 🤖 ... ✅ YYYY-MM-DD`
     - Update detail file if it exists (log entry + status)
     - Report completion status to user:
@@ -39,7 +44,7 @@ Fully autonomous mode. No stopping, no asking, just execute and report.
       ✅ Completed: [task name]
       Summary: [what was done, 2-3 lines]
       ```
-11. **If task fails or is blocked**: report the blocker, move task back to Ready, do NOT attempt next task
+12. **If task fails or is blocked**: report the blocker, move task back to Ready, do NOT attempt next task
 
 #### Weight tags
 - `⚡` — quick task (< 30 min), safe to run anytime
