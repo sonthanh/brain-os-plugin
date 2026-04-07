@@ -28,8 +28,7 @@ description: "Use when processing raw knowledge input (book notes, highlights, r
 4. **Extract memorable quotes**: max 3-5 short quotes (under 15 words each)
 5. **Identify vault connections**: which existing vault files relate to this content?
 6. **Create or update** the book note at `{vault}/knowledge/books/[book-slug].md` using the Book Note Template below
-7. **Update `{vault}/_index.md`** — add/update entry under the appropriate section (Books, Articles, etc.)
-8. **Create wiki-links** to related vault files
+7. **Create wiki-links** to related vault files
 
 ### For Articles/Podcasts/Courses:
 Same process, saved to respective `{vault}/knowledge/[type]/` folder.

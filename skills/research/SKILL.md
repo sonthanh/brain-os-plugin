@@ -142,7 +142,6 @@ Each writes to `{vault}/knowledge/research/reports/research-findings-{slug}-{n}.
 
 Save to: `{vault}/knowledge/research/reports/YYYY-MM-DD-research-{slug}.md`
 
-After saving, update `{vault}/_index.md` — add entry under Research Reports with one-line summary.
 
 ## Phase 4: INGEST (optional, only with --ingest)
 
