@@ -33,7 +33,15 @@ curl -sSL https://raw.githubusercontent.com/sonthanh/brain-os-plugin/main/skills
 
 ### After Install
 
-Edit `~/.brain-os/brain-os.config.md` and set your vault path:
+**1. Set up your vault** — run the setup script to create the folder structure and starter files:
+
+```bash
+./setup-vault.sh
+```
+
+This creates all required directories, populates starter template files, and sets your vault path automatically. See [GETTING-STARTED.md](GETTING-STARTED.md) for the full walkthrough.
+
+**2. Or set vault path manually** — edit `~/.brain-os/brain-os.config.md`:
 
 ```
 vault_path: /path/to/your/obsidian/vault
