@@ -35,6 +35,14 @@ When triggered (by `/aha`, `/aha <note>`, or natural language like "aha"):
 
 3. **Confirm briefly**: "Captured." — then continue working. No summary, no questions.
 
+## Trigger Rules
+- **"aha" at start of message = ALWAYS a trigger**, even with instructions after it
+  - "aha cần tạo task..." → capture aha first, then handle the instruction
+  - "aha switching to remote task" → capture with that as the quote
+- **"aha" mid-sentence is NOT a trigger** — e.g., "I had an aha about..." is normal speech
+- Primary trigger: `/aha` (always reliable)
+- Natural language: best-effort, depends on position in message
+
 ## Rules
 - Speed over completeness — capture in <5 seconds, don't ask follow-up questions
 - If user provides a one-liner (`aha switching to remote task is faster`), use it as the quote
