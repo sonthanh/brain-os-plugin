@@ -9,13 +9,14 @@ import os
 
 NLM_BIN = os.path.expanduser("~/.local/bin/notebooklm")
 
-MIN_DELAY = int(os.environ.get("NLM_MIN_DELAY", 5))
-MAX_DELAY = int(os.environ.get("NLM_MAX_DELAY", 120))
+QUERY_DELAY = int(os.environ.get("NLM_QUERY_DELAY", 3))  # between successful queries
+BACKOFF_START = 15  # first backoff on rate limit
+BACKOFF_MAX = 120   # cap
 
 
 def ask_nlm(question: str, retries: int = 3) -> str:
     """Ask NotebookLM a question with exponential backoff on rate limits."""
-    delay = MIN_DELAY
+    backoff = BACKOFF_START
     for attempt in range(retries + 1):
         try:
             result = subprocess.run(
@@ -32,19 +33,18 @@ def ask_nlm(question: str, retries: int = 3) -> str:
                 return output.strip()
             else:
                 stderr = result.stderr.strip()
-                is_rate_limit = "rate limit" in stderr.lower()
-                if attempt < retries and is_rate_limit:
-                    print(f" RATE LIMITED, waiting {delay}s...", end="", flush=True)
-                    time.sleep(delay)
-                    delay = min(delay * 2, MAX_DELAY)
+                if "rate limit" in stderr.lower() and attempt < retries:
+                    print(f" RATE LIMITED, backoff {backoff}s...", end="", flush=True)
+                    time.sleep(backoff)
+                    backoff = min(backoff * 2, BACKOFF_MAX)
                     continue
                 elif attempt < retries:
-                    time.sleep(MIN_DELAY)
+                    time.sleep(QUERY_DELAY)
                     continue
                 return f"ERROR: {stderr}"
         except subprocess.TimeoutExpired:
             if attempt < retries:
-                time.sleep(MIN_DELAY)
+                time.sleep(QUERY_DELAY)
                 continue
             return "ERROR: Timeout"
         except Exception as e:
@@ -105,7 +105,7 @@ def main():
 
             # Delay between questions to avoid rate limiting
             if not is_error:
-                time.sleep(MIN_DELAY)
+                time.sleep(QUERY_DELAY)
 
     # Summary
     total_ok = 0
