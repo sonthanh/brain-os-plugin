@@ -17,6 +17,12 @@ Before anything else, every `/pickup` call does this:
 
 This is invisible plumbing — the user never invokes it separately.
 
+## `/pickup groom` — Explicit backlog review
+
+Runs the same Step 0 grooming but with **verbose output**: lists every backlog task, its blockers, and whether each blocker is resolved. Reports what moved and what's still blocked.
+
+For now this is identical to the silent groom — reserved for future interactive grooming (e.g., re-classify tasks, suggest priority, split large tasks).
+
 ## `/pickup` — Resume handover tasks (default)
 
 After grooming:
