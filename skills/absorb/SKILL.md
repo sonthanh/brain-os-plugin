@@ -79,8 +79,21 @@ Run: `python3 ${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.py {vault}/knowle
 Approve updates? (all / pick numbers / skip)
 ```
 
+## Post-Absorb: Update Vault Index
+
+After absorption completes (approved changes applied):
+
+1. **Read** `{vault}/_index.md`
+2. **Add/update entries** for any NEW files created during absorption (ideas, patterns, principles)
+3. **Update entries** for any MODIFIED files (e.g., strategy.md got new content → update its one-liner)
+4. **Cross-link check**: scan the absorbed book/article for concepts that overlap with OTHER entries in `_index.md` — add `[[wiki-links]]` in both directions if missing
+5. **Commit** the index update with the absorption commit
+
+This keeps `_index.md` as the single routing table for the entire vault. Every absorption enriches the index.
+
 ## Rules
 - Never update vault files without explicit approval
 - Always show what will change before changing it
 - Prioritize actionable insights over theoretical knowledge
 - Connect to EXISTING vault content — don't create orphan notes
+- After every absorption, update `{vault}/_index.md` (this does NOT require approval — it's routing metadata, not content)
