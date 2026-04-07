@@ -1,0 +1,76 @@
+{
+  "skill_name": "journal",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "What is the default behavior when /journal is invoked without arguments?",
+      "expected_output": "Backfill mode: scan for missing days and create all of them",
+      "expectations": [
+        "Scans {vault}/daily/journal/ for existing journey files",
+        "Determines Day 1 from the earliest journal file's date",
+        "Checks every date from Day 1 through yesterday for missing journals",
+        "Creates journals for each missing day using the full process",
+        "Skips days with no data (rest days get a minimal journal)"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "What are the 6 data sources the journal skill aggregates?",
+      "expected_output": "Git logs, aha moments, grill sessions, handovers, email intelligence, session summaries",
+      "expectations": [
+        "Mentions git logs across multiple repos (brain, brain-ops, brain-os-plugin, brain-os-marketplace)",
+        "Mentions aha moments from daily/sessions/YYYY-MM-DD-aha.md",
+        "Mentions grill sessions from daily/grill-sessions/",
+        "Mentions handovers from daily/handovers/",
+        "Mentions email intelligence from business/intelligence/emails/",
+        "Mentions session summaries from daily/sessions/"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "What sections does the journal output format contain?",
+      "expected_output": "7 sections: Story, Key Decisions, Aha Moments, Real Examples, Numbers, What Broke, What I'd Do Differently, Content Angles",
+      "expectations": [
+        "Has The Story section with narrative arc (2-3 paragraphs)",
+        "Has Key Decisions table with columns: Decision, What I chose, Why, What I rejected",
+        "Has Aha Moments section (best 3-5 from daily aha file)",
+        "Has Real Examples section with code diffs and exact commands",
+        "Has Numbers section with concrete metrics",
+        "Has What Broke section for failures",
+        "Has Content Angles section with hook, platform, and Hormozi principle"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "How does /journal handle explicit date or day number arguments?",
+      "expected_output": "Creates only that specific day's journal, determines correct day number from directory",
+      "expectations": [
+        "Supports specific date format like /journal 2026-04-06",
+        "Supports day number format like /journal day 3",
+        "Creates only that single day's journal, not all missing days",
+        "Still determines the correct day number from the journal directory"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "What are the key rules for writing journal content?",
+      "expected_output": "Narrative over list, real examples, failures as content, Hormozi lens, no fabrication",
+      "expectations": [
+        "Narrative over list — tell a story, don't just list commits",
+        "Real examples are gold — actual code, prompts, error messages",
+        "Failures are content — 'I tried X and it broke' is valuable",
+        "Hormozi lens — free Facebook post gets insights, paid Substack gets implementation",
+        "Don't fabricate — every claim must trace to a git commit, aha moment, or grill session"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "How does day numbering work in the journal skill?",
+      "expected_output": "Check earliest file in journal directory to determine Day 1, count sequentially",
+      "expectations": [
+        "Checks {vault}/daily/journal/ for the earliest file to determine Day 1",
+        "Counts sequentially from Day 1 date"
+      ]
+    }
+  ]
+}
