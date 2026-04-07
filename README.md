@@ -1,210 +1,134 @@
 # Brain OS
 
-A Claude Code plugin for managing a second brain powered by Obsidian. 28 skills for knowledge management, deep thinking, web research, Gmail automation, and vault operations.
+Your AI tools give generic answers because they don't know how you think.
+Brain OS fixes that — it's a Claude Code plugin that turns your Obsidian vault into a second brain that learns, thinks, and acts with you.
 
-**[Documentation](https://aileadersvietnam.mintlify.app/)** | **[Subscribe on Substack](https://thanhdo.substack.com/)** for detailed walkthroughs on building this plugin, the self-learn pipeline, and how to build your own second brain with Claude Code.
+## Quick Start
 
-## Installation
-
-### All skills (one line)
-
-```bash
-curl -sSL https://raw.githubusercontent.com/sonthanh/brain-os-plugin/main/skills.sh | bash
-```
-
-### Pick specific skills
+One line. Plugin + vault + everything ready in under 2 minutes:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/sonthanh/brain-os-plugin/main/skills.sh | bash -s self-learn audit today
+curl -sSL https://raw.githubusercontent.com/sonthanh/brain-os-plugin/main/install.sh | bash
 ```
 
-### Via Claude Code Marketplace
-
+Already have an Obsidian vault? Point to it:
 ```bash
-/plugin marketplace add sonthanh/brain-os-marketplace
-/plugin install brain-os@brain-os-marketplace
+curl -sSL .../install.sh | bash -s -- --vault ~/my-vault
 ```
 
-### Uninstall
-
+Just want the plugin (no vault setup):
 ```bash
-curl -sSL https://raw.githubusercontent.com/sonthanh/brain-os-plugin/main/skills.sh | bash -s -- --uninstall
+curl -sSL .../install.sh | bash -s -- --plugin-only
 ```
 
-### After Install
-
-**1. Set up your vault** — run the setup script to create the folder structure and starter files:
-
-```bash
-./setup-vault.sh
-```
-
-This creates all required directories, populates starter template files, and sets your vault path automatically. See [GETTING-STARTED.md](GETTING-STARTED.md) for the full walkthrough.
-
-**2. Or set vault path manually** — edit `~/.brain-os/brain-os.config.md`:
+After install, try your first command:
 
 ```
-vault_path: /path/to/your/obsidian/vault
+/think What should I focus on this week?
 ```
 
-## Vault Structure
+Brain OS reads your context, goals, and recent activity — then thinks with you.
+Not generic advice. Your priorities, your situation.
 
-Brain OS expects an Obsidian vault with this layout:
+> **Power feature:** `/study` reads an entire book, extracts atomic notes, validates each one against NotebookLM (159/159 checks, avg 97/100 accuracy), and connects insights to your vault — fully autonomous.
 
-```
-your-vault/
-├── context/          # Who you are, business, goals, ICP, brand
-├── business/         # Projects, tasks, intelligence, departments
-├── personal/         # Research, people, resources, inbox
-├── thinking/         # Ideas, patterns, reflections, connections
-├── knowledge/        # Books, articles, raw input
-│   ├── raw/          # Unprocessed book extractions
-│   ├── books/        # Structured book notes
-│   └── research/     # Web research outputs
-│       ├── reports/  # Synthesized research reports
-│       └── findings/ # Atomic ingested findings
-├── daily/            # Daily notes, handovers
-└── private/          # Git-ignored confidential data
-```
+See [Getting Started](GETTING-STARTED.md) for the full setup walkthrough and first use cases.
+
+## Why Brain OS
+
+Claude Code skills solve specific tasks. But context is scattered across projects, skills, and agents. Each one knows a piece — none sees the full picture. Decisions from fragmented context are generic: "correct but not yours."
+
+Think of it like onboarding a team lead. You don't start by delegating decisions — you teach them how you think first. Give them the books you've read, the frameworks you use, the goals you're chasing. Then gradually let them act.
+
+That's what Brain OS does with AI. One vault, one knowledge layer. Every skill reads from the same source of truth — your context, your knowledge, your decisions. The more you use it, the more it thinks like you.
+
+Karpathy is building something similar with "LLM Knowledge Bases." Same direction, different purpose — he builds a wiki to read. Brain OS is an OS to act.
+
+[Read the full story: Day 1 — I Taught an AI to Read a Book](https://thanhdo.substack.com/)
 
 ## Skills
 
-### Knowledge Pipeline
+### Learn — teach it what you know
+
+| Skill | When to use |
+|-------|-------------|
+| `/study` | When you want to master a book end-to-end: extract, validate, absorb into your vault |
+| `/self-learn` | When you want to extract and validate knowledge from a book (the core of `/study`) |
+| `/research` | When you need to understand a topic — searches the web and synthesizes a cited report |
+
+### Think — let it reason with you
+
+| Skill | When to use |
+|-------|-------------|
+| `/think` | When you're stuck on a decision, exploring an idea, or want deep reflection on anything |
+| `/grill` | When you need a plan stress-tested until it's bulletproof |
+
+### Act — let it work for you
+
+| Skill | When to use |
+|-------|-------------|
+| `/status` | Morning briefing — what's open, what's urgent, what to focus on |
+| `/aha` | When something clicks mid-session — captures the moment with full context |
+| `/journal` | End of day — aggregates your journey into content material, surfaces what's missing |
+| `/handover` | When you're stopping a session — creates a summary for next time |
+| `/pickup` | When you're starting a new session — resumes where you left off |
+
+<details>
+<summary><strong>All skills</strong> — full reference</summary>
+
 | Skill | Description |
 |-------|-------------|
-| **self-learn** | Master a book through 3-phase autoresearch: extract, validate against NotebookLM, extend |
-| **audit** | Verify ingested knowledge with 50 fresh questions against NotebookLM |
-| **chain** | Orchestrate full pipeline: self-learn → ingest → audit → absorb → sync |
-| **ingest** | Process raw knowledge into structured vault notes |
-| **absorb** | Extract deep insights from books, connect to vault zones |
-| **book** | Interactive book knowledge capture through conversation |
+| `/ingest` | Process raw notes into structured vault notes |
+| `/audit` | Verify extracted knowledge against NotebookLM with fresh questions |
+| `/absorb` | Connect book insights to your vault zones (business, personal, thinking) |
+| `/gmail` | Automated inbox triage — cleanup, draft replies, process reports |
+| `/gmail-bootstrap` | One-time setup: scan 3 months of inbox to build email rules |
+| `/triggers` | Manage and debug scheduled remote agents |
+| `/eval` | Run eval checks on skills to catch regressions |
+| `/sync` | Git commit and push all vault changes |
 
-| **research** | Web research agent: multi-platform search → synthesize into cited bullet points → optionally ingest to vault |
-
-### Gmail Automation
-| Skill | Description |
-|-------|-------------|
-| **gmail** | Execute triage actions — cleanup inbox, draft replies, process reports |
-| **gmail-bootstrap** | One-time: scan 3 months of inbox to build email rules |
-| **grill** | Interview relentlessly about a topic until reaching a bulletproof plan |
-
-### Daily Operations
-| Skill | Description |
-|-------|-------------|
-| **today** | Morning review: calendar + tasks + gmail triage → prioritized plan (auto-scheduled 7AM) |
-| **close** | End of day: extract action items, surface connections (auto-scheduled 10:30PM) |
-| **handover** | Create handover doc for next session with decisions and next steps |
-| **pickup** | Resume unfinished work from a previous handover |
-| **sync** | Git commit and push all vault changes |
-
-### Thinking
-| Skill | Description |
-|-------|-------------|
-| **think** | Deep thinking mode — ideas, patterns, reflections |
-| **emerge** | Surface ideas the vault implies but you never stated |
-| **challenge** | Pressure test beliefs against vault history |
-| **drift** | Compare stated intentions vs actual behavior |
-| **connect** | Find connections between two domains |
-| **trace** | Track how an idea evolved over time |
-| **ghost** | Answer a question in your voice based on vault history |
-| **ideas-gen** | Generate ideas by scanning across all vault domains |
-| **graduate** | Promote ideas from daily notes to standalone files |
-
-### Mode Switching
-| Skill | Description |
-|-------|-------------|
-| **work** | Business operations mode |
-| **personal** | Personal assistant mode |
-| **context** | Load full context about you |
-
-### Meta
-| Skill | Description |
-|-------|-------------|
-| **eval** | Run eval checks on skills to catch regressions |
+</details>
 
 ## Dependencies
 
 **Required for all skills:**
 - [Claude Code](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview)
-- An Obsidian vault (or any markdown-based vault with the expected structure)
+- An Obsidian vault (or any markdown-based vault)
 
-**Required for self-learn and audit skills only:**
+**Required for self-learn and audit only:**
 - Python 3.12+
-- [notebooklm-py](https://github.com/nicholasgasior/notebooklm-py) CLI at `~/.local/bin/notebooklm`
-- Python packages: `pip install ebooklib beautifulsoup4`
-
-```bash
-cd brain-os-plugin/skills/self-learn/scripts
-python3 -m venv .venv
-source .venv/bin/activate
-pip install ebooklib beautifulsoup4
-```
+- [notebooklm-py](https://github.com/nicholasgasior/notebooklm-py) — `pip install notebooklm-py`
+- `pip install ebooklib beautifulsoup4`
 
 ## Eval System
 
-Brain OS includes a two-layer eval system to catch regressions when editing skills.
+Brain OS includes evals to catch regressions when editing skills.
 
-### Layer 1: Smart Diff Check (automatic)
+**Auto (on every edit):** A PostToolUse hook diffs against git baseline and warns if critical content was removed.
 
-A PostToolUse hook that runs on every SKILL.md edit. Diffs against git baseline and warns if critical content was removed.
-
-Add to `~/.claude/settings.json`:
-
-```json
-{
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write",
-        "hooks": [{
-          "type": "command",
-          "command": "bash ~/brain-os-plugin/evals/smart-diff-check.sh"
-        }]
-      }
-    ]
-  }
-}
-```
-
-### Layer 2: Eval checks (on-demand)
-
-Pipeline skills have `evals/evals.json` following the [Agent Skills](https://agentskills.io/skill-creation/evaluating-skills) standard:
+**On-demand:** Pipeline skills have `evals/evals.json` following the [Agent Skills](https://agentskills.io/skill-creation/evaluating-skills) standard:
 
 ```
 /eval self-learn
 ```
 
-### Adding evals to your skill
-
-Create `evals/evals.json` in your skill directory following the [standard schema](https://agentskills.io/skill-creation/evaluating-skills):
-
-```json
-{
-  "skill_name": "my-skill",
-  "evals": [
-    {
-      "id": 1,
-      "prompt": "User task to test",
-      "expected_output": "What success looks like",
-      "expectations": ["Verifiable assertion 1", "Verifiable assertion 2"]
-    }
-  ]
-}
-```
-
-### Creating and improving skills
-
-Use the official tooling:
-- **`/grill-me`** — stress-test your skill design before building
-- **`/skill-creator`** — create, evaluate, and iterate on skills with structured evals
-- **[Agent Skills spec](https://agentskills.io/specification)** — the open format standard
-- **[Best practices](https://agentskills.io/skill-creation/best-practices)** — official skill creation guide
-
 ## Updating
 
 ```bash
-/plugin update brain-os
+curl -sSL https://raw.githubusercontent.com/sonthanh/brain-os-plugin/main/install.sh | bash
 ```
+
+## Uninstall
+
+```bash
+curl -sSL https://raw.githubusercontent.com/sonthanh/brain-os-plugin/main/install.sh | bash -s -- --uninstall
+```
+
+## Links
+
+- [Documentation](https://aileadersvietnam.mintlify.app/)
+- [Subscribe on Substack](https://thanhdo.substack.com/) — build logs, self-learn pipeline walkthroughs, and how to build your own second brain
+- [Agent Skills spec](https://agentskills.io/specification) — the open format standard
 
 ## License
 
