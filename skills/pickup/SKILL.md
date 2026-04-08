@@ -49,7 +49,7 @@ After grooming:
 3. **If multiple tasks**: show list, ask user which one to pick up
 4. **If zero handover tasks**: show all Ready tasks as a summary so user can decide
 
-## `/pickup auto` — Execute next 🤖 auto task autonomously
+## `/pickup auto` — Launch 🤖 tasks in background
 
 After grooming:
 
@@ -60,32 +60,43 @@ After grooming:
    - If no eligible 🤖 tasks: report "No eligible auto tasks for current time window."
 3. **Pick the first eligible one** (top = highest priority)
 4. **Move it to In Progress** in inbox.md
-5. **If task has a detail file** (`[[slug|Name]]`): read it for context
-6. **Launch via Ralph Loop** to guarantee completion:
-   - Build the prompt from task description + any linked skill invocation
-   - Set `--completion-promise` to a task-specific success phrase (e.g., "TASK COMPLETE")
-   - Set `--max-iterations` based on weight: `⚡` → 20, `🏋️` → 50, untagged → 30
-   - Invoke: `/ralph-loop "<prompt>" --completion-promise "TASK COMPLETE" --max-iterations N`
-7. **When done** (Ralph Loop exits with promise met):
-    - Move task to Done: `- [x] 🤖 ... ✅ YYYY-MM-DD`
-    - Update detail file if it exists (log entry + status)
-    - Report completion status to user:
-      ```
-      ✅ Completed: [task name]
-      Summary: [what was done, 2-3 lines]
-      ```
-8. **If task fails or is blocked**: report the blocker, move task back to Ready, do NOT attempt next task
+5. **Build the prompt** from task description + any linked detail file + skill reference
+6. **Launch as background Claude process** — the task runs independently, user is NOT blocked:
+   ```bash
+   claude -p \
+     --dangerously-skip-permissions \
+     --max-budget-usd 5 \
+     "<prompt>" \
+     > /tmp/auto-task-{slug}.log 2>&1 &
+   ```
+   The prompt MUST include:
+   - The full task description
+   - "When done: (1) move task to Done in inbox.md, (2) commit and push, (3) send Telegram notification"
+   - Any linked skill invocation (e.g., `/study`, `/ingest`)
+   - Ralph Loop instructions: "Do NOT stop until the task is complete. If blocked, log the blocker and move task back to Ready."
+7. **Report to user immediately** (don't wait for completion):
+   ```
+   🚀 Launched: [task name]
+   Running in background (PID: XXXX)
+   Log: /tmp/auto-task-{slug}.log
+   Will notify via Telegram when done.
+   ```
+
+#### `/pickup auto --all` — Launch ALL eligible 🤖 tasks
+
+Same as above but launches every eligible 🤖 task in parallel, each in its own background Claude process.
 
 #### Weight tags
-- `⚡` — quick task (< 30 min), safe to run anytime, Ralph Loop max 20 iterations
-- `🏋️` — heavy task (1h+), only run off-hours, Ralph Loop max 50 iterations
+- `⚡` — quick task (< 30 min), safe to run anytime, max budget $2
+- `🏋️` — heavy task (1h+), only run off-hours, max budget $10
 
 #### Auto mode rules
-- **ONE task per invocation** — finish it, report, stop. User decides whether to run again.
+- **Fire-and-forget** — launch in background, report immediately, user continues working.
 - **No human input** — if a task requires 👤 decisions, skip it and pick the next 🤖 task.
-- **Ralph Loop by default** — all 🤖 tasks run inside Ralph Loop. This mechanically prevents Claude from stopping mid-task. The Stop hook re-prompts until the completion promise is output.
+- **Self-completing** — the background process handles: execute → update inbox.md → commit + push → notify via Telegram.
 - **Respect skill flows** — if a task maps to a skill (e.g., `/study`, `/ingest`), invoke that skill with full autonomy.
 - **Time-aware** — never run 🏋️ tasks during work hours unless explicitly overridden.
+- **Budget-capped** — each task has a max budget to prevent runaway costs.
 
 ## Handover Task Behavior
 
