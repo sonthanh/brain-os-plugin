@@ -5,22 +5,35 @@ description: "Use when starting a new session and wanting to resume unfinished w
 
 # Pickup — Resume Work
 
-## Step 0: Groom Backlog (runs on every invocation, silently)
+## `/pickup` — Resume handover tasks (default)
 
-Before anything else, every `/pickup` call does this:
+Go straight to handovers — no grooming, no delay:
 
-1. Read `{vault}/business/tasks/inbox.md` and `{vault}/context/preferences.md` (timezone)
-2. For each Backlog task, assess readiness:
-   - **Blocked?** Check ⛓️ slugs and `blocked-by` — if any blocker is NOT in Done → stays in Backlog
-   - **Clear to execute?** Does the task have enough context to act on? → Ready
-   - Vague tasks (no clear next step, needs scoping): → stays in Backlog
-3. Move clear + unblocked tasks to Ready
-4. Report promotions: "Promoted: [task names] → Ready"
-5. If vague tasks remain in Backlog, append: "N tasks need context — run `/pickup groom` to classify them"
+1. Read `{vault}/business/tasks/inbox.md`
+2. Find unchecked handover tasks — lines matching `📋` tag
+3. **If one task**: load its handover doc and start immediately
+4. **If multiple tasks**: show list, ask user which one to pick up
+5. **If zero handover tasks**: show Ready tasks as summary so user can decide
+
+## `/pickup next` — Groom + Autogrill + Start top task
+
+This is where grooming and autogrill happen:
+
+1. **Groom Backlog:**
+   - For each Backlog task, assess readiness:
+     - **Blocked?** Check ⛓️ slugs and `blocked-by` — if any blocker is NOT in Done → stays in Backlog
+     - **Clear to execute?** Enough context to act on? → Ready
+     - Vague (no clear next step)? → stays in Backlog
+   - Move clear + unblocked tasks to Ready
+   - Report promotions
+
+2. **Autogrill Ready Tasks** (Step 2 below)
+
+3. **Start top remaining task** — pick first Ready task, move to In Progress, begin
 
 ## `/pickup groom` — Interactive backlog classification
 
-For tasks that Step 0 couldn't auto-classify (vague, needs scoping, unclear priority):
+For vague tasks that auto-groom couldn't classify:
 
 1. List each remaining Backlog task with current assessment
 2. For each unclear task, ask the user targeted questions:
@@ -29,15 +42,6 @@ For tasks that Step 0 couldn't auto-classify (vague, needs scoping, unclear prio
    - Any blockers?
 3. Update the task in inbox.md with the classification
 4. Move newly-classified tasks to Ready
-
-## `/pickup` — Resume handover tasks (default)
-
-After grooming:
-
-1. Find unchecked handover tasks — lines matching `📋` tag in Ready
-2. **If one task**: load its handover doc and start
-3. **If multiple tasks**: show list, ask user which one to pick up
-4. **If zero handover tasks**: run **Step 2: Autogrill** on Ready tasks
 
 ## Step 2: Autogrill Ready Tasks
 
@@ -192,9 +196,10 @@ Session A:
   /handover → creates handover doc + writes task to inbox.md
 
 Session B (new Claude):
-  /pickup → groom → handovers first → autogrill remaining → surface gaps
+  /pickup → straight to handovers → load doc → start working
   ... work done ...
   marks task ✅ in inbox.md
 
-  /pickup auto → grabs eligible tasks → launches in background → self-completes
+  /pickup next → groom backlog → autogrill Ready → start top task
+  /pickup auto → groom → launch eligible in background → self-completes
 ```
