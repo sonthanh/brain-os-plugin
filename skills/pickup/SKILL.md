@@ -71,7 +71,7 @@ After grooming:
    ```
    The prompt MUST include:
    - The full task description
-   - "When done: (1) move task to Done in inbox.md, (2) commit and push, (3) send Telegram notification"
+   - "When done: (1) move task to Done in inbox.md, (2) commit and push, (3) send Telegram notification with task name + result summary"
    - Any linked skill invocation (e.g., `/study`, `/ingest`)
    - Ralph Loop instructions: "Do NOT stop until the task is complete. If blocked, log the blocker and move task back to Ready."
 7. **Report to user immediately** (don't wait for completion):
@@ -103,7 +103,7 @@ All launch in parallel. Report all PIDs and logs to user at once.
 - **Fire-and-forget** — launch in background, report immediately, user continues working.
 - **Worktree isolation** — each task runs via `claude -w` in its own worktree to avoid conflicts with main workspace.
 - **No human input** — if a task requires 👤 decisions, skip it and pick the next 🤖 task.
-- **Self-completing** — the background process handles: execute → update inbox.md → commit + push → notify via Telegram.
+- **Self-completing** — the background process handles: execute → update inbox.md → commit + push → notify via Telegram. Each task reports independently — whichever finishes first notifies first.
 - **Respect skill flows** — if a task maps to a skill (e.g., `/study`, `/ingest`), invoke that skill with full autonomy.
 - **Time-aware** — never run 🏋️ tasks during work hours unless explicitly overridden.
 - **No budget cap** — tasks run until complete. Ralph Loop ensures completion.
