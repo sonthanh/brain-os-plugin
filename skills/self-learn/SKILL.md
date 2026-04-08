@@ -103,7 +103,19 @@ Round 2: 94/100 passed (94%) — weak: [accountability-structures]
 Round 3: 100/100 passed (100%) — MASTERY ACHIEVED
 ```
 
-## Phase 3: EXTEND
+## Phase 3: EXTEND + INGEST
+
+### 3a. Create Structured Book Note
+
+After validation passes, create the structured book note directly (previously a separate `/ingest` step):
+
+1. Read all validated atomic notes from `{obsidian_vault}/{book-slug}/`
+2. Synthesize into a single structured book note at `{vault}/knowledge/books/{book-slug}.md`
+3. Use the Book Note Template (see `/ingest` skill for template)
+4. Extract: metadata, key concepts, frameworks, actionable insights, quotes, vault connections
+5. Mark `ingested: true` in `_validation/audit-flag.json`
+
+### 3b. Extend Beyond Source
 
 1. **Synthesize** with adjacent thinkers — tagged `source: "synthesis"`
 2. **Apply** to new domains — in `applied/{domain}/`, tagged `source: "application"`
@@ -113,8 +125,8 @@ Extension notes use same template but different source tags.
 
 ## After Completion
 
-Pipeline continues autonomously: `/ingest` → `/audit` → `/absorb` → commit + push → notify.
-Phase 2 must reach 100% pass at ≥95 before `/ingest` triggers. See `/study` for full pipeline.
+Pipeline continues autonomously: `/audit` → `/absorb` → commit + push → notify.
+Phase 2 must reach 100% pass at ≥95 before Phase 3 runs. See `/study` for full pipeline.
 
 ## Usage
 

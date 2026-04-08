@@ -17,19 +17,17 @@ description: "Use when running the complete knowledge pipeline for a book, from 
 Step 1: /self-learn --book <epub> --notebook-id <id>
   ├── Phase 1: Extract (epub → atomic notes in knowledge/raw/)
   ├── Phase 2: Validate (questions vs NotebookLM, ≥95 threshold, 100% pass)
-  └── Phase 3: Extend (synthesis + applied + research)
+  └── Phase 3: Extend + Ingest (book note in knowledge/books/ + synthesis)
         ↓
-Step 2: /ingest (raw notes → structured book note in knowledge/books/)
-        ↓
-Step 3: /audit (50 fresh questions vs NotebookLM → audit flag)
+Step 2: /audit (50 fresh questions vs NotebookLM → audit flag)
   ├── PASS → audited: true
   └── FAIL → audited: false → STOP, notify user
         ↓
-Step 4: /absorb (book note → vault connections, bypass approval since audited: true)
+Step 3: /absorb (book note → vault connections, bypass approval since audited: true)
         ↓
-Step 5: commit + push (git commit + push all changes)
+Step 4: commit + push (git commit + push all changes)
         ↓
-Step 6: Notify all 3 channels
+Step 5: Notify all 3 channels
   ├── Obsidian task in business/tasks/inbox.md
   ├── Daily note entry
   └── Audit flag updated with pipeline_completed timestamp
@@ -39,29 +37,27 @@ Step 6: Notify all 3 channels
 
 **IMPORTANT: Run each step sequentially. Do NOT skip steps.**
 
-### Step 1: Self-Learn
+### Step 1: Self-Learn (includes ingestion)
 ```
 /self-learn --book <epub_path> --notebook-id <nlm_id>
 ```
-Wait for all 3 phases to complete. Check with `/self-learn --status`.
+Wait for all 3 phases to complete. Phase 3 now creates the structured book note
+in `knowledge/books/` (previously a separate `/ingest` step). Check with `/self-learn --status`.
 
-### Step 2: Ingest
-Run the `/ingest` skill on the book's raw notes folder.
-
-### Step 3: Audit
+### Step 2: Audit
 ```bash
 python3 ${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.py {vault}/knowledge/raw --status
 ```
 If flag is `false`, run `/audit` with 50 fresh questions.
 If flag is already `true` (from self-learn validation), proceed.
 
-### Step 4: Absorb
+### Step 3: Absorb
 Run the `/absorb` skill. Since audit is true, bypass approval — apply all vault connections automatically.
 
-### Step 5: Commit + Push
+### Step 4: Commit + Push
 Commit and push all vault changes to git.
 
-### Step 6: Notify
+### Step 5: Notify
 - Add review task to `business/tasks/inbox.md`
 - Create/update daily note with pipeline log
 - Update audit flag with `pipeline_completed` timestamp

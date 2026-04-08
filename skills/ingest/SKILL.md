@@ -6,6 +6,8 @@ description: "Use when processing raw knowledge input (book notes, highlights, r
 ## Vault Location
 **Vault path:** Read from `${CLAUDE_PLUGIN_ROOT}/brain-os.config.md`
 
+**Note:** When using `/study` pipeline, ingestion is handled by self-learn Phase 3 automatically. Use `/ingest` standalone for manual processing of raw files outside the study pipeline.
+
 ## Behavior
 
 ### If `/ingest` (no argument) — Process all raw files
@@ -90,11 +92,6 @@ status: reading | completed | abandoned
 - [Question the book made me think about]
 ```
 
-## After Ingestion
-Ask: "I've processed [X]. Want me to run `/absorb` to extract deeper insights and connect them to your vault?"
-
-## Auto-Chain (Post-Ingest)
-After successful ingestion:
-1. Auto-trigger /audit on the ingested book
-2. If audit passes → auto-trigger /absorb
-3. Notify all 3 channels (Obsidian task, daily note, audit flag)
+## After Ingestion (standalone mode only)
+Auto-chain: `/audit` → `/absorb` → commit + push → notify.
+Do NOT ask for confirmation — execute the full chain.
