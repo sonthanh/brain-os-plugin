@@ -21,13 +21,27 @@ Enforces a spec-test-build-verify cycle for all code that runs. Synthesized from
 
 These are non-negotiable. Breaking them = deleting the violating code and restarting.
 
-1. **No code before tests.** Write the test/verification first. Watch it fail. Then write the implementation. Code written before its test is deleted.
-2. **No fix without investigation.** When something fails: read the error, check assumptions, trace the root cause. Never retry blindly. After 3 failed fix attempts on the same issue → STOP and report to user.
-3. **No ship without verify.** Every change must pass its verification before commit. Silent failures are worse than crashes.
+1. **First principles first.** Before building ANYTHING, answer these 3 questions:
+   - "Does this already exist somewhere?" (grep codebase, read existing skills/code)
+   - "What's the ONE thing that's actually missing?"
+   - "Can I add it in < 10 lines instead of building a new system?"
+   If the answer to #3 is yes → do that. Don't build a system. Delete your spec and just add the lines.
+2. **No code before tests.** Write the test/verification first. Watch it fail. Then write the implementation. Code written before its test is deleted.
+3. **No fix without investigation.** When something fails: read the error, check assumptions, trace the root cause. Never retry blindly. After 3 failed fix attempts on the same issue → STOP and report to user.
+4. **No ship without verify.** Every change must pass its verification before commit. Silent failures are worse than crashes.
 
 ## Process
 
-### Phase 1: SPEC
+### Phase 0: FIRST PRINCIPLES CHECK
+
+Before starting the spec, answer:
+1. **Does this already exist?** Search codebase, skills, hooks for existing solution.
+2. **What's the minimal change?** Identify the ONE thing missing. Not a system — the thing.
+3. **Can existing code do this with a small addition?** If yes → make the addition, skip the rest of /develop.
+
+If Phase 0 kills the task (it already exists or needs < 10 lines) → report what you found and make the small change. No spec, no test plan, no ceremony.
+
+### Phase 1: SPEC (only if Phase 0 says "genuinely new")
 
 1. Read the task — detail file, linked issues, conversation context
 2. Write a spec (5-10 bullets):
