@@ -73,44 +73,62 @@ Include:
 
 ## Usage
 ```
-/grill <topic>           Auto-grill (vault-first, default)
-/grill --manual <topic>  Manual grill (skip vault search, ask everything)
-/grill --compare <topic> Run both modes on same topic, then diff
-/grill                   Resume or ask what to grill on
+/grill <topic>              Manual grill (default — ask everything)
+/grill auto <topic>         Auto-grill (vault-first, skip known answers)
+/grill compare <topic>      Compare existing sessions on same topic
+/grill                      Resume or ask what to grill on
 ```
 
 ## Modes
 
-### Auto (default)
+### Manual (default)
+Ask every question from scratch. No vault search. Pure grill.
+This is the proven mode — it always works. Saves to `YYYY-MM-DD-<topic>-manual.md`.
+
+### Auto (`/grill auto`)
 Searches vault before each question. Presents found knowledge. Only grills for gaps.
-Best for: topics where vault already has context (business strategy, technical decisions).
+Saves to `YYYY-MM-DD-<topic>-auto.md`.
+Best for: topics where vault has rich context and you want to skip re-answering settled questions.
 
-### Manual (`--manual`)
-Skips vault search entirely. Asks every question from scratch as if vault doesn't exist.
-Best for: stress-testing assumptions, getting a fresh perspective, or auditing auto mode.
+### Compare (`/grill compare`)
+Compares two grill sessions (manual vs auto) on the same topic. Flexible workflow:
 
-### Compare (`--compare`)
-1. Run auto-grill first → save as `YYYY-MM-DD-<topic>-auto.md`
-2. Run manual grill on same topic → save as `YYYY-MM-DD-<topic>-manual.md`
-3. Diff the two sessions and produce a comparison report:
+**Typical flow:**
+1. `/grill auto <topic>` → run auto-grill, find issues
+2. `/grill <topic>` → re-grill manually to get ground truth
+3. `/grill compare <topic>` → diff the two sessions
+
+**What compare does:**
+1. Find existing sessions for `<topic>` in `daily/grill-sessions/` (looks for `*-<topic>-auto.md` and `*-<topic>-manual.md`)
+2. If both exist → produce comparison report
+3. If only one exists → tell user which mode is missing, offer to run it
+4. Comparison report:
    ```
    ## Comparison: <topic>
-   
-   ### Auto-grill stats
-   - Questions vault answered: N
-   - Questions human answered: N
-   - Vault accuracy: N/N correct (X%)
-   
-   ### Differences
-   - [Question]: Auto said X (from vault), Manual revealed Y (different!)
-   - [Question]: Auto correct, Manual confirmed same answer
-   
+
+   ### Stats
+   - Auto: N questions, vault answered M (X%)
+   - Manual: N questions, human answered all
+
+   ### Where auto was right
+   - [Question]: vault said X, manual confirmed X ✅
+
+   ### Where auto was wrong
+   - [Question]: vault said X, manual revealed Y ❌
+     → Vault entry updated: [[context/file]]
+
+   ### What auto missed
+   - [Question]: auto skipped this (vault had no info), manual uncovered important insight
+     → New vault entry: [[context/file]]
+
    ### Learnings
-   - Vault entries to update: [list files where vault was wrong/stale]
-   - Vault entries confirmed: [list files where vault was correct]
+   - Vault accuracy: X% (N/M correct)
+   - Files updated: [list]
+   - Files confirmed accurate: [list]
    ```
-4. Save comparison to `YYYY-MM-DD-<topic>-comparison.md`
-5. Auto-update stale vault entries identified in the diff
+5. Save to `YYYY-MM-DD-<topic>-comparison.md`
+6. Auto-update stale vault entries from the diff
+7. Log accuracy trend: if multiple comparisons exist, show improvement over time
 
 ## Session Log Format
 
