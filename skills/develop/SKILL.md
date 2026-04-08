@@ -41,7 +41,7 @@ Before starting the spec, answer:
 
 If Phase 0 kills the task (it already exists or needs < 10 lines) → report what you found and make the small change. No spec, no test plan, no ceremony.
 
-**Log it:** Update `{vault}/thinking/principles/first-principles-log.md` — increment usage count in Active Principles table, add combination if multiple principles applied, append a row to the Log.
+**Log it:** Update `{vault}/thinking/principles/tracker.md` — increment usage count in Active Principles table, add combination if multiple principles applied, append a row to the Log.
 
 ### Phase 1: SPEC (only if Phase 0 says "genuinely new")
 
