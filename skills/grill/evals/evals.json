@@ -4,60 +4,27 @@
     {
       "id": 1,
       "prompt": "What does grill do before asking the user a question?",
-      "expected_output": "Searches vault for existing answers first",
+      "expected_output": "Searches documents and web for answers first",
       "expectations": [
-        "Mentions searching vault or context files before asking",
-        "Mentions auto-search or vault-first behavior",
-        "Mentions only asking human for gaps vault can't answer"
+        "Mentions reviewing documents or browsing web before asking",
+        "Mentions only asking human when answer can't be found"
       ]
     },
     {
       "id": 2,
-      "prompt": "What happens after the user provides a new answer during a grill session?",
-      "expected_output": "Answer is written back to vault context files",
+      "prompt": "What happens after a decision is made during a grill session?",
+      "expected_output": "New knowledge is written back to vault context files",
       "expectations": [
-        "Mentions writing answers back to vault",
-        "Mentions updating context files with new knowledge",
-        "Mentions the vault growing from grill sessions"
+        "Mentions writing back to vault context files",
+        "Mentions the vault growing so same question never asked twice"
       ]
     },
     {
       "id": 3,
-      "prompt": "What modes does grill support and how do they differ?",
-      "expected_output": "Auto, manual, and compare modes",
+      "prompt": "Where does grill save its output?",
+      "expected_output": "daily/grill-sessions/ with date and topic slug",
       "expectations": [
-        "Mentions auto mode (vault-first, default)",
-        "Mentions manual mode (skip vault search)",
-        "Mentions compare mode (run both and diff)"
-      ]
-    },
-    {
-      "id": 4,
-      "prompt": "What metrics does grill track in its session log?",
-      "expected_output": "Stats on vault vs human answers and accuracy",
-      "expectations": [
-        "Mentions vault-answered count vs human-answered count",
-        "Mentions vault accuracy percentage",
-        "Mentions context files updated"
-      ]
-    },
-    {
-      "id": 5,
-      "prompt": "How does the compare mode work?",
-      "expected_output": "Runs auto then manual, diffs the results, updates stale vault entries",
-      "expectations": [
-        "Mentions running both auto and manual on same topic",
-        "Mentions producing a comparison report with differences",
-        "Mentions auto-updating stale vault entries from the diff"
-      ]
-    },
-    {
-      "id": 6,
-      "prompt": "What happens when the user says the grill was wrong about something?",
-      "expected_output": "Updates vault immediately and logs the correction",
-      "expectations": [
-        "Mentions updating the stale vault entry",
-        "Mentions logging correction in the session file"
+        "Mentions daily/grill-sessions/ as output path"
       ]
     }
   ]
