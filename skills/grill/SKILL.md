@@ -73,6 +73,93 @@ Include:
 
 ## Usage
 ```
-/grill <topic>           Start grilling on a topic
+/grill <topic>           Auto-grill (vault-first, default)
+/grill --manual <topic>  Manual grill (skip vault search, ask everything)
+/grill --compare <topic> Run both modes on same topic, then diff
 /grill                   Resume or ask what to grill on
 ```
+
+## Modes
+
+### Auto (default)
+Searches vault before each question. Presents found knowledge. Only grills for gaps.
+Best for: topics where vault already has context (business strategy, technical decisions).
+
+### Manual (`--manual`)
+Skips vault search entirely. Asks every question from scratch as if vault doesn't exist.
+Best for: stress-testing assumptions, getting a fresh perspective, or auditing auto mode.
+
+### Compare (`--compare`)
+1. Run auto-grill first → save as `YYYY-MM-DD-<topic>-auto.md`
+2. Run manual grill on same topic → save as `YYYY-MM-DD-<topic>-manual.md`
+3. Diff the two sessions and produce a comparison report:
+   ```
+   ## Comparison: <topic>
+   
+   ### Auto-grill stats
+   - Questions vault answered: N
+   - Questions human answered: N
+   - Vault accuracy: N/N correct (X%)
+   
+   ### Differences
+   - [Question]: Auto said X (from vault), Manual revealed Y (different!)
+   - [Question]: Auto correct, Manual confirmed same answer
+   
+   ### Learnings
+   - Vault entries to update: [list files where vault was wrong/stale]
+   - Vault entries confirmed: [list files where vault was correct]
+   ```
+4. Save comparison to `YYYY-MM-DD-<topic>-comparison.md`
+5. Auto-update stale vault entries identified in the diff
+
+## Session Log Format
+
+Every grill session (auto or manual) saves a structured log to `{vault}/daily/grill-sessions/`:
+
+```markdown
+---
+topic: "<topic>"
+mode: auto | manual
+date: YYYY-MM-DD
+duration_questions: N
+vault_answered: N
+human_answered: N
+vault_accuracy: "N/N (X%)"
+context_files_updated: [list]
+---
+
+# Grill Session: <topic>
+
+## Stats
+- Mode: auto | manual
+- Total questions: N
+- Vault-sourced answers: N (X%)
+- Human-answered gaps: N (Y%)
+- Context files updated: N
+
+## Decisions
+
+### 1. [Question/Branch]
+- **Source:** vault | human
+- **Vault said:** [if auto mode, what vault provided]
+- **Decision:** [final answer]
+- **Saved to:** [[context/file]] | (not saved — vault already had this)
+
+### 2. [Question/Branch]
+...
+
+## Context Files Updated
+- [[context/strategy.md]] — added [what]
+- [[context/business.md]] — updated [what]
+
+## Open Questions
+- [anything unresolved for next session]
+```
+
+## Feedback Loop
+
+If user is unhappy with the auto-grill result:
+1. User says "grill was wrong about X" or "vault was stale on Y"
+2. Agent immediately updates the stale vault entry
+3. Logs the correction in the session file under `## Corrections`
+4. Next auto-grill on same topic will use the corrected knowledge

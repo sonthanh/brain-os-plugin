@@ -23,29 +23,41 @@
     },
     {
       "id": 3,
-      "prompt": "How does grill present information it found in the vault?",
-      "expected_output": "Shows vault knowledge and asks if still current",
+      "prompt": "What modes does grill support and how do they differ?",
+      "expected_output": "Auto, manual, and compare modes",
       "expectations": [
-        "Mentions presenting found knowledge to user",
-        "Mentions asking if information is still current or accurate"
+        "Mentions auto mode (vault-first, default)",
+        "Mentions manual mode (skip vault search)",
+        "Mentions compare mode (run both and diff)"
       ]
     },
     {
       "id": 4,
-      "prompt": "Where does grill save the session output?",
-      "expected_output": "daily/grill-sessions/ with date and topic slug",
+      "prompt": "What metrics does grill track in its session log?",
+      "expected_output": "Stats on vault vs human answers and accuracy",
       "expectations": [
-        "Mentions daily/grill-sessions/ as output path",
-        "Mentions date-based filename format"
+        "Mentions vault-answered count vs human-answered count",
+        "Mentions vault accuracy percentage",
+        "Mentions context files updated"
       ]
     },
     {
       "id": 5,
-      "prompt": "What format does grill use when presenting options?",
-      "expected_output": "Pros, cons, and recommendation for each option",
+      "prompt": "How does the compare mode work?",
+      "expected_output": "Runs auto then manual, diffs the results, updates stale vault entries",
       "expectations": [
-        "Mentions pros and cons format",
-        "Mentions recommendation for each option"
+        "Mentions running both auto and manual on same topic",
+        "Mentions producing a comparison report with differences",
+        "Mentions auto-updating stale vault entries from the diff"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "What happens when the user says the grill was wrong about something?",
+      "expected_output": "Updates vault immediately and logs the correction",
+      "expectations": [
+        "Mentions updating the stale vault entry",
+        "Mentions logging correction in the session file"
       ]
     }
   ]
