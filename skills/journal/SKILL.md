@@ -121,9 +121,11 @@ After the journal is written, scan all daily sources for knowledge that should l
 
 3. **Append** to the context file (don't overwrite existing content)
 
-4. **Principles (P1-P4):** If extraction finds a principle-related decision, update `thinking/principles/tracker.md` usage count. If a NEW principle is proposed, do NOT auto-add — flag it for user review.
+4. **Content ideas:** If extraction finds a potential content idea (insight, problem solved, surprising result), append to `~/work/ai-leaders-vietnam/content-ideas.md` under "Next Up" with a one-line description + link to source.
 
-5. **Report** at the end of journal: "Extracted N items to vault: [list of context files updated]"
+5. **Principles (P1-P4):** If extraction finds a principle-related decision, update `thinking/principles/tracker.md` usage count. If a NEW principle is proposed, do NOT auto-add — flag it for user review.
+
+6. **Report** at the end of journal: "Extracted N items to vault: [list of context files updated]"
 
 ## Rules
 - **Narrative over list** — tell a story, don't just list commits
