@@ -137,4 +137,4 @@ python3 ${CLAUDE_PLUGIN_ROOT}/skills/self-learn/scripts/summary.py {vault}/knowl
 |------|-----------|---------------|
 | The Road Less Stupid | `knowledge/raw/the-road-less-stupid` | `9c6d742c-d512-42f6-a42c-ccdd993ef19f` |
 | Start with Why | `knowledge/raw/start-with-why` | `e990cedd-7dca-4812-824e-7a9e757f0065` |
-| Changing World Order | `knowledge/raw/dalio-changing-world-order` | _(pending)_ |
+| Changing World Order | `knowledge/raw/dalio-changing-world-order` | `bf8f46c4-0dfb-4f5e-9013-7a9e757f0065` |
