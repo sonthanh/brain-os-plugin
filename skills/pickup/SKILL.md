@@ -5,43 +5,22 @@ description: "Use when starting a new session and wanting to resume unfinished w
 
 # Pickup — Resume Work
 
-## `/pickup` — Resume handover tasks (default)
-
-Go straight to handovers — no grooming, no delay:
+## `/pickup` — Single interactive flow
 
 1. Read `{vault}/business/tasks/inbox.md`
-2. Find unchecked handover tasks — lines matching `📋` tag
-3. **If one task**: load its handover doc and start immediately
-4. **If multiple tasks**: show list, ask user which one to pick up
-5. **If zero handover tasks**: show Ready tasks as summary so user can decide
 
-## `/pickup next` — Groom + Autogrill + Start top task
+2. **Handovers first:** Find unchecked 📋 tasks not already In Progress
+   - Found → move to In Progress (session lock) → load handover doc → start
+   - Multiple → show list, ask user which one
+   - None → continue to step 3
 
-This is where grooming and autogrill happen:
+3. **Ready tasks?**
+   - **Yes** → skip to step 4 (no groom needed)
+   - **No** → groom Backlog: promote unblocked + clear tasks to Ready, ask user about vague ones
 
-1. **Groom Backlog:**
-   - For each Backlog task, assess readiness:
-     - **Blocked?** Check ⛓️ slugs and `blocked-by` — if any blocker is NOT in Done → stays in Backlog
-     - **Clear to execute?** Enough context to act on? → Ready
-     - Vague (no clear next step)? → stays in Backlog
-   - Move clear + unblocked tasks to Ready
-   - Report promotions
+4. **Autogrill Ready tasks** (see Autogrill section below)
 
-2. **Autogrill Ready Tasks** (Step 2 below)
-
-3. **Start top remaining task** — pick first Ready task, move to In Progress, begin
-
-## `/pickup groom` — Interactive backlog classification
-
-For vague tasks that auto-groom couldn't classify:
-
-1. List each remaining Backlog task with current assessment
-2. For each unclear task, ask the user targeted questions:
-   - What's the concrete next step?
-   - Weight: ⚡ quick or 🏋️ heavy?
-   - Any blockers?
-3. Update the task in inbox.md with the classification
-4. Move newly-classified tasks to Ready
+5. **Start top remaining task** — first Ready task → In Progress → begin
 
 ## Step 2: Autogrill Ready Tasks
 
@@ -102,18 +81,7 @@ When the user grills on the remaining questions:
 2. **Re-run autogrill** on the task — should now auto-close with full answers
 3. The vault gets smarter every cycle
 
-## `/pickup next` — Start the top priority Ready task
-
-After grooming:
-
-1. Pick the first task in Ready column (top = highest priority)
-2. Move it to In Progress in inbox.md
-3. If task has a detail file: read it for context
-4. Start working on it immediately
-
 ## `/pickup auto` — Launch tasks in background
-
-After grooming:
 
 1. **Find eligible tasks in Ready column** — apply time-aware filtering:
    - **Work hours (09:00–22:00)**: only pick `⚡` (quick) tasks. Skip `🏋️` (heavy).
@@ -200,6 +168,5 @@ Session B (new Claude):
   ... work done ...
   marks task ✅ in inbox.md
 
-  /pickup next → groom backlog → autogrill Ready → start top task
-  /pickup auto → groom → launch eligible in background → self-completes
+  /pickup auto → launch eligible in background → self-completes
 ```
