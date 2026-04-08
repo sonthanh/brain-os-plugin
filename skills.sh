@@ -17,7 +17,7 @@ INSTALL_DIR="$HOME/.claude/skills"
 CLONE_DIR="$HOME/.brain-os"
 
 ALL_SKILLS=(
-  absorb aha audit develop eval gmail gmail-bootstrap handover ingest
+  absorb aha audit develop eval gmail gmail-bootstrap grill handover ingest
   journal pickup research self-learn status study think triggers
 )
 
