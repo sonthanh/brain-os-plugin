@@ -106,7 +106,7 @@ When invoked with a specific date or day number (e.g., `/journal day 3` or `/jou
 
 ## Vault Knowledge Extraction (after writing journal)
 
-After the journal is written, scan all daily sources for knowledge that should live in vault `context/` files:
+After the journal is written, scan all daily sources for knowledge that should live in the vault:
 
 1. **Scan** today's grill sessions, aha moments, handovers, session logs for:
    - **Decisions made** — what was chosen and why
@@ -114,12 +114,12 @@ After the journal is written, scan all daily sources for knowledge that should l
    - **Preferences stated** — how user wants things done
    - **Context updated** — strategy changes, goal shifts, process changes
 
-2. **For each item**, find the right `context/` file:
-   - Business decisions → `context/business.md` or `context/strategy.md`
-   - Preferences/rules → `context/preferences.md`
-   - New topic → create `context/{topic}.md`
+2. **For each item**, find the right file by topic:
+   - Personal info/preferences → `personal/` (about-me.md, preferences.md, goals.md, etc.)
+   - Business project decisions → `business/projects/{project}/` (business.md, strategy.md, icp.md)
+   - New topic → create file in the natural location (personal/ or business/)
 
-3. **Append** to the context file (don't overwrite existing content)
+3. **Append** to the target file (don't overwrite existing content)
 
 4. **Content ideas:** If extraction finds a potential content idea (insight, problem solved, surprising result), append to `~/work/ai-leaders-vietnam/content-ideas.md` under "Next Up" with a one-line description + link to source.
 
