@@ -12,10 +12,8 @@ Before anything else, every `/pickup` call does this:
 1. Read `{vault}/business/tasks/inbox.md` and `{vault}/context/preferences.md` (timezone)
 2. For each Backlog task, assess readiness:
    - **Blocked?** Check ⛓️ slugs and `blocked-by` — if any blocker is NOT in Done → stays in Backlog
-   - **Clear to execute?** Does the task have enough context to act on? Consider:
-     - 🤖 tasks: is there a skill, detail file, or clear instruction? → Ready
-     - 👤 tasks: is the next action obvious from the description? → Ready
-     - Vague tasks (no clear next step, needs scoping): → stays in Backlog
+   - **Clear to execute?** Does the task have enough context to act on? → Ready
+   - Vague tasks (no clear next step, needs scoping): → stays in Backlog
 3. Move clear + unblocked tasks to Ready
 4. Report promotions: "Promoted: [task names] → Ready"
 5. If vague tasks remain in Backlog, append: "N tasks need context — run `/pickup groom` to classify them"
@@ -24,17 +22,9 @@ Before anything else, every `/pickup` call does this:
 
 For tasks that Step 0 couldn't auto-classify (vague, needs scoping, unclear priority):
 
-1. List each remaining Backlog task with current assessment:
-   ```
-   Backlog (N tasks):
-   1. 👤 Fix pointer/duplicate violation enforcement
-      Status: UNCLEAR — what exactly should be built? Hook? Eval? Lint rule?
-      Need: user to define scope → then move to Ready
-   2. ...
-   ```
-2. For each unclear task, ask the user targeted questions to classify it:
+1. List each remaining Backlog task with current assessment
+2. For each unclear task, ask the user targeted questions:
    - What's the concrete next step?
-   - Is this 🤖 auto or 👤 manual?
    - Weight: ⚡ quick or 🏋️ heavy?
    - Any blockers?
 3. Update the task in inbox.md with the classification
@@ -47,7 +37,66 @@ After grooming:
 1. Find unchecked handover tasks — lines matching `📋` tag in Ready
 2. **If one task**: load its handover doc and start
 3. **If multiple tasks**: show list, ask user which one to pick up
-4. **If zero handover tasks**: show all Ready tasks as a summary so user can decide
+4. **If zero handover tasks**: run **Step 2: Autogrill** on Ready tasks
+
+## Step 2: Autogrill Ready Tasks
+
+For each non-📋 Ready task, run vault-first Q&A:
+
+1. **Generate grill questions** — the same questions you'd ask a human:
+   - What's the goal?
+   - What context exists?
+   - What are the constraints/requirements?
+   - What's the expected output?
+   - Task-specific questions based on the domain
+   - Aim for 5-10 questions per task
+
+2. **Search vault for each answer** — grep, read wiki-links, follow references
+
+3. **Log the Q&A** to `{vault}/daily/grill-sessions/YYYY-MM-DD-autogrill.md`:
+   ```markdown
+   ## HH:MM — <task name>
+
+   ### Q&A
+
+   | # | Question | Answer | Source |
+   |---|----------|--------|--------|
+   | 1 | What is X? | Found: ... | [[path/to/source]] |
+   | 2 | How does Y? | ❌ NOT FOUND | — |
+
+   ### Gaps (needs human)
+   - Q2: How does Y?
+
+   ### Decision
+   - N/M answered → auto-close / escalate
+
+   ### Artifacts
+   - Files created/modified
+   ```
+
+4. **Decide per task:**
+   - **≥80% questions answered** → auto-close: produce the artifact, mark Done, log process
+   - **<80% answered** → escalate: surface specific unanswered questions for human grill
+
+5. **Run tasks in parallel** — launch multiple agents for independent tasks
+
+6. **Present results:**
+   ```
+   Autogrill complete:
+   ✅ [Task A] — auto-closed (7/8 questions answered)
+   ❓ [Task B] — needs you on 4 questions:
+      - Q3: What pricing model?
+      - Q5: What's the timeline?
+      - Q7: Who is the target?
+      - Q8: What channels?
+   ```
+
+### After human answers gaps:
+
+When the user grills on the remaining questions:
+1. **Write answers back to vault** — update the relevant context/strategy/goals files
+2. **Re-run autogrill** on the task — should now auto-close with full answers
+3. The vault gets smarter every cycle
 
 ## `/pickup next` — Start the top priority Ready task
 
@@ -58,19 +107,15 @@ After grooming:
 3. If task has a detail file: read it for context
 4. Start working on it immediately
 
-## `/pickup auto` — Launch 🤖 tasks in background
+## `/pickup auto` — Launch tasks in background
 
 After grooming:
 
-1. **Find 🤖 tasks in Ready column**
-2. **Apply time-aware filtering** (skipped if user explicitly overrides):
-   - **Work hours (09:00–22:00)**: only pick `⚡` (quick) tasks. Skip `🏋️` (heavy) and untagged tasks.
-   - **Off-hours (22:00–09:00) or weekends**: pick any 🤖 task including `🏋️` and untagged.
-   - If no eligible 🤖 tasks: report "No eligible auto tasks for current time window."
-3. **Pick the first eligible one** (top = highest priority)
-4. **Move it to In Progress** in inbox.md
-5. **Build the prompt** from task description + any linked detail file + skill reference
-6. **Launch as background Claude process in worktree** — isolated from main work, user is NOT blocked:
+1. **Find eligible tasks in Ready column** — apply time-aware filtering:
+   - **Work hours (09:00–22:00)**: only pick `⚡` (quick) tasks. Skip `🏋️` (heavy).
+   - **Off-hours (22:00–09:00) or weekends**: pick any task including `🏋️`.
+2. **Pick eligible tasks** and move to In Progress
+3. **Launch as background Claude process in worktree**:
    ```bash
    claude -w "auto-{slug}" \
      --model opus \
@@ -78,31 +123,12 @@ After grooming:
      -p "<prompt>" \
      > /tmp/auto-task-{slug}.log 2>&1 &
    ```
-   The prompt MUST include:
-   - The full task description
-   - "When done: (1) move task to Done in inbox.md, (2) commit and push, (3) send Telegram notification with task name + result summary"
-   - Any linked skill invocation (e.g., `/study`, `/ingest`)
-   - Ralph Loop instructions: "Do NOT stop until the task is complete. If blocked, log the blocker and move task back to Ready."
-7. **Report to user immediately** (don't wait for completion):
-   ```
-   🚀 Launched: [task name]
-   Running in background (PID: XXXX)
-   Log: /tmp/auto-task-{slug}.log
-   Will notify via Telegram when done.
-   ```
+   The prompt MUST include the full task description + autogrill Q&A log instructions + Ralph Loop.
+4. **Report immediately** (don't wait for completion)
 
-#### `/pickup auto --all` — Launch ALL eligible 🤖 tasks
+#### `/pickup auto --all` — Launch ALL eligible tasks in parallel
 
-Same as above but for **every** eligible 🤖 task, not just the first one. Each task gets its own worktree:
-```bash
-# For each eligible task:
-claude -w "auto-{slug}" \
-  --model opus \
-  --dangerously-skip-permissions \
-  -p "<prompt>" \
-  > /tmp/auto-task-{slug}.log 2>&1 &
-```
-All launch in parallel. Report all PIDs and logs to user at once.
+Same as above but for every eligible task. Each gets its own worktree.
 
 #### Weight tags
 - `⚡` — quick task (< 30 min), safe to run anytime
@@ -110,10 +136,9 @@ All launch in parallel. Report all PIDs and logs to user at once.
 
 #### Auto mode rules
 - **Fire-and-forget** — launch in background, report immediately, user continues working.
-- **Worktree isolation** — each task runs via `claude -w` in its own worktree to avoid conflicts with main workspace.
-- **No human input** — if a task requires 👤 decisions, skip it and pick the next 🤖 task.
-- **Self-completing** — the background process handles: execute → update inbox.md → commit + push → notify via Telegram. Each task reports independently — whichever finishes first notifies first.
-- **Respect skill flows** — if a task maps to a skill (e.g., `/study`, `/ingest`), invoke that skill with full autonomy.
+- **Worktree isolation** — each task runs via `claude -w` to avoid conflicts.
+- **Self-completing** — execute → log autogrill Q&A → update inbox.md → commit + push.
+- **Respect skill flows** — if a task maps to a skill, invoke that skill.
 - **Time-aware** — never run 🏋️ tasks during work hours unless explicitly overridden.
 - **No budget cap** — tasks run until complete. Ralph Loop ensures completion.
 
@@ -160,19 +185,6 @@ If handover is > 7 days old:
 - `/pickup` reads tasks from `inbox.md`
 - No external system, no arguments to remember
 - The user just types `/pickup` and work resumes
-- The user types `/pickup auto` and the next 🤖 task runs autonomously
-
-## How to Find Handover Tasks in inbox.md
-
-Handover tasks:
-```
-- [ ] 📋 ... → [[daily/handovers/...]] (status)
-```
-
-Auto tasks:
-```
-- [ ] 🤖 ... (in Ready column)
-```
 
 ## Flow
 ```
@@ -180,9 +192,9 @@ Session A:
   /handover → creates handover doc + writes task to inbox.md
 
 Session B (new Claude):
-  /pickup → scans inbox.md → finds handover task → loads doc → executes
+  /pickup → groom → handovers first → autogrill remaining → surface gaps
   ... work done ...
   marks task ✅ in inbox.md
 
-  /pickup auto → grabs top 🤖 task → executes fully → reports result
+  /pickup auto → grabs eligible tasks → launches in background → self-completes
 ```
