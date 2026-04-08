@@ -5,101 +5,145 @@ description: "Structured development process with mandatory testing. Use when bu
 
 # /develop — Structured Development with Mandatory Testing
 
-Enforces a spec-test-build-verify cycle. Inspired by Superpower framework's RED-GREEN-REFACTOR discipline — no code ships without passing tests.
+Enforces a spec-test-build-verify cycle for all code that runs. Synthesized from three coding agent frameworks:
+
+- **Superpowers** (obra): Iron Law of TDD — no production code without failing test first
+- **gstack** (garrytan): Hard review gate + 3-strike investigation rule
+- **GSD** (gsd-build): State externalization + wave-based execution
 
 ## Usage
 ```
 /develop <task description>
-/develop --resume          Resume interrupted development
+/develop --resume          Resume from state file
 ```
+
+## Iron Laws
+
+These are non-negotiable. Breaking them = deleting the violating code and restarting.
+
+1. **No code before tests.** Write the test/verification first. Watch it fail. Then write the implementation. Code written before its test is deleted.
+2. **No fix without investigation.** When something fails: read the error, check assumptions, trace the root cause. Never retry blindly. After 3 failed fix attempts on the same issue → STOP and report to user.
+3. **No ship without verify.** Every change must pass its verification before commit. Silent failures are worse than crashes.
 
 ## Process
 
-### Phase 1: SPEC (what are we building?)
+### Phase 1: SPEC
 
-1. **Read the task** — detail file, linked issues, conversation context
-2. **Write a spec** in 5-10 bullet points:
-   - What it does (behavior)
-   - What it doesn't do (scope boundary)
-   - Success criteria (how we know it works)
-   - Edge cases to handle
-3. **Show spec to user** — get approval before coding
-4. If task is a skill: also define eval cases (input → expected output)
+1. Read the task — detail file, linked issues, conversation context
+2. Write a spec (5-10 bullets):
+   - **Does:** behavior description
+   - **Doesn't:** scope boundary
+   - **Success:** how we know it works (testable criteria)
+   - **Edge cases:** at least 3 failure scenarios
+3. Show spec to user — get approval before coding
+4. Save spec to state file if multi-session work
 
-### Phase 2: TEST FIRST (how will we verify?)
+### Phase 2: TEST FIRST (Red)
 
-Before writing any implementation code, define the verification plan:
+Before writing ANY implementation, define and write the verification:
 
-#### For scripts (launchd, cron, shell):
-- [ ] All binary paths resolved? (test with restricted PATH)
-- [ ] Shell quoting safe? (no inline interpreters — use jq or separate files)
-- [ ] What happens if machine is off at scheduled time?
-- [ ] What prevents duplicate runs?
-- [ ] Notification/alerting works?
-- [ ] `bash -n script.sh` passes (syntax check)
+#### Scripts (launchd, cron, shell):
+- [ ] `bash -n script.sh` — syntax check
+- [ ] All binary paths absolute or in PATH (`which <binary>`)
+- [ ] No inline interpreters (`python3 -c`, `ruby -e`) — use `jq` or separate files
+- [ ] Machine-off handling (StartAtLoad, backfill logic)
+- [ ] Duplicate-run guard (marker file, lock file)
+- [ ] Notification pathway works (test `send_telegram`, etc.)
+- [ ] `set -euo pipefail` at top
 
-#### For skills (SKILL.md):
-- [ ] Eval spec exists in `evals/evals.json`
-- [ ] `/eval` passes after changes
+#### Skills (SKILL.md):
+- [ ] Eval spec written in `evals/evals.json` BEFORE implementation
+- [ ] At least 2 test cases: happy path + edge case
 
-#### For code (TypeScript, Python, etc.):
+#### Code (TypeScript, Python):
+- [ ] Write failing test first
+- [ ] Watch it fail (confirm test is valid)
 - [ ] Type-check passes (`tsc --noEmit` / `mypy`)
-- [ ] Lint passes
-- [ ] Unit tests written for new logic
-- [ ] Tests pass before moving on
 
-#### For hooks/plist/config:
-- [ ] Config syntax valid (`plutil -lint`, `jq .`, JSON parse)
-- [ ] Dry-run in isolation before deploying
+#### Hooks/plist/config:
+- [ ] Config syntax valid (`plutil -lint`, `jq .`)
+- [ ] Dry-run in restricted environment
 - [ ] Rollback plan identified
 
-### Phase 3: BUILD (implement)
+### Phase 3: BUILD (Green)
 
-1. Write the implementation
-2. Run tests defined in Phase 2 **after each significant change** — not just at the end
-3. If a test fails: fix before continuing. Do not accumulate broken state.
-4. Commit working increments (not one giant commit at the end)
+1. Write minimal code to make the test pass — nothing more
+2. Run verification after EACH significant change, not just at the end
+3. If a test fails: fix immediately. Do not accumulate broken state.
+4. Commit working increments (one concern per commit)
 
-### Phase 4: VERIFY (does it actually work?)
+### Phase 4: REVIEW (Two-Stage Gate)
 
-Run the full verification suite:
+Inspired by Superpowers' two-stage review:
 
-1. **Syntax check**: `bash -n` / `tsc --noEmit` / `plutil -lint` / `python3 -m py_compile`
-2. **Dry-run**: execute the script/skill/code manually and check output
-3. **Edge case test**: simulate at least one edge case from Phase 1 spec
-4. **Integration test**: for launchd/cron — trigger with `launchctl start` and verify logs
-5. **Eval test**: for skills — run `/eval` and confirm all pass
-6. **CI check**: after push — `gh run list --limit 3` to verify pipeline is green
+**Stage 1 — Spec compliance:**
+- Does the implementation match the spec from Phase 1?
+- Are all edge cases from the spec handled?
+- Are all success criteria met?
 
-### Phase 5: SHIP
+**Stage 2 — Code quality:**
+- No duplicated logic (check existing codebase first)
+- No silent failures (errors must be visible)
+- No over-engineering (solve the stated problem, nothing more)
+- Shell quoting safe? PATH correct? Env vars validated?
+
+If critical issues found → fix before proceeding. Do NOT ship with known issues.
+
+### Phase 5: VERIFY (Integration)
+
+Full end-to-end verification in the real environment:
+
+1. **Syntax**: `bash -n` / `tsc --noEmit` / `plutil -lint` / `python3 -m py_compile`
+2. **Dry-run**: execute manually, check output matches spec
+3. **Edge case**: simulate at least one failure scenario from Phase 1
+4. **Integration**: for launchd → `launchctl start` + check logs. For hooks → trigger the event.
+5. **Eval**: for skills → run `/eval` and confirm pass
+6. **CI**: after push → verify pipeline green
+
+### Phase 6: SHIP
 
 1. Commit + push
-2. Verify CI passes (if applicable)
-3. Report completion with test results summary
+2. Verify CI passes
+3. Report: what was built, what tests pass, what edge cases were verified
 
-## Rules
+## Bug Fix Protocol (from gstack)
 
-### Never skip Phase 2
-The test plan is not optional. Even for "simple" changes. The auto-journal bug (4 issues, all catchable) happened because Phase 2 was skipped.
+When fixing bugs, follow this exact sequence:
 
-### Test at boundaries, not internals
-- Validate user input, external APIs, file I/O, env vars
-- Don't over-test pure functions that the type system already guarantees
+1. **Investigate** — read the error, trace the root cause. No guessing.
+2. **Write regression test** — a test that reproduces the bug. Watch it fail.
+3. **Fix** — minimal change to make the test pass.
+4. **Verify** — all existing tests still pass + new regression test passes.
+5. **3-strike rule** — if the same fix fails 3 times, STOP. Report to user with:
+   - What was tried
+   - What failed
+   - Root cause hypothesis
 
-### One concern per commit
-Don't mix refactoring with feature work. Don't mix test fixes with new logic.
+## State File (for multi-session work)
 
-### Fail fast, fail loud
-Scripts must `set -euo pipefail`. Silent failures are worse than crashes. If something can fail, it should fail visibly with a clear error message.
+For complex tasks, persist state to `{vault}/daily/sessions/develop-{slug}.md`:
 
-### No inline interpreters in shell
-Never embed `python3 -c "..."` or `ruby -e "..."` in shell scripts. Use `jq` for JSON, or write a separate script file. Shell quoting will break inline code.
+```markdown
+---
+task: "{description}"
+phase: "spec|test|build|review|verify|ship"
+started: YYYY-MM-DD
+---
+## Spec
+{approved spec}
+
+## Test Plan
+{verification checklist with pass/fail status}
+
+## Progress
+{what's done, what's next}
+```
+
+Resume with `/develop --resume` — reads state file, continues from last phase.
 
 ## When NOT to use /develop
 
-- Quick vault edits (just edit the file)
-- Writing content (use `/writer`)
-- Research tasks (use `/research`)
-- One-line config changes (just do it)
+- Quick vault edits, content writing, research — just do it
+- One-line config changes — just do it
 
-Use `/develop` when the output is **code that runs** — scripts, skills, hooks, automations, features.
+Use `/develop` when the output is **code that runs unattended** — scripts, skills, hooks, automations, pipelines.
