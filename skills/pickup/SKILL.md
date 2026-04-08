@@ -61,17 +61,21 @@ After grooming:
 3. **Pick the first eligible one** (top = highest priority)
 4. **Move it to In Progress** in inbox.md
 5. **Build the prompt** from task description + any linked detail file + skill reference
-6. **Launch as background Claude process** — the task runs independently, user is NOT blocked:
+6. **Launch as background Claude process in worktree** — isolated from main work, user is NOT blocked:
    ```bash
+   # Create worktree for isolation
+   BRANCH="auto/$(date +%Y%m%d)-{slug}"
+   git worktree add "/tmp/auto-worktree-{slug}" -b "$BRANCH"
+   
+   cd "/tmp/auto-worktree-{slug}" && \
    claude -p \
      --dangerously-skip-permissions \
-     --max-budget-usd 5 \
      "<prompt>" \
      > /tmp/auto-task-{slug}.log 2>&1 &
    ```
    The prompt MUST include:
    - The full task description
-   - "When done: (1) move task to Done in inbox.md, (2) commit and push, (3) send Telegram notification"
+   - "When done: (1) move task to Done in inbox.md, (2) commit and push, (3) merge branch to main, (4) clean up worktree, (5) send Telegram notification"
    - Any linked skill invocation (e.g., `/study`, `/ingest`)
    - Ralph Loop instructions: "Do NOT stop until the task is complete. If blocked, log the blocker and move task back to Ready."
 7. **Report to user immediately** (don't wait for completion):
@@ -87,16 +91,17 @@ After grooming:
 Same as above but launches every eligible 🤖 task in parallel, each in its own background Claude process.
 
 #### Weight tags
-- `⚡` — quick task (< 30 min), safe to run anytime, max budget $2
-- `🏋️` — heavy task (1h+), only run off-hours, max budget $10
+- `⚡` — quick task (< 30 min), safe to run anytime
+- `🏋️` — heavy task (1h+), only run off-hours
 
 #### Auto mode rules
 - **Fire-and-forget** — launch in background, report immediately, user continues working.
+- **Worktree isolation** — each task runs in its own git worktree to avoid conflicts with main workspace.
 - **No human input** — if a task requires 👤 decisions, skip it and pick the next 🤖 task.
-- **Self-completing** — the background process handles: execute → update inbox.md → commit + push → notify via Telegram.
+- **Self-completing** — the background process handles: execute → update inbox.md → commit + push → merge to main → clean up worktree → notify via Telegram.
 - **Respect skill flows** — if a task maps to a skill (e.g., `/study`, `/ingest`), invoke that skill with full autonomy.
 - **Time-aware** — never run 🏋️ tasks during work hours unless explicitly overridden.
-- **Budget-capped** — each task has a max budget to prevent runaway costs.
+- **No budget cap** — tasks run until complete. Ralph Loop ensures completion.
 
 ## Handover Task Behavior
 
