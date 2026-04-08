@@ -10,6 +10,8 @@ Interview me relentlessly about every aspect of this until we reach a shared und
 
 ## Rules
 
+- **First principles first.** Before proposing any solution, ask: "What's the actual problem? Does something already solve this? What's the simplest change?" Strip away assumptions. If the answer is one line, don't build a system.
+
 - **Every option must have pros, cons, and a recommendation.** When presenting solutions or alternatives, always include:
   - **Pros** (1-2 lines)
   - **Cons** (1-2 lines)
