@@ -22,12 +22,6 @@ Interview me relentlessly about every aspect of this until we reach a shared und
 - For each question, provide your recommended best practice answer based on the relevant domain standards.
 - Grill until we have a bulletproof, actionable plan. Do not stop early.
 
-## Write-back
-
-After each decision is made, write the new knowledge back to the appropriate vault context file (`{vault}/context/`). This way the vault grows with every grill session and the same question never needs asking twice.
-
-If user corrects stale vault info during the grill, update it immediately.
-
 ## Output
 
 When complete, save a structured summary of all decisions to:

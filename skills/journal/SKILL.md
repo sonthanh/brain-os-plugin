@@ -104,6 +104,27 @@ When invoked with a specific date or day number (e.g., `/journal day 3` or `/jou
 - Create only that specific day's journal
 - Still determine the correct day number from the journal directory
 
+## Vault Knowledge Extraction (after writing journal)
+
+After the journal is written, scan all daily sources for knowledge that should live in vault `context/` files:
+
+1. **Scan** today's grill sessions, aha moments, handovers, session logs for:
+   - **Decisions made** — what was chosen and why
+   - **Facts learned** — new information about business, users, market
+   - **Preferences stated** — how user wants things done
+   - **Context updated** — strategy changes, goal shifts, process changes
+
+2. **For each item**, find the right `context/` file:
+   - Business decisions → `context/business.md` or `context/strategy.md`
+   - Preferences/rules → `context/preferences.md`
+   - New topic → create `context/{topic}.md`
+
+3. **Append** to the context file (don't overwrite existing content)
+
+4. **Principles (P1-P4):** If extraction finds a principle-related decision, update `thinking/principles/tracker.md` usage count. If a NEW principle is proposed, do NOT auto-add — flag it for user review.
+
+5. **Report** at the end of journal: "Extracted N items to vault: [list of context files updated]"
+
 ## Rules
 - **Narrative over list** — tell a story, don't just list commits
 - **Real examples are gold** — include actual code, actual prompts, actual error messages
