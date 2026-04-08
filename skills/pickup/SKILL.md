@@ -49,6 +49,15 @@ After grooming:
 3. **If multiple tasks**: show list, ask user which one to pick up
 4. **If zero handover tasks**: show all Ready tasks as a summary so user can decide
 
+## `/pickup next` — Start the top priority Ready task
+
+After grooming:
+
+1. Pick the first task in Ready column (top = highest priority)
+2. Move it to In Progress in inbox.md
+3. If task has a detail file: read it for context
+4. Start working on it immediately
+
 ## `/pickup auto` — Launch 🤖 tasks in background
 
 After grooming:
