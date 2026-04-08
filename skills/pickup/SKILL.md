@@ -54,16 +54,19 @@ After grooming:
 After grooming:
 
 1. **Find 🤖 tasks in Ready column**
-2. **Apply time-aware filtering**:
+2. **Apply time-aware filtering** (skipped if user explicitly overrides):
    - **Work hours (09:00–22:00)**: only pick `⚡` (quick) tasks. Skip `🏋️` (heavy) and untagged tasks.
    - **Off-hours (22:00–09:00) or weekends**: pick any 🤖 task including `🏋️` and untagged.
    - If no eligible 🤖 tasks: report "No eligible auto tasks for current time window."
 3. **Pick the first eligible one** (top = highest priority)
 4. **Move it to In Progress** in inbox.md
 5. **If task has a detail file** (`[[slug|Name]]`): read it for context
-6. **If task references a skill** (e.g., "self-learn pipeline"): invoke that skill
-7. **Execute the task end-to-end** — do NOT stop to ask permission, do NOT ask for confirmation
-8. **When done**:
+6. **Launch via Ralph Loop** to guarantee completion:
+   - Build the prompt from task description + any linked skill invocation
+   - Set `--completion-promise` to a task-specific success phrase (e.g., "TASK COMPLETE")
+   - Set `--max-iterations` based on weight: `⚡` → 20, `🏋️` → 50, untagged → 30
+   - Invoke: `/ralph-loop "<prompt>" --completion-promise "TASK COMPLETE" --max-iterations N`
+7. **When done** (Ralph Loop exits with promise met):
     - Move task to Done: `- [x] 🤖 ... ✅ YYYY-MM-DD`
     - Update detail file if it exists (log entry + status)
     - Report completion status to user:
@@ -71,16 +74,16 @@ After grooming:
       ✅ Completed: [task name]
       Summary: [what was done, 2-3 lines]
       ```
-9. **If task fails or is blocked**: report the blocker, move task back to Ready, do NOT attempt next task
+8. **If task fails or is blocked**: report the blocker, move task back to Ready, do NOT attempt next task
 
 #### Weight tags
-- `⚡` — quick task (< 30 min), safe to run anytime
-- `🏋️` — heavy task (1h+), only run off-hours
+- `⚡` — quick task (< 30 min), safe to run anytime, Ralph Loop max 20 iterations
+- `🏋️` — heavy task (1h+), only run off-hours, Ralph Loop max 50 iterations
 
 #### Auto mode rules
 - **ONE task per invocation** — finish it, report, stop. User decides whether to run again.
 - **No human input** — if a task requires 👤 decisions, skip it and pick the next 🤖 task.
-- **No confirmation loops** — treat task description as the requirement. Execute.
+- **Ralph Loop by default** — all 🤖 tasks run inside Ralph Loop. This mechanically prevents Claude from stopping mid-task. The Stop hook re-prompts until the completion promise is output.
 - **Respect skill flows** — if a task maps to a skill (e.g., `/study`, `/ingest`), invoke that skill with full autonomy.
 - **Time-aware** — never run 🏋️ tasks during work hours unless explicitly overridden.
 
