@@ -84,7 +84,16 @@ After grooming:
 
 #### `/pickup auto --all` — Launch ALL eligible 🤖 tasks
 
-Same as above but launches every eligible 🤖 task in parallel, each in its own background Claude process.
+Same as above but for **every** eligible 🤖 task, not just the first one. Each task gets its own worktree:
+```bash
+# For each eligible task:
+claude -w "auto-{slug}" \
+  --model opus \
+  --dangerously-skip-permissions \
+  -p "<prompt>" \
+  > /tmp/auto-task-{slug}.log 2>&1 &
+```
+All launch in parallel. Report all PIDs and logs to user at once.
 
 #### Weight tags
 - `⚡` — quick task (< 30 min), safe to run anytime
