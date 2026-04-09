@@ -39,6 +39,8 @@ Reads the latest triage report from the vault, executes cleanup actions, and dra
 3. Read `{vault}/context/about-me.md` and `{vault}/context/business.md` for voice/context
 4. Draft a reply — show it to the user for approval before creating in Gmail
 5. Create draft in Gmail via `gmail_create_draft` with the approved text
+   - **Reply All**: always include all CC recipients from the original email
+   - **From**: use the email address that received the original email (not a default)
 
 ### `/gmail auto-draft` — Autonomously draft replies (no approval needed)
 
@@ -46,7 +48,8 @@ Fully autonomous mode — reads needs-reply queue, generates drafts, creates the
 
 1. Follow the command spec at `{vault}/commands/gmail-auto-draft.md`
 2. Execute all steps end-to-end without user interaction
-3. Report results when done
+3. All drafts must use **Reply All** (include CC) and set **From** to the receiving address
+4. Report results when done
 
 ### `/gmail status` — Show pending actions
 
