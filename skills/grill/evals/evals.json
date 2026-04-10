@@ -4,19 +4,19 @@
     {
       "id": 1,
       "prompt": "What does grill do before asking the user a question?",
-      "expected_output": "Searches vault, web, or code for answers first",
+      "expected_output": "Researches the answer first — vault, web, code",
       "expectations": [
-        "Mentions searching vault, web, or code before asking",
+        "Mentions researching before asking",
         "Mentions doing research instead of asking the user"
       ]
     },
     {
       "id": 2,
       "prompt": "How should grill present multiple options?",
-      "expected_output": "List pros/cons for each option, then ONE recommendation",
+      "expected_output": "List pros/cons for each option, then ONE pick",
       "expectations": [
-        "Mentions listing pros and cons for each option",
-        "Mentions giving ONE recommendation",
+        "Mentions pros and cons",
+        "Mentions ONE recommendation or pick",
         "Says never recommend per-option"
       ]
     },
@@ -26,6 +26,25 @@
       "expected_output": "daily/grill-sessions/ with date and topic slug",
       "expectations": [
         "Mentions daily/grill-sessions/ as output path"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Does the grill skill prescribe specific steps for HOW to search or HOW to present findings?",
+      "expected_output": "No — it is generic. Only output location is specific.",
+      "expectations": [
+        "Does NOT prescribe a multi-step search protocol",
+        "Does NOT include a template for presenting vault findings",
+        "Does NOT list specific vault paths to scan"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "How long is the grill skill instruction body (excluding frontmatter and usage)?",
+      "expected_output": "Very short — one paragraph plus one output line",
+      "expectations": [
+        "Instruction body is under 100 words",
+        "No separate Rules or Protocol sections exist"
       ]
     }
   ]
