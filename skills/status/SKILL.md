@@ -1,6 +1,7 @@
 ---
 name: status
 description: "Use when user wants a briefing on current state — tasks, emails, handovers, priorities. Replaces /today and /close. Triggers on: status, what should I do, what's pending, brief me, morning review, wrap up, end of day"
+model: sonnet
 ---
 
 ## Vault Location
