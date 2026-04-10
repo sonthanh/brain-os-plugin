@@ -39,6 +39,40 @@ OLD=$(cd "$REPO_ROOT" && git show "HEAD:$RELATIVE_PATH" 2>/dev/null) || {
 
 NEW=$(cat "$FILE_PATH")
 
+# --- Harness skill bloat check ---
+# Harness skills (grill, think) must stay short and generic.
+# Specifying HOW narrows Claude's reasoning.
+HARNESS_SKILLS="grill think"
+
+if echo "$HARNESS_SKILLS" | grep -qw "$SKILL_NAME"; then
+  BODY_WORDS=$(echo "$NEW" | sed '1,/^---$/d' | sed '/^## Usage/,$d' | wc -w | tr -d ' ')
+
+  # Block if instruction body exceeds 120 words
+  if [[ "$BODY_WORDS" -gt 120 ]]; then
+    echo ""
+    echo "⚠️  HARNESS SKILL BLOAT: $SKILL_NAME"
+    echo "─────────────────────────────────"
+    echo "  ✗ Instruction body is ${BODY_WORDS} words (limit: 120)"
+    echo "  Harness skills must stay short and generic."
+    echo "  Only specify output format — never HOW to think."
+    echo ""
+    exit 2
+  fi
+
+  # Block if structured protocol sections appear
+  if echo "$NEW" | grep -qE '^## (Rules|Protocol|Steps|Workflow|Process)'; then
+    SECTIONS=$(echo "$NEW" | grep -oE '^## (Rules|Protocol|Steps|Workflow|Process)' | tr '\n' ', ')
+    echo ""
+    echo "⚠️  HARNESS SKILL OVER-SPECIFICATION: $SKILL_NAME"
+    echo "─────────────────────────────────"
+    echo "  ✗ Found prescriptive sections: $SECTIONS"
+    echo "  Harness skills should not have Rules/Protocol/Steps sections."
+    echo "  Keep it to one generic paragraph + output location."
+    echo ""
+    exit 2
+  fi
+fi
+
 # --- Extract invariants from old version ---
 
 ISSUES=()
