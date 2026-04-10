@@ -119,7 +119,11 @@ Same as above but for every eligible task. Each gets its own worktree.
 ### For each handover task found:
 1. **Read the linked handover doc** completely (all sections)
 2. **Run "Commands to Verify State"** from the handover to confirm nothing changed
-3. **Present brief summary**:
+3. **Check for incomplete grills** — scan handover for "INCOMPLETE", "NOT completed", "grill session started but". If found:
+   - Do NOT start executing tasks
+   - Present the incomplete grill status
+   - Resume the grill FIRST using `/grill <topic>` before any implementation
+4. **Present brief summary**:
    ```
    Picking up: [topic]
    Status: [status]
@@ -131,7 +135,7 @@ Same as above but for every eligible task. Each gets its own worktree.
 
    Starting with step 1.
    ```
-4. **Start executing step 1** immediately (don't wait for confirmation unless blocked)
+5. **Start executing step 1** immediately (don't wait for confirmation unless blocked)
 
 ### After completing all steps:
 1. **Mark task done** in inbox.md: `- [x] [Handover] ... ✅ YYYY-MM-DD`
