@@ -1,6 +1,7 @@
 ---
 name: eval
 description: "Use when testing skill correctness after editing, or wanting to verify all skills pass their eval checks"
+model: sonnet
 ---
 
 # Skill Eval
