@@ -37,12 +37,11 @@ Before each question branch, search the vault FIRST. Only grill for genuine gaps
 
 - **Vault-first, always.** Never ask the human something the vault already answers. Every repeated question is a failure of the system.
 
-- **Every option must have pros, cons, and a recommendation.** When presenting solutions or alternatives, always include:
-  - **Pros** (1-2 lines)
-  - **Cons** (1-2 lines)
-  - **Recommend:** which option and why (1 line)
-
-  Keep it short — the user wants signal, not essays.
+- **Present options with pros/cons, then ONE recommendation.** When presenting alternatives:
+  - List each option with **Pros** and **Cons** (1-2 lines each)
+  - After all options, give ONE **→ Recommend:** line picking the best option and why
+  
+  Never recommend each option individually — that's recommending nothing.
 
 - **Research before asking.** If a question can be answered by reviewing documents, browsing the web, or reading code — do that instead of asking the user. Don't ask diagnostic questions that data can answer.
 

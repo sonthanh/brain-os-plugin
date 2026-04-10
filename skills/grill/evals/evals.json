@@ -4,9 +4,9 @@
     {
       "id": 1,
       "prompt": "What does grill do before asking the user a question?",
-      "expected_output": "Searches documents and web for answers first",
+      "expected_output": "Searches vault, documents, and web for answers first",
       "expectations": [
-        "Mentions reviewing documents or browsing web before asking",
+        "Mentions searching vault before asking",
         "Mentions only asking human when answer can't be found"
       ]
     },
@@ -25,6 +25,16 @@
       "expected_output": "daily/grill-sessions/ with date and topic slug",
       "expectations": [
         "Mentions daily/grill-sessions/ as output path"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "How should grill present multiple options to the user?",
+      "expected_output": "List each option with pros and cons, then ONE recommendation at the end",
+      "expectations": [
+        "Mentions listing options with pros and cons",
+        "Mentions giving ONE recommendation after all options",
+        "Does NOT say recommend each option individually"
       ]
     }
   ]
