@@ -69,3 +69,19 @@ This creates `${CLAUDE_PLUGIN_ROOT}/skills/gmail/.credentials.json` (gitignored)
 ## Rules
 
 The skill reads `{vault}/business/intelligence/gmail-rules.md` for user-defined patterns. AI judgment is used as fallback when no rule matches.
+
+---
+
+## Outcome log
+
+After each `/gmail` or `/gmail auto-draft` run, append one line to `{vault}/daily/skill-outcomes/gmail.log`:
+
+```
+{date} | gmail | {mode} | ~/work/brain-os-plugin | {vault}/daily/gmail-triage/{triage-file} | commit:N/A | {result}
+```
+
+- `mode`: `triage`, `draft`, or `auto-draft`
+- `triage-file`: the filename of the triage report processed (e.g., `2026-04-11-triage.md`)
+- `result`: `pass` if all actions executed cleanly, `partial` if some skipped/already-handled, `fail` if errors
+
+This log feeds `/improve gmail` to detect patterns in skipped actions, draft rejections, and triage errors.
