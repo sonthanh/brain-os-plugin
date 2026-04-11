@@ -1,6 +1,7 @@
 ---
 name: research
 description: "Use when needing to research a topic from the web — scans X and web for state-of-the-art thinking from top voices, synthesizes into bullet points with citations, and optionally ingests into vault"
+context: fork
 ---
 
 ## Vault Location

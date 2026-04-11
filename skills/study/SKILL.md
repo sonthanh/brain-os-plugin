@@ -1,6 +1,7 @@
 ---
 name: study
 description: "Use when running the complete knowledge pipeline for a book, from self-learn through ingestion, verification, absorption, and sync"
+context: fork
 ---
 
 # Study — Full Knowledge Pipeline Orchestrator

@@ -1,6 +1,7 @@
 ---
 name: self-learn
 description: "Use when mastering a book's content through autonomous extraction, validation against NotebookLM, and knowledge extension"
+context: fork
 ---
 
 # Self-Learning Agent
