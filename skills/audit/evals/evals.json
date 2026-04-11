@@ -1,0 +1,36 @@
+{
+  "skill_name": "audit",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "How does /audit differ from /grill?",
+      "expected_output": "Audit is non-interactive one-shot via advisor; grill is interactive questioning",
+      "expectations": [
+        "States /audit is non-interactive, returns findings",
+        "States /grill is interactive, asks questions",
+        "Mentions advisor as the auditing mechanism"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "What are the invocation options for /audit?",
+      "expected_output": "/audit (p0 auto-pick), /audit p1 (specific), /audit p1 p5 (multiple)",
+      "expectations": [
+        "Shows bare /audit uses p0 auto-pick of top 3",
+        "Shows specific principle IDs like p1, p5",
+        "Shows multiple principles can be combined"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "What is the execution flow of /audit?",
+      "expected_output": "Read principles, pick relevant ones, print to context, call advisor, format findings, log to tracker",
+      "expectations": [
+        "Reads principles from tracker.md",
+        "Prints principles into conversation for advisor visibility",
+        "Calls advisor() for independent principle-based review",
+        "Logs usage to tracker after completion"
+      ]
+    }
+  ]
+}

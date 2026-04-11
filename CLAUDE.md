@@ -39,7 +39,7 @@ npm run gmail:bootstrap
 | Category | Skills | Notes |
 |----------|--------|-------|
 | **Learn** | study, self-learn, verify, ingest, absorb, research | self-learn/verify need Python 3.12+ and notebooklm-py |
-| **Think** | think, grill (via separate plugin) | /think subsumes old emerge/challenge/drift/connect/trace/ghost |
+| **Think** | think, grill, audit | /think subsumes old emerge/challenge/drift/connect/trace/ghost; /audit = one-shot principle check via advisor |
 | **Act** | status, aha, journal, handover, pickup, gmail, gmail-bootstrap, triggers, eval | gmail needs Node deps + OAuth setup |
 
 ## Hooks

@@ -62,6 +62,7 @@ Karpathy is building something similar with "LLM Knowledge Bases." Same directio
 |-------|-------------|
 | `/think` | When you're stuck on a decision, exploring an idea, or want deep reflection on anything |
 | `/grill` | When you need a plan stress-tested until it's bulletproof |
+| `/audit` | One-shot principle check via advisor — non-interactive, returns findings |
 
 ### Act — let it work for you
 
