@@ -1,6 +1,6 @@
 ---
 name: study
-description: "Use when running the complete knowledge pipeline for a book, from self-learn through ingestion, audit, absorption, and sync"
+description: "Use when running the complete knowledge pipeline for a book, from self-learn through ingestion, verification, absorption, and sync"
 ---
 
 # Study — Full Knowledge Pipeline Orchestrator
@@ -19,7 +19,7 @@ Step 1: /self-learn --book <epub> --notebook-id <id>
   ├── Phase 2: Validate (questions vs NotebookLM, ≥95 threshold, 100% pass)
   └── Phase 3: Extend + Ingest (book note in knowledge/books/ + synthesis)
         ↓
-Step 2: /audit (50 fresh questions vs NotebookLM → audit flag)
+Step 2: /verify (50 fresh questions vs NotebookLM → audit flag)
   ├── PASS → audited: true
   └── FAIL → audited: false → STOP, notify user
         ↓
@@ -44,15 +44,15 @@ Step 5: Notify all 3 channels
 Wait for all 3 phases to complete. Phase 3 now creates the structured book note
 in `knowledge/books/` (previously a separate `/ingest` step). Check with `/self-learn --status`.
 
-### Step 2: Audit
+### Step 2: Verify
 ```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.py {vault}/knowledge/raw --status
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/verify/scripts/verify.py {vault}/knowledge/raw --status
 ```
-If flag is `false`, run `/audit` with 50 fresh questions.
+If flag is `false`, run `/verify` with 50 fresh questions.
 If flag is already `true` (from self-learn validation), proceed.
 
 ### Step 3: Absorb
-Run the `/absorb` skill. Since audit is true, bypass approval — apply all vault connections automatically.
+Run the `/absorb` skill. Since verify is true, bypass approval — apply all vault connections automatically.
 
 ### Step 4: Commit + Push
 Commit and push all vault changes to git.
@@ -80,6 +80,6 @@ If pipeline is interrupted, `/study --resume` checks audit-flag.json to determin
 
 ## Error Handling
 - **Phase 2 fails (< 100% pass)**: Loop continues fixing until 100%. No timeout.
-- **Audit fails**: Pipeline stops. Flag stays false. Task written to inbox.
+- **Verify fails**: Pipeline stops. Flag stays false. Task written to inbox.
 - **Git push fails**: Pull first, resolve conflicts, retry push.
 - **NotebookLM timeout**: Retry 3 times with backoff. If still failing, pause and notify user.

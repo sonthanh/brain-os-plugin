@@ -4,11 +4,11 @@
     {
       "id": 1,
       "prompt": "What is the exact order of the chain pipeline steps?",
-      "expected_output": "self-learn → ingest → audit → absorb → sync → notify",
+      "expected_output": "self-learn → ingest → verify → absorb → sync → notify",
       "expectations": [
         "Lists self-learn as step 1",
         "Lists ingest as step 2",
-        "Lists audit as step 3",
+        "Lists verify as step 3",
         "Lists absorb as step 4",
         "Lists sync as step 5"
       ]
@@ -25,10 +25,10 @@
     },
     {
       "id": 3,
-      "prompt": "What happens when audit fails in the pipeline?",
+      "prompt": "What happens when verify fails in the pipeline?",
       "expected_output": "Pipeline stops, flag stays false, task written to inbox",
       "expectations": [
-        "States pipeline stops on audit failure",
+        "States pipeline stops on verify failure",
         "States audited flag stays false",
         "Mentions notification to user via task or inbox"
       ]

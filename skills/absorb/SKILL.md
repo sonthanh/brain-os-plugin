@@ -4,8 +4,8 @@ description: "Use when extracting deep insights from a book and connecting them 
 ---
 
 ## Pre-Absorb Check
-Run: `python3 ${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.py {vault}/knowledge/raw --status`
-- ❌ (false): BLOCK — "Run /audit first before absorbing."
+Run: `python3 ${CLAUDE_PLUGIN_ROOT}/skills/verify/scripts/verify.py {vault}/knowledge/raw --status`
+- ❌ (false): BLOCK — "Run /verify first before absorbing."
 - 👁️ (manual): Run WITH approval prompt — show each proposal, ask "Approve? (all / pick numbers / skip)"
 - ✅ (true): Run autonomously, bypass approval.
 

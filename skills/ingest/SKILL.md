@@ -93,5 +93,5 @@ status: reading | completed | abandoned
 ```
 
 ## After Ingestion (standalone mode only)
-Auto-chain: `/audit` → `/absorb` → commit + push → notify.
+Auto-chain: `/verify` → `/absorb` → commit + push → notify.
 Do NOT ask for confirmation — execute the full chain.

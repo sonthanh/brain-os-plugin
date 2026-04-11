@@ -125,7 +125,7 @@ Extension notes use same template but different source tags.
 
 ## After Completion
 
-Pipeline continues autonomously: `/audit` → `/absorb` → commit + push → notify.
+Pipeline continues autonomously: `/verify` → `/absorb` → commit + push → notify.
 Phase 2 must reach 100% pass at ≥95 before Phase 3 runs. See `/study` for full pipeline.
 
 ## Usage

@@ -9,7 +9,7 @@ From zero to working Brain OS in under 2 minutes.
 | [Claude Code](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview) | The Claude CLI — required for all skills |
 | [Obsidian](https://obsidian.md/) | Your vault lives here (free) |
 
-**Optional** (for the self-learn + audit pipeline only):
+**Optional** (for the self-learn + verify pipeline only):
 - Python 3.12+
 - [notebooklm-py](https://github.com/nicholasgasior/notebooklm-py) — `pip install notebooklm-py`
 - `pip install ebooklib beautifulsoup4`
@@ -119,7 +119,7 @@ Have an epub or PDF? Run the full knowledge pipeline:
 
 3 phases, fully autonomous:
 1. **self-learn** — extracts key ideas, validates against NotebookLM
-2. **audit** — 50 fresh questions to verify accuracy
+2. **verify** — 50 fresh questions to verify accuracy
 3. **absorb** — connects insights to your vault zones
 
 ### End-of-session handover
@@ -173,6 +173,6 @@ your-vault/
 
 **Kanban board shows raw markdown** — Install the Obsidian Kanban plugin: Settings → Community plugins → search "Kanban".
 
-**`/self-learn` or `/audit` fails** — These require `notebooklm-py` and Python dependencies. See [Prerequisites](#prerequisites).
+**`/self-learn` or `/verify` fails** — These require `notebooklm-py` and Python dependencies. See [Prerequisites](#prerequisites).
 
 **A skill writes to the wrong place** — Check your `context/` files. Empty context = default behavior. Filling them in fixes most issues.

@@ -79,7 +79,7 @@ Karpathy is building something similar with "LLM Knowledge Bases." Same directio
 | Skill | Description |
 |-------|-------------|
 | `/ingest` | Process raw notes into structured vault notes |
-| `/audit` | Verify extracted knowledge against NotebookLM with fresh questions |
+| `/verify` | Verify extracted knowledge against NotebookLM with fresh questions |
 | `/absorb` | Connect book insights to your vault zones (business, personal, thinking) |
 | `/gmail` | Automated inbox triage — cleanup, draft replies, process reports |
 | `/gmail-bootstrap` | One-time setup: scan 3 months of inbox to build email rules |
@@ -95,7 +95,7 @@ Karpathy is building something similar with "LLM Knowledge Bases." Same directio
 - [Claude Code](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview)
 - An Obsidian vault (or any markdown-based vault)
 
-**Required for self-learn and audit only:**
+**Required for self-learn and verify only:**
 - Python 3.12+
 - [notebooklm-py](https://github.com/nicholasgasior/notebooklm-py) — `pip install notebooklm-py`
 - `pip install ebooklib beautifulsoup4`

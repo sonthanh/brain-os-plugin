@@ -1,5 +1,5 @@
 {
-  "skill_name": "audit",
+  "skill_name": "verify",
   "evals": [
     {
       "id": 1,
@@ -14,23 +14,23 @@
     },
     {
       "id": 2,
-      "prompt": "What are the 3 modes of the audit.py script? Show the commands.",
-      "expected_output": "Run audit, check status, set flag — with script commands",
+      "prompt": "What are the 3 modes of the verify.py script? Show the commands.",
+      "expected_output": "Run verify, check status, set flag — with script commands",
       "expectations": [
-        "Shows audit.py command for running an audit",
-        "Shows --status flag for checking audit status",
+        "Shows verify.py command for running a verification",
+        "Shows --status flag for checking verification status",
         "Shows --set-flag for changing the flag",
         "Mentions fuzzy name matching for book selection"
       ]
     },
     {
       "id": 3,
-      "prompt": "How does the audit generate and evaluate questions?",
-      "expected_output": "50 fresh questions across 3 types, scored at ≥95",
+      "prompt": "How does the verification generate and evaluate questions?",
+      "expected_output": "50 fresh questions across 3 types, scored at >=95",
       "expectations": [
         "States 50 fresh questions (not reused from self-learn)",
         "Mentions topic-based, cross-cutting, and adversarial question types",
-        "Mentions ≥95 scoring threshold",
+        "Mentions >=95 scoring threshold",
         "States 100% pass leads to audited: true, any fail to audited: false"
       ]
     }

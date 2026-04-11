@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Knowledge audit system: flag management, book discovery, fuzzy matching.
+"""Knowledge verify system: flag management, book discovery, fuzzy matching.
 
 Usage:
-  audit.py <vault_root> --status                           Show all books and flags
-  audit.py <vault_root> --set-flag <true|false|manual> [fuzzy]  Set flag for a book
-  audit.py <vault_root> [fuzzy]                            Run audit on a book
-  audit.py <vault_root> --run [fuzzy]                      Same as above
+  verify.py <vault_root> --status                           Show all books and flags
+  verify.py <vault_root> --set-flag <true|false|manual> [fuzzy]  Set flag for a book
+  verify.py <vault_root> [fuzzy]                            Run verify on a book
+  verify.py <vault_root> --run [fuzzy]                      Same as above
 """
 
 import os
@@ -109,7 +109,7 @@ def print_status(vault_root):
         return
 
     print(f"{'='*60}")
-    print(f"  KNOWLEDGE AUDIT STATUS")
+    print(f"  KNOWLEDGE VERIFY STATUS")
     print(f"{'='*60}")
     print()
 
@@ -147,7 +147,7 @@ def prompt_book_selection(books, query=None):
             print(f"Multiple matches for '{query}':")
             for i, b in enumerate(partials, 1):
                 print(f"  {i}. {b['slug']} ({b['flag']['flag']})")
-            print(f"\nBe more specific, e.g.: /audit {partials[0]['slug'][:10]}")
+            print(f"\nBe more specific, e.g.: /verify {partials[0]['slug'][:10]}")
             return None
         else:
             print(f"No book matching '{query}'. Available books:")
@@ -163,13 +163,13 @@ def prompt_book_selection(books, query=None):
     for i, b in enumerate(books, 1):
         flag_icon = {"true": "✅", "false": "❌", "manual": "👁️"}.get(b['flag']['flag'], "?")
         print(f"  {i}. {flag_icon} {b['slug']}")
-    print("\nSpecify a book name, e.g.: /audit road")
+    print("\nSpecify a book name, e.g.: /verify road")
     return None
 
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: audit.py <vault_root> [--status | --set-flag <flag> [name] | [name]]")
+        print("Usage: verify.py <vault_root> [--status | --set-flag <flag> [name] | [name]]")
         sys.exit(1)
 
     vault_root = sys.argv[1]
@@ -212,12 +212,12 @@ def main():
     if not book:
         sys.exit(1)
 
-    print(f"Audit target: {book['slug']} ({book['note_count']} notes)")
+    print(f"Verify target: {book['slug']} ({book['note_count']} notes)")
     print(f"Current flag: {book['flag']['flag']}")
     print()
-    print("To run the full audit (50 fresh questions vs NotebookLM):")
+    print("To run the full verify (50 fresh questions vs NotebookLM):")
     print(f"  The agent should generate 50 fresh questions, query NotebookLM,")
-    print(f"  score at ≥95 threshold, and update the audit flag.")
+    print(f"  score at ≥95 threshold, and update the flag.")
     print()
     print(f"Book path: {book['path']}")
     print(f"Validation dir: {os.path.join(book['path'], '_validation')}")

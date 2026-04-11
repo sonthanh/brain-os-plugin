@@ -5,7 +5,7 @@
 #   curl -sSL https://raw.githubusercontent.com/sonthanh/brain-os-plugin/main/skills.sh | bash
 #
 # Install specific skills:
-#   curl -sSL https://raw.githubusercontent.com/sonthanh/brain-os-plugin/main/skills.sh | bash -s self-learn audit today
+#   curl -sSL https://raw.githubusercontent.com/sonthanh/brain-os-plugin/main/skills.sh | bash -s self-learn verify today
 #
 # Uninstall:
 #   curl -sSL https://raw.githubusercontent.com/sonthanh/brain-os-plugin/main/skills.sh | bash -s --uninstall
@@ -17,7 +17,7 @@ INSTALL_DIR="$HOME/.claude/skills"
 CLONE_DIR="$HOME/.brain-os"
 
 ALL_SKILLS=(
-  absorb aha audit develop eval gmail gmail-bootstrap grill handover ingest
+  absorb aha verify develop eval gmail gmail-bootstrap grill handover ingest
   journal pickup research self-learn status study think triggers
 )
 

@@ -71,10 +71,10 @@
     {
       "id": 7,
       "prompt": "What happens after all 3 phases complete?",
-      "expected_output": "Pipeline continues with ingest, audit, absorb, sync",
+      "expected_output": "Pipeline continues with ingest, verify, absorb, sync",
       "expectations": [
         "Mentions /ingest as next step",
-        "Mentions /audit follows ingest",
+        "Mentions /verify follows ingest",
         "Mentions Phase 2 must reach 100% pass at ≥95 before /ingest triggers"
       ]
     }

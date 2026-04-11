@@ -1,11 +1,11 @@
 ---
-name: audit
-description: "Use when verifying ingested book knowledge against NotebookLM, checking audit status, or managing audit flags before absorbing"
+name: verify
+description: "Use when verifying ingested book knowledge against NotebookLM, checking verification status, or managing audit flags before absorbing"
 ---
 
-# Knowledge Audit
+# Knowledge Verify
 
-Independent verification of self-learn knowledge. Runs 50 fresh questions against NotebookLM to catch errors the original validation missed. Audit is separate from self-learn — it owns the `audited` flag entirely.
+Independent verification of self-learn knowledge. Runs 50 fresh questions against NotebookLM to catch errors the original validation missed. Verify is separate from self-learn — it owns the `audited` flag entirely.
 
 ## Configuration
 ```yaml
@@ -28,17 +28,17 @@ Stored in `{book_vault}/_validation/audit-flag.json`.
 **Always run the script — it handles fuzzy matching and execution.**
 
 ```bash
-# Run audit
-python3 ${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.py {vault}/knowledge/raw <optional-fuzzy-name>
+# Run verify
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/verify/scripts/verify.py {vault}/knowledge/raw <optional-fuzzy-name>
 
 # Check status
-python3 ${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.py {vault}/knowledge/raw --status
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/verify/scripts/verify.py {vault}/knowledge/raw --status
 
 # Set flag
-python3 ${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.py {vault}/knowledge/raw --set-flag <true|false|manual> <optional-fuzzy-name>
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/verify/scripts/verify.py {vault}/knowledge/raw --set-flag <true|false|manual> <optional-fuzzy-name>
 ```
 
-## How Audit Runs
+## How Verify Runs
 
 1. Fuzzy match book name against `knowledge/raw/` folders
 2. Generate 50 fresh questions (25 topic, 15 cross-cutting, 10 adversarial)
