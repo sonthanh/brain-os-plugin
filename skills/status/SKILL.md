@@ -17,7 +17,13 @@ Works any time of day. No daily boundary assumption. Shows what needs attention 
 
 2. **Check tasks** — read `{vault}/business/tasks/inbox.md` for all unchecked priority tasks and backlog items.
 
-3. **Check email intelligence** (if today's files exist):
+3. **Check content ideas** (if `ai-leaders-vietnam` plugin is installed):
+   - Read `${vault}/business/projects/ai-leaders-vietnam/content-ideas.md` (or symlinked equivalent)
+   - Count items in "Next Up" and "Writing" columns
+   - Add to briefing: `### Content\n- X ideas ready, Y in writing`
+   - If Writing > 0: list titles so user knows what's in flight
+
+4. **Check email intelligence** (if today's files exist):
    - `{vault}/business/intelligence/emails/YYYY-MM-DD-daily-summary.md` — totals, key signals
    - `{vault}/business/intelligence/emails/YYYY-MM-DD-needs-reply.md` — pending replies with priority
    - `{vault}/business/intelligence/emails/YYYY-MM-DD-client-support-queue.md` — SLA breaches
@@ -36,6 +42,9 @@ Works any time of day. No daily boundary assumption. Shows what needs attention 
    ### Tasks
    - [ ] Task 1
    - [ ] Task 2
+
+   ### Content
+   - X ideas ready, Y in writing
 
    ### Email
    - X needs reply (Y high priority)
