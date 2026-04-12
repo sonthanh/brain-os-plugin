@@ -20,6 +20,14 @@
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/smart-diff-check.sh\""
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/trace-capture.sh\""
+          }
+        ]
       }
     ],
     "SessionEnd": [

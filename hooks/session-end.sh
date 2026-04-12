@@ -6,6 +6,13 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/resolve-vault.sh"
 
+# --- 0. Clear trace-capture active-skill state for this session ---
+INPUT=$(cat 2>/dev/null || echo "")
+SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
+if [ -n "$SESSION_ID" ]; then
+  rm -f "${TMPDIR:-/tmp}/claude-trace/${SESSION_ID}.skill" 2>/dev/null || true
+fi
+
 TIMESTAMP=$(date +%Y-%m-%dT%H-%M)
 DATE=$(date +%Y-%m-%d)
 REPO_NAME=$(basename "$PWD" 2>/dev/null || echo "unknown")
