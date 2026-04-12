@@ -51,7 +51,6 @@ Plugin hooks live in `hooks/hooks.json` and are auto-registered on install:
 
 ## Editing Rules
 
-- Edit skill source here, NEVER in `~/.claude/plugins/cache/` (installed copies are symlinks)
+- Plugin editing + auto commit/push rules: see `~/.claude/CLAUDE.md` (canonical)
 - When editing SKILL.md: the PostToolUse hook will validate. If it blocks, review what was removed.
 - ALL_SKILLS arrays in `install.sh` and `skills.sh` must stay in sync
-- After changes: commit and push (auto-deploy via symlinks)
