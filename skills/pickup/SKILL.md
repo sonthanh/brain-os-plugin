@@ -86,6 +86,7 @@ When the user grills on the remaining questions:
 1. **Find eligible tasks in Ready column** — apply time-aware filtering:
    - **Work hours (09:00–22:00)**: only pick `⚡` (quick) tasks. Skip `🏋️` (heavy).
    - **Off-hours (22:00–09:00) or weekends**: pick any task including `🏋️`.
+   - **`--force` flag**: skip time-aware filtering entirely — pick any Ready task regardless of weight or hour. Used by the pickup-auto cron.
 2. **Pick eligible tasks** and move to In Progress
 3. **Launch as background Claude process in worktree**:
    ```bash
@@ -111,7 +112,8 @@ Same as above but for every eligible task. Each gets its own worktree.
 - **Worktree isolation** — each task runs via `claude -w` to avoid conflicts.
 - **Self-completing** — execute → log autogrill Q&A → update inbox.md → commit + push.
 - **Respect skill flows** — if a task maps to a skill, invoke that skill.
-- **Time-aware** — never run 🏋️ tasks during work hours unless explicitly overridden.
+- **Time-aware** — never run 🏋️ tasks during work hours unless `--force` is passed.
+- **`--force` override** — `/pickup auto --force` bypasses time-aware filtering entirely. Used by the pickup-auto cron (see `~/.local/bin/pickup-auto-cron.sh`) so scheduled runs can pick 🏋️ during daytime.
 - **No budget cap** — tasks run until complete. Ralph Loop ensures completion.
 
 ## Handover Task Behavior
