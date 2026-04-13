@@ -129,6 +129,7 @@ Answer a question as the user would:
 
 ## Outcome log
 
+<<<<<<< Updated upstream
 Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/think.log`:
 
 ```
@@ -138,3 +139,13 @@ Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/think.log`
 - `action`: `think`, `digest`, `challenge`, `emerge`, `drift`, `trace`, `connect`, `ideas`, or `ghost`
 - `result`: `pass` if output written, `partial` if gaps flagged or vault data sparse, `fail` if no relevant vault content found
 - Optional: `args="{angle} {topic}"`
+=======
+After each `/think` run, append one line to `{vault}/daily/skill-outcomes/think.log`:
+
+```
+{date} | think | {action} | ~/work/brain-os-plugin | {vault}/thinking/agent-output/{date}-{angle}-{topic}.md | commit:{hash} | {result}
+```
+
+- `mode`: `open`, `digest`, `challenge`, `emerge`, `drift`, `trace`, `connect`, `ideas`, or `ghost`
+- `result`: `pass` if output generated, `partial` if some angles skipped, `fail` if errors
+>>>>>>> Stashed changes

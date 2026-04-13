@@ -87,6 +87,7 @@ If pipeline is interrupted, `/study --resume` checks audit-flag.json to determin
 
 ## Outcome log
 
+<<<<<<< Updated upstream
 Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/study.log`:
 
 ```
@@ -95,3 +96,13 @@ Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/study.log`
 
 - `result`: `pass` if full pipeline complete (self-learn → verify → absorb → commit), `partial` if interrupted mid-pipeline, `fail` if verify fails
 - Optional: `args="{epub_path}"`, `score={step_reached}/5`
+=======
+After each `/study` run, append one line to `{vault}/daily/skill-outcomes/study.log`:
+
+```
+{date} | study | {action} | ~/work/brain-os-plugin | {vault}/knowledge/books/{book-slug}.md | commit:{hash} | {result}
+```
+
+- `mode`: `full`, `resume`, or `status`
+- `result`: `pass` if full pipeline completed, `partial` if stopped at verification, `fail` if errors
+>>>>>>> Stashed changes

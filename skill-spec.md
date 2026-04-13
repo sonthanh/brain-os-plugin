@@ -45,6 +45,10 @@ Each skill defines its own pass/partial/fail logic in its `## Outcome log` secti
 - `partial` — completed but with corrections, gaps, or user modifications
 - `fail` — errored, blocked, or output rejected
 
+### Implementation
+
+Each skill's `SKILL.md` contains an `## Outcome log` section specifying the exact action values and artifact paths for that skill. The log line is appended by the skill itself (not a hook) at the end of each run.
+
 ### Rules
 
 - Append-only. Never overwrite or rotate log files.
