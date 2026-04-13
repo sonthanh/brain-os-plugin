@@ -1,6 +1,6 @@
 # Gmail Triage — Remote Task Prompt
 
-This prompt is used by the scheduled cloud remote task. Copy it when setting up the scheduled task via `/schedule` or `claude.ai/code/scheduled`.
+> **DEPRECATED (2026-04-13).** The live production triage runs as a GitHub Actions workflow in the brain vault repo: `.github/workflows/gmail-triage.yml`. The classification prompt lives **inline** in that workflow (the `Classify with Claude` step). This file is kept as a historical reference for the original scheduled-task design but is NOT read by the running system. When classification rules change, edit the workflow file, not this one. See also `commands/gmail-triage.md` in the vault — a longer-form spec that documents desired behavior but is also not consumed by the workflow.
 
 ## Prompt
 
