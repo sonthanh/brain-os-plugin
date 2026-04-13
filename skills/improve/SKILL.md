@@ -116,11 +116,44 @@ Write evals to `evals/evals.json` in the skill's source directory. Append to exi
 1. **Locate the skill source** — read the `source_repo` field from the outcome log. The SKILL.md to edit is at `{source_repo}/skills/{skill}/SKILL.md`
 2. **Run existing evals** as "before" baseline. Record pass count.
 3. **Git tag** `pre-improve-vN` in the source repo (N = increment from last tag)
-4. **Edit SKILL.md** — translate patterns into new rules or gotchas. Add to the appropriate section. Don't restructure the entire skill — surgical additions only.
-5. **Run evals again** as "after". Record pass count.
-6. **Eval gate:**
-   - If after >= before → keep changes, commit with message `improve: {skill} — {one-line summary}`
-   - If after < before → `git checkout -- skills/{skill}/SKILL.md`, report what was tried and why it failed
+4. **Save the original SKILL.md** content (the pre-edit version) for revert and diff sizing
+
+### Variant generation (3-5 candidates)
+
+Generate 3-5 candidate SKILL.md edits, each addressing the Phase 2 patterns via a different strategy. Every candidate must be a complete, valid SKILL.md — not a diff.
+
+**Diversity axes** — vary at least 2 axes across candidates:
+
+| Axis | Pole A | Pole B |
+|------|--------|--------|
+| Scope | Narrow rule (one specific fix) | Broad guideline (covers pattern family) |
+| Placement | Add to Gotchas section | Add inline near relevant step |
+| Phrasing | Negative constraint ("NEVER do X") | Positive instruction ("ALWAYS do Y instead") |
+| Abstraction | Concrete example with literal values | General principle the executor infers from |
+
+**Candidate generation process:**
+1. For each candidate, pick a unique combination of diversity axes
+2. Translate the Phase 2 patterns into rules using that combination's style
+3. Write the full SKILL.md with the new rules surgically added
+4. Keep all changes minimal — only add/modify lines that address the patterns
+
+**Minimum 3 candidates required.** Generate up to 5 when patterns are complex or when multiple distinct placement strategies exist.
+
+### Evaluate and select
+
+5. **Run evals against each candidate** — swap in each candidate SKILL.md, run the eval suite, record pass count and which evals pass/fail
+6. **Rank candidates** by selection criteria (in priority order):
+   - **Eval pass count** — must be >= before baseline (hard gate, disqualifies if not met)
+   - **Minimal diff size** — `diff <original> <candidate> | wc -l` — prefer surgical changes
+   - **Pattern coverage** — count how many Phase 2 patterns each candidate addresses
+7. **Tiebreaker:** if multiple candidates tie on all three criteria, prefer the candidate with the smallest absolute file size (less bloat)
+
+### Eval gate
+
+8. **Select the winning candidate** — highest-ranked variant that passes the eval gate
+9. **If NO candidate passes** (all have eval count < before) → `git checkout -- skills/{skill}/SKILL.md`, report what was tried and why all variants failed
+10. **If winner found** → apply that candidate's SKILL.md, commit with message `improve: {skill} — {one-line summary}`
+11. **Record in report** — which variants were generated, their eval scores, diff sizes, and which was selected (or that all were rejected)
 
 ---
 
@@ -143,10 +176,18 @@ Write report to `{vault}/daily/improve-reports/{date}-{skill}.md`:
 ## Changes made
 - {what was added/modified in SKILL.md}
 
+## Variant evaluation
+| Variant | Strategy | Eval pass | Diff lines | Patterns covered | Selected |
+|---------|----------|-----------|------------|------------------|----------|
+| V1 | {axes used} | {X}/{Y} | {N} | {N}/{total} | {yes/no} |
+| V2 | ... | ... | ... | ... | ... |
+
 ## Eval results
 - Before: {X}/{Y} pass ({percent}%)
-- After: {X}/{Y} pass ({percent}%)
-- Decision: KEPT / REVERTED
+- After (winner): {X}/{Y} pass ({percent}%)
+- Candidates tested: {N}
+- Candidates passing gate: {N}
+- Decision: KEPT (V{N}) / REVERTED (all failed)
 
 ## Auto-generated evals
 - {N} new eval cases added from user corrections
