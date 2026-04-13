@@ -70,6 +70,30 @@ Read all collected signals. Synthesize into patterns:
 - Use `score=N.N` to distinguish severity: a `partial` with score 9.0 is cosmetic; a `partial` with score 5.0 is structural
 - Cross-reference trace files for behavioral patterns (e.g., skill always calls tool X before failing)
 
+### Trace-based process detectors
+
+When trace data exists, run these detectors against the JSONL tool-call sequence. Each detector is an IF/THEN rule — if the condition matches, emit a pattern. Weight trace-derived patterns **lower than direct user corrections** (`corrections=N`) but **higher than zero-signal inference**.
+
+If no trace file exists, skip this subsection entirely — Phase 2 still works from outcome logs alone.
+
+**Detector 1 — Skipped vault-first lookup**
+IF trace shows `WebSearch` or `WebFetch` tool calls WITHOUT a prior `Grep` or `Read` targeting vault paths (e.g., `~/work/brain/`, `{vault}/`)
+THEN → `Pattern: skill searches web before checking vault → should grep vault first per brain-first lookup rule`
+
+**Detector 2 — Over-read context**
+IF trace shows ≥10 `Read` calls in a single session, OR any `Read` call with line range >500 lines, OR repeated reads of the same file
+THEN → `Pattern: skill reads excessive context ({N} reads / {M} lines) → should read targeted sections only`
+
+**Detector 3 — Skipped research before action**
+IF trace shows `Edit` or `Write` calls WITHOUT prior `Read`/`Grep`/`Glob` calls for spec or reference files in the same skill directory
+THEN → `Pattern: skill jumps to editing without reading specs/references → should consult skill references before producing output`
+
+**Detector 4 — Missing spec consultation**
+IF the skill has `references/` files and trace shows zero `Read` calls to any file under `skills/{skill}/references/`
+THEN → `Pattern: skill ignores its own reference files → should read references/ before generating output`
+
+New detectors can be added following the same IF/THEN format.
+
 Write each pattern as: `Pattern: <what happens> → <what user wants instead>`
 
 ---
