@@ -54,3 +54,14 @@ After each audit, append to the Log table in `{vault}/thinking/principles/tracke
 ```
 
 Also increment the Uses count for each principle applied.
+
+## Outcome log
+
+Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/audit.log`:
+
+```
+{date} | audit | audit | ~/work/brain-os-plugin | thinking/principles/tracker.md | commit:N/A | {result}
+```
+
+- `result`: `pass` if all principles PASS, `partial` if any FLAG, `fail` if any FAIL
+- Optional: `args="{principles}"` (e.g., `args="p1 p5"`)

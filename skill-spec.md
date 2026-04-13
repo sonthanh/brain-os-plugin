@@ -2,7 +2,56 @@
 
 Canonical spec for skills inside `brain-os-plugin/skills/`. Each numbered section defines one cross-cutting convention that all skills inherit.
 
-Sections §1–§11 are reserved for conventions documented elsewhere as they are formalized (frontmatter, usage block, phase protocol, outcome logging, eval format, source repo field, etc.). §12 below is the first section captured here.
+Sections §1–§10 are reserved for conventions documented elsewhere as they are formalized (frontmatter, usage block, phase protocol, eval format, source repo field, etc.).
+
+---
+
+## § 11 — Outcome logging
+
+Every skill appends one line per run to `{vault}/daily/skill-outcomes/{skill}.log`. These logs feed `/improve` for pattern detection and skill learning.
+
+### Format
+
+Pipe-delimited, 7 required fields + optional trailing key=value pairs:
+
+```
+{date} | {skill} | {action} | {source_repo} | {output_path} | commit:{hash} | {result} [| key=value ...]
+```
+
+| Field | Description |
+|-------|-------------|
+| `date` | `YYYY-MM-DD` |
+| `skill` | Skill name (e.g., `grill`, `self-learn`) |
+| `action` | Skill-specific action (e.g., `triage`, `extract`, `audit`) |
+| `source_repo` | Path to the source repo (e.g., `~/work/brain-os-plugin`) |
+| `output_path` | Vault-relative path to main output artifact |
+| `commit:{hash}` | Git commit hash of output, or `commit:N/A` if no commit |
+| `result` | `pass`, `partial`, or `fail` |
+
+### Optional trailing fields
+
+- `corrections=N` — number of user corrections needed (higher = stronger failure signal)
+- `args="..."` — original input/topic (replayed as eval case by `/improve`)
+- `score=N.N` — rubric score from evaluator (correlate with result for severity)
+- `interrupt="..."` — user-stated reason for stopping (explicit failure reason)
+
+Unknown keys are ignored (forward-compat). Missing trailing fields are fine (backwards-compat).
+
+### Result criteria
+
+Each skill defines its own pass/partial/fail logic in its `## Outcome log` section. General guidance:
+
+- `pass` — skill completed successfully, output accepted
+- `partial` — completed but with corrections, gaps, or user modifications
+- `fail` — errored, blocked, or output rejected
+
+### Rules
+
+- Append-only. Never overwrite or rotate log files.
+- Log AFTER the skill completes its work (not before).
+- Use vault-relative paths for `output_path` (e.g., `daily/journal/2026-04-13-journey.md`).
+- Skills that produce no artifact (e.g., `/status`) use `output_path=N/A`.
+- Skills with multiple phases log once at the end, not per-phase.
 
 ---
 

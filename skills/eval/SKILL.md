@@ -78,3 +78,15 @@ When `/eval --all`:
 ## Adding Evals to a Skill
 
 Create `evals/evals.json` in your skill directory following the schema above. Each eval should test a critical aspect of the skill that would break if removed.
+
+## Outcome log
+
+Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/eval.log`:
+
+```
+{date} | eval | {action} | ~/work/brain-os-plugin | N/A | commit:N/A | {result}
+```
+
+- `action`: `eval` (single skill) or `eval-all` (all skills)
+- `result`: `pass` if all evals pass, `partial` if some fail, `fail` if errors prevent running
+- Optional: `args="{skill-name}"`, `score={passed}/{total}`

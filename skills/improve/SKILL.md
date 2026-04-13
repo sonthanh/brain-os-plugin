@@ -141,6 +141,13 @@ Commit and push the report to the vault.
 
 ---
 
-## Outcome logging convention
+## Outcome log
 
-After building or modifying this skill, update `skill-spec.md` to include the outcome logging convention so all future skills inherit it.
+Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/improve.log`:
+
+```
+{date} | improve | improve | ~/work/brain-os-plugin | daily/improve-reports/{date}-{skill}.md | commit:{hash} | {result}
+```
+
+- `result`: `pass` if evals improved and changes kept, `partial` if changes reverted (evals dropped), `fail` if no outcome data
+- Optional: `args="{skill-name}"`, `score={after_pass}/{after_total}`

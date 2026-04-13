@@ -95,3 +95,14 @@ status: reading | completed | abandoned
 ## After Ingestion (standalone mode only)
 Auto-chain: `/verify` → `/absorb` → commit + push → notify.
 Do NOT ask for confirmation — execute the full chain.
+
+## Outcome log
+
+Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/ingest.log`:
+
+```
+{date} | ingest | ingest | ~/work/brain-os-plugin | knowledge/books/{slug}.md | commit:{hash} | {result}
+```
+
+- `result`: `pass` if all files processed, `partial` if some skipped, `fail` if errors
+- Optional: `args="{filepath}"`, `score={processed}/{total}`

@@ -84,3 +84,14 @@ If pipeline is interrupted, `/study --resume` checks audit-flag.json to determin
 - **Verify fails**: Pipeline stops. Flag stays false. Task written to inbox.
 - **Git push fails**: Pull first, resolve conflicts, retry push.
 - **NotebookLM timeout**: Retry 3 times with backoff. If still failing, pause and notify user.
+
+## Outcome log
+
+Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/study.log`:
+
+```
+{date} | study | study | ~/work/brain-os-plugin | knowledge/books/{slug}.md | commit:{hash} | {result}
+```
+
+- `result`: `pass` if full pipeline complete (self-learn → verify → absorb → commit), `partial` if interrupted mid-pipeline, `fail` if verify fails
+- Optional: `args="{epub_path}"`, `score={step_reached}/5`

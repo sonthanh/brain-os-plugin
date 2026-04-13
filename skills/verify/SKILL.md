@@ -48,3 +48,14 @@ python3 ${CLAUDE_PLUGIN_ROOT}/skills/verify/scripts/verify.py {vault}/knowledge/
 6. 100% pass → `audited: true`. Any fail → `audited: false`, report to inbox
 
 Results saved to `{book_vault}/_validation/audit-results-{date}.jsonl`.
+
+## Outcome log
+
+Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/verify.log`:
+
+```
+{date} | verify | verify | ~/work/brain-os-plugin | knowledge/raw/{slug}/_validation/audit-results-{date}.jsonl | commit:{hash} | {result}
+```
+
+- `result`: `pass` if 100% questions score ≥95 (audited=true), `fail` if any question fails (audited=false)
+- Optional: `args="{book-name}"`, `score={passed}/{total}`
