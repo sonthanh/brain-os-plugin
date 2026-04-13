@@ -88,7 +88,14 @@ When the user grills on the remaining questions:
    - **Off-hours (22:00–09:00) or weekends**: pick any task including `🏋️`.
    - **`--force` flag**: skip time-aware filtering entirely — pick any Ready task regardless of weight or hour. Used by the pickup-auto cron.
 2. **Pick eligible tasks** and move to In Progress
-3. **Launch as background Claude process in worktree**:
+3. **Build dependency DAG** before launching anything:
+   - **Step 1 — Scan descriptions:** For each eligible task, parse for `depends on X` / `Depends on P1 Y` free-text patterns
+   - **Step 2 — Read plan docs:** For tasks referencing plan docs (e.g., `vault-redesign-plan`), read the plan and extract Phase numbering (`Phase 1.1`, `1.2`, etc.) — sequential phases within the same plan = sequential tasks
+   - **Step 3 — Build DAG:** nodes = tasks, edges = dependency relationships from Steps 1-2
+   - **Step 4 — Launch root nodes:** only tasks with no incoming edges launch in parallel
+   - **Step 5 — Queue dependents:** dependent tasks launch only after their prereq merges to main
+   - **Default:** if dependency parsing is ambiguous, serialize (cheap insurance vs 90 min cleanup)
+4. **Launch as background Claude process in worktree**:
    ```bash
    claude -w "auto-{slug}" \
      --model opus \
@@ -97,11 +104,13 @@ When the user grills on the remaining questions:
      > /tmp/auto-task-{slug}.log 2>&1 &
    ```
    The prompt MUST include the full task description + autogrill Q&A log instructions + Ralph Loop.
-4. **Report immediately** (don't wait for completion)
+   The prompt MUST end with: "DO NOT invoke /pickup, /status, or any other skill after finishing — exit cleanly."
+   Exit protocol (non-negotiable): `commit → push → exit`. Watcher treats missing remote ref as failure.
+5. **Report immediately** (don't wait for completion)
 
-#### `/pickup auto --all` — Launch ALL eligible tasks in parallel
+#### `/pickup auto --all` — Launch ALL eligible tasks respecting the dependency DAG
 
-Same as above but for every eligible task. Each gets its own worktree.
+Same as above but for every eligible task. Each gets its own worktree. DAG constraints still apply — only independent tasks launch in parallel; dependent tasks queue behind their prereqs.
 
 #### Weight tags
 - `⚡` — quick task (< 30 min), safe to run anytime
@@ -112,6 +121,7 @@ Same as above but for every eligible task. Each gets its own worktree.
 - **Worktree isolation** — each task runs via `claude -w` to avoid conflicts.
 - **Self-completing** — execute → log autogrill Q&A → update inbox.md → commit + push.
 - **Respect skill flows** — if a task maps to a skill, invoke that skill.
+- **Dependency-aware** — build DAG before parallelizing; serialize sequential phases of same plan.
 - **Time-aware** — never run 🏋️ tasks during work hours unless `--force` is passed.
 - **`--force` override** — `/pickup auto --force` bypasses time-aware filtering entirely. Used by the pickup-auto cron (see `~/.local/bin/pickup-auto-cron.sh`) so scheduled runs can pick 🏋️ during daytime.
 - **No budget cap** — tasks run until complete. Ralph Loop ensures completion.
