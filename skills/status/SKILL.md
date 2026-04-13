@@ -70,10 +70,18 @@ Works any time of day. No daily boundary assumption. Shows what needs attention 
 
 ## Outcome log
 
+<<<<<<< Updated upstream
 Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/status.log`:
+=======
+After each `/status` run, append one line to `{vault}/daily/skill-outcomes/status.log`:
+>>>>>>> Stashed changes
 
 ```
 {date} | status | briefing | ~/work/brain-os-plugin | N/A | commit:N/A | {result}
 ```
 
+<<<<<<< Updated upstream
 - `result`: `pass` (briefing delivered), `fail` (vault unreadable or missing)
+=======
+- `result`: `pass` if briefing completed, `fail` if vault read errors
+>>>>>>> Stashed changes

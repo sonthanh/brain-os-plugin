@@ -57,6 +57,7 @@ Safe to re-run anytime. Will regenerate the rules file but preserve the `## Cust
 
 ## Outcome log
 
+<<<<<<< Updated upstream
 Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/gmail-bootstrap.log`:
 
 ```
@@ -64,3 +65,12 @@ Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/gmail-boot
 ```
 
 - `result`: `pass` if rules generated and saved, `fail` if API errors or scan incomplete
+=======
+After each `/gmail-bootstrap` run, append one line to `{vault}/daily/skill-outcomes/gmail-bootstrap.log`:
+
+```
+{date} | gmail-bootstrap | bootstrap | ~/work/brain-os-plugin | {vault}/business/intelligence/gmail-rules.md | commit:{hash} | {result}
+```
+
+- `result`: `pass` if rules generated cleanly, `partial` if some categories missing, `fail` if errors
+>>>>>>> Stashed changes

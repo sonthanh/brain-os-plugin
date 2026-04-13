@@ -166,6 +166,7 @@ Use `/develop` when the output is **code that runs unattended** — scripts, ski
 
 ## Outcome log
 
+<<<<<<< Updated upstream
 Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/develop.log`:
 
 ```
@@ -177,3 +178,14 @@ Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/develop.lo
 - `output_path`: main artifact path (script, skill, hook)
 - `result`: `pass` if shipped, `partial` if stopped early (Phase 0 kill or user halt), `fail` if 3-strike rule triggered
 - Optional: `args="{task description}"`
+=======
+After each `/develop` run, append one line to `{vault}/daily/skill-outcomes/develop.log`:
+
+```
+{date} | develop | {action} | ~/work/brain-os-plugin | {output_path} | commit:{hash} | {result}
+```
+
+- `mode`: `full` or `resume`
+- `artifact_path`: state file path or target repo path
+- `result`: `pass` if all phases completed + tests pass, `partial` if some phases skipped, `fail` if errors
+>>>>>>> Stashed changes

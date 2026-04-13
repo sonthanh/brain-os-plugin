@@ -189,6 +189,7 @@ Session B (new Claude):
 
 ## Outcome log
 
+<<<<<<< Updated upstream
 Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/pickup.log`:
 
 ```
@@ -198,3 +199,14 @@ Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/pickup.log
 - `action`: `pickup` (interactive) or `auto` (background launch)
 - `result`: `pass` if tasks started/completed, `partial` if some escalated to user, `fail` if no eligible tasks
 - Optional: `args="{task-slug}"`, `score={completed}/{launched}` (for auto mode)
+=======
+After each `/pickup` run, append one line to `{vault}/daily/skill-outcomes/pickup.log`:
+
+```
+{date} | pickup | {action} | ~/work/brain-os-plugin | {output_path} | commit:{hash} | {result}
+```
+
+- `mode`: `interactive`, `auto`, or `auto-all`
+- `artifact_path`: handover doc path or task file path
+- `result`: `pass` if tasks launched/resumed, `partial` if some tasks skipped, `fail` if errors
+>>>>>>> Stashed changes

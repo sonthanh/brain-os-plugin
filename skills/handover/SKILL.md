@@ -97,6 +97,7 @@ When `/pickup` completes the task, it marks it done:
 
 ## Outcome log
 
+<<<<<<< Updated upstream
 Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/handover.log`:
 
 ```
@@ -105,3 +106,12 @@ Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/handover.l
 
 - `result`: `pass` if handover doc + backlog task created, `fail` if nothing to hand over
 - Optional: `args="{topic}"`
+=======
+After each `/handover` run, append one line to `{vault}/daily/skill-outcomes/handover.log`:
+
+```
+{date} | handover | handover | ~/work/brain-os-plugin | {vault}/daily/handovers/{date}-{topic}.md | commit:{hash} | {result}
+```
+
+- `result`: `pass` if handover doc + task created, `partial` if doc created but task write failed, `fail` if errors
+>>>>>>> Stashed changes

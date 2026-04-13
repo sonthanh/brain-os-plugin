@@ -17,6 +17,7 @@ Save decisions to `{vault}/daily/grill-sessions/YYYY-MM-DD-<topic-slug>.md`
 
 ## Outcome log
 
+<<<<<<< Updated upstream
 Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/grill.log`:
 
 ```
@@ -25,3 +26,12 @@ Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/grill.log`
 
 - `result`: `pass` if bulletproof plan reached, `partial` if gaps remain, `fail` if abandoned
 - Optional: `args="{topic}"`
+=======
+After each `/grill` run, append one line to `{vault}/daily/skill-outcomes/grill.log`:
+
+```
+{date} | grill | grill | ~/work/brain-os-plugin | {vault}/daily/grill-sessions/{date}-{topic-slug}.md | commit:{hash} | {result}
+```
+
+- `result`: `pass` if reached actionable plan, `partial` if session ended early, `fail` if errors
+>>>>>>> Stashed changes
