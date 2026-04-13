@@ -84,3 +84,16 @@ Approve updates? (all / pick numbers / skip)
 - Always show what will change before changing it
 - Prioritize actionable insights over theoretical knowledge
 - Connect to EXISTING vault content — don't create orphan notes
+
+## Outcome log
+
+Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/absorb.log`:
+
+```
+{date} | absorb | {action} | ~/work/brain-os-plugin | {output_path} | commit:{hash} | {result}
+```
+
+- `action`: `absorb` (single book) or `synthesis` (cross-book)
+- `output_path`: path to absorption report or synthesis file
+- `result`: `pass` if vault updates applied, `partial` if user skipped some proposals, `fail` if blocked by verify
+- Optional: `args="{book-name}"`, `corrections=N`

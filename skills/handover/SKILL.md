@@ -94,3 +94,14 @@ When `/pickup` completes the task, it marks it done:
 ```
 - [x] [Handover] Short description → [[daily/handovers/YYYY-MM-DD-topic]] ✅ YYYY-MM-DD
 ```
+
+## Outcome log
+
+Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/handover.log`:
+
+```
+{date} | handover | handover | ~/work/brain-os-plugin | daily/handovers/{date}-{topic}.md | commit:{hash} | {result}
+```
+
+- `result`: `pass` if handover doc + backlog task created, `fail` if nothing to hand over
+- Optional: `args="{topic}"`

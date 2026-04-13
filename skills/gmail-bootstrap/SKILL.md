@@ -54,3 +54,13 @@ Scans your last 3 months of inbox to learn your email patterns and generates `gm
 ## Re-running
 
 Safe to re-run anytime. Will regenerate the rules file but preserve the `## Custom Rules` section that you edited manually.
+
+## Outcome log
+
+Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/gmail-bootstrap.log`:
+
+```
+{date} | gmail-bootstrap | bootstrap | ~/work/brain-os-plugin | business/intelligence/gmail-rules.md | commit:{hash} | {result}
+```
+
+- `result`: `pass` if rules generated and saved, `fail` if API errors or scan incomplete

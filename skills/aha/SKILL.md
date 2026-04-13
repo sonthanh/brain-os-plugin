@@ -50,3 +50,14 @@ When triggered (by `/aha`, `/aha <note>`, or natural language like "aha"):
 - One file per day, multiple entries appended
 - This is RAW MATERIAL for `/journal` — don't polish, just capture
 - Never break the user's flow with confirmation dialogs or summaries
+
+## Outcome log
+
+Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/aha.log`:
+
+```
+{date} | aha | capture | ~/work/brain-os-plugin | daily/sessions/{date}-aha.md | commit:N/A | {result}
+```
+
+- `result`: `pass` (captured successfully), `fail` (context too sparse to capture)
+- Optional: `args="{user-one-liner}"`

@@ -186,3 +186,15 @@ Session B (new Claude):
 
   /pickup auto → launch eligible in background → self-completes
 ```
+
+## Outcome log
+
+Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/pickup.log`:
+
+```
+{date} | pickup | {action} | ~/work/brain-os-plugin | N/A | commit:N/A | {result}
+```
+
+- `action`: `pickup` (interactive) or `auto` (background launch)
+- `result`: `pass` if tasks started/completed, `partial` if some escalated to user, `fail` if no eligible tasks
+- Optional: `args="{task-slug}"`, `score={completed}/{launched}` (for auto mode)

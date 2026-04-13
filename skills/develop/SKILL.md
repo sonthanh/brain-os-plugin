@@ -163,3 +163,17 @@ Resume with `/develop --resume` — reads state file, continues from last phase.
 - One-line config changes — just do it
 
 Use `/develop` when the output is **code that runs unattended** — scripts, skills, hooks, automations, pipelines.
+
+## Outcome log
+
+Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/develop.log`:
+
+```
+{date} | develop | {phase} | {source_repo} | {output_path} | commit:{hash} | {result}
+```
+
+- `phase`: last completed phase (`spec`, `test`, `build`, `review`, `verify`, `ship`)
+- `source_repo`: repo where code was built
+- `output_path`: main artifact path (script, skill, hook)
+- `result`: `pass` if shipped, `partial` if stopped early (Phase 0 kill or user halt), `fail` if 3-strike rule triggered
+- Optional: `args="{task description}"`

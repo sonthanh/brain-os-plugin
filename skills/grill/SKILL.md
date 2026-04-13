@@ -14,3 +14,14 @@ Save decisions to `{vault}/daily/grill-sessions/YYYY-MM-DD-<topic-slug>.md`
 ```
 /grill <topic>
 ```
+
+## Outcome log
+
+Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/grill.log`:
+
+```
+{date} | grill | grill | ~/work/brain-os-plugin | daily/grill-sessions/{date}-{slug}.md | commit:{hash} | {result}
+```
+
+- `result`: `pass` if bulletproof plan reached, `partial` if gaps remain, `fail` if abandoned
+- Optional: `args="{topic}"`

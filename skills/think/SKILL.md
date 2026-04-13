@@ -126,3 +126,15 @@ Answer a question as the user would:
 3. **Write answer in user's voice** — matching tone, vocabulary, reasoning, values
 4. **Rate fidelity** — confidence 1-10 that this matches how user would respond
 5. **Flag gaps** — where vault lacks data on this topic
+
+## Outcome log
+
+Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/think.log`:
+
+```
+{date} | think | {action} | ~/work/brain-os-plugin | thinking/agent-output/{date}-{angle}-{topic}.md | commit:{hash} | {result}
+```
+
+- `action`: `think`, `digest`, `challenge`, `emerge`, `drift`, `trace`, `connect`, `ideas`, or `ghost`
+- `result`: `pass` if output written, `partial` if gaps flagged or vault data sparse, `fail` if no relevant vault content found
+- Optional: `args="{angle} {topic}"`

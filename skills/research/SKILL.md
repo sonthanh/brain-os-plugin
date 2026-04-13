@@ -217,3 +217,14 @@ tags: [{tags}]
 - **Quotes < 15 words** — only for truly original phrasing worth preserving
 - **Copyright** — never reproduce long quotes, only short factual extractions
 - **Max searches**: quick=8, deep=20
+
+## Outcome log
+
+Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/research.log`:
+
+```
+{date} | research | research | ~/work/brain-os-plugin | knowledge/research/reports/{date}-research-{slug}.md | commit:{hash} | {result}
+```
+
+- `result`: `pass` if report written with citations, `partial` if low signal or few sources, `fail` if search errors
+- Optional: `args="{topic}"`, `score={sources_found}`

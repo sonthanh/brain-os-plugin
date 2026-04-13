@@ -141,3 +141,15 @@ The journey doc is INPUT for the writing pipeline:
 /journal → journey doc → (copy to ai-leaders-vietnam) → context-collector or journey-extractor → writer → ai-checking → evaluator → deliver
 ```
 The user copies the journey doc to ai-leaders-vietnam and runs the content pipeline there.
+
+## Outcome log
+
+Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/journal.log`:
+
+```
+{date} | journal | {action} | ~/work/brain-os-plugin | daily/journal/{date}-journey.md | commit:{hash} | {result}
+```
+
+- `action`: `journal` (single day) or `backfill` (catch-up)
+- `result`: `pass` if journal written with all data sources, `partial` if some sources missing, `fail` if no data found
+- Optional: `args="{date-or-day}"`, `score={days_written}/{days_attempted}` (for backfill)

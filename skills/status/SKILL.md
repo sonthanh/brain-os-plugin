@@ -67,3 +67,13 @@ Works any time of day. No daily boundary assumption. Shows what needs attention 
 - No "morning" or "evening" framing — works at any hour
 - Keep it concise — if nothing needs attention, say "All clear."
 - SLA breaches always go to top of suggested focus
+
+## Outcome log
+
+Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/status.log`:
+
+```
+{date} | status | briefing | ~/work/brain-os-plugin | N/A | commit:N/A | {result}
+```
+
+- `result`: `pass` (briefing delivered), `fail` (vault unreadable or missing)
