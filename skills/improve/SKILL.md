@@ -29,15 +29,29 @@ When invoked without a skill name, scan all outcome logs, rank skills by `partia
 When invoked with a skill name:
 
 1. **Read outcome log** at `{vault}/daily/skill-outcomes/{skill}.log`
-   - Format: `date | skill | action | source_repo | output_path | commit:hash | result`
+   - Format: `date | skill | action | source_repo | output_path | commit:hash | result [| key=value ...]`
+   - 7 required pipe-delimited fields, then optional trailing `key=value` fields (also pipe-delimited)
    - result = `pass`, `partial`, or `fail`
+   - Optional trailing fields (per `skill-spec.md § 11`):
+     - `corrections=N` → weight signal: higher N = stronger failure pattern, prioritize in Phase 2
+     - `args="..."` → original input/topic — replay as eval case in Phase 3
+     - `score=N.N` → rubric score from evaluator skill — correlate with result (partial+score=9.5 differs from partial+score=6.1)
+     - `interrupt="..."` → user-stated reason for stopping — feed into Phase 2 as explicit failure reason
+   - Unknown keys are ignored (forward-compat for future fields)
+   - If trailing fields are absent, parse the 7 required fields only (backwards-compat with old log lines)
    - If no log exists, report "no outcome data yet" and stop
 
-2. **Scan grill sessions** — grep `{vault}/daily/grill-sessions/` for mentions of the skill name
+2. **Read trace files** (if available) at `{vault}/daily/skill-traces/{skill}.jsonl`
+   - JSONL format: each line is a tool call record with `ts`, `event`, `tool`, `session`, `input` fields
+   - Use traces to understand behavioral patterns: which tools the skill calls, in what order, and what inputs it uses
+   - Correlate trace sessions with outcome log entries by timestamp proximity
+   - If no trace file exists, skip — traces are supplementary, not required
 
-3. **Scan aha moments** — grep `{vault}/thinking/aha/` for mentions of the skill name
+3. **Scan grill sessions** — grep `{vault}/daily/grill-sessions/` for mentions of the skill name
 
-4. **Detect user corrections via git diff** — for each outcome log entry with a commit hash:
+4. **Scan aha moments** — grep `{vault}/thinking/aha/` for mentions of the skill name
+
+5. **Detect user corrections via git diff** — for each outcome log entry with a commit hash:
    - In the repo that contains the output file, check if the same file was modified in a later commit by the user (not by the skill)
    - If yes, `git diff <skill-commit>..<user-commit> -- <output_path>` to capture what changed
    - **Filter cosmetic diffs:** skip entries where the diff is only whitespace, typos, or formatting. Only keep substantive content changes (added/removed paragraphs, reworded arguments, structural changes).
@@ -51,6 +65,10 @@ Read all collected signals. Synthesize into patterns:
 - What does the skill consistently get wrong?
 - What do user corrections have in common?
 - What did grill sessions or aha moments flag?
+- Weight by `corrections=N` — entries with higher N represent stronger failure signals
+- Use `interrupt="..."` values as explicit failure reasons (user told you what went wrong)
+- Use `score=N.N` to distinguish severity: a `partial` with score 9.0 is cosmetic; a `partial` with score 5.0 is structural
+- Cross-reference trace files for behavioral patterns (e.g., skill always calls tool X before failing)
 
 Write each pattern as: `Pattern: <what happens> → <what user wants instead>`
 
@@ -60,7 +78,7 @@ Write each pattern as: `Pattern: <what happens> → <what user wants instead>`
 
 For each substantive user correction found in Phase 1:
 
-1. Extract the original prompt/input that triggered the skill (from git log message or outcome log)
+1. Extract the original prompt/input that triggered the skill — prefer `args="..."` from the outcome log (exact input), fall back to git log message
 2. The skill's output = the failing case
 3. The user's corrected version = the expected output
 4. Generate an assertion from the diff pattern (e.g., "must include company-specific example", "must not name frameworks by author")
