@@ -1,0 +1,5 @@
+{"ts":"2026-04-14T10:00:00Z","event":"skill_start","skill":"research","session":"sess-002","args":"API design patterns"}
+{"ts":"2026-04-14T10:00:05Z","event":"tool_call","skill":"research","session":"sess-002","tool":"Grep","input":{"pattern":"API design","glob":"**/*.md"}}
+{"ts":"2026-04-14T10:00:10Z","event":"tool_call","skill":"research","session":"sess-002","tool":"Read","input":{"file":"/Users/thanhdo/work/brain/knowledge/research/api-design.md"}}
+{"ts":"2026-04-14T10:00:20Z","event":"tool_call","skill":"research","session":"sess-002","tool":"WebSearch","input":{"query":"API design patterns 2026"}}
+{"ts":"2026-04-14T10:00:30Z","event":"tool_call","skill":"research","session":"sess-002","tool":"Write","input":{"file":"daily/research/2026-04-14-api-design.md"}}

@@ -1,0 +1,30 @@
+[
+  {
+    "name": "detect-skipped-vault-grep",
+    "description": "WebSearch/WebFetch before any vault Grep/Read should flag skipped-vault-first pattern",
+    "fixture": "trace-skipped-vault-grep.jsonl",
+    "expected_pattern": "makes external calls before grepping vault",
+    "should_detect": true
+  },
+  {
+    "name": "no-false-positive-vault-first",
+    "description": "Grep/Read vault paths before WebSearch should NOT flag skipped-vault-first",
+    "fixture": "trace-vault-first-correct.jsonl",
+    "expected_pattern": "makes external calls before grepping vault",
+    "should_detect": false
+  },
+  {
+    "name": "detect-overread-context",
+    "description": "3 consecutive Reads of same file should flag over-read heuristic",
+    "fixture": "trace-overread-context.jsonl",
+    "expected_pattern": "reads same file repeatedly",
+    "should_detect": true
+  },
+  {
+    "name": "detect-skipped-grill",
+    "description": "Write/Edit output without prior grill Skill call should flag skipped-grill",
+    "fixture": "trace-skipped-grill.jsonl",
+    "expected_pattern": "produces output without grill",
+    "should_detect": true
+  }
+]

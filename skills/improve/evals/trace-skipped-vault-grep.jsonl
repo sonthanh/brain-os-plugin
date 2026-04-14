@@ -1,0 +1,5 @@
+{"ts":"2026-04-14T10:00:00Z","event":"skill_start","skill":"research","session":"sess-001","args":"quantum computing trends"}
+{"ts":"2026-04-14T10:00:05Z","event":"tool_call","skill":"research","session":"sess-001","tool":"WebSearch","input":{"query":"quantum computing 2026 trends"}}
+{"ts":"2026-04-14T10:00:10Z","event":"tool_call","skill":"research","session":"sess-001","tool":"WebFetch","input":{"url":"https://example.com/quantum"}}
+{"ts":"2026-04-14T10:00:20Z","event":"tool_call","skill":"research","session":"sess-001","tool":"Grep","input":{"pattern":"quantum","glob":"**/*.md"}}
+{"ts":"2026-04-14T10:00:30Z","event":"tool_call","skill":"research","session":"sess-001","tool":"Write","input":{"file":"daily/research/2026-04-14-quantum.md"}}

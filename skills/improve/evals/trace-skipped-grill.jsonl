@@ -1,0 +1,5 @@
+{"ts":"2026-04-14T10:00:00Z","event":"skill_start","skill":"develop","session":"sess-004","args":"new-feature"}
+{"ts":"2026-04-14T10:00:05Z","event":"tool_call","skill":"develop","session":"sess-004","tool":"Read","input":{"file":"/Users/thanhdo/work/brain-os-plugin/skills/develop/SKILL.md"}}
+{"ts":"2026-04-14T10:00:10Z","event":"tool_call","skill":"develop","session":"sess-004","tool":"Grep","input":{"pattern":"feature","glob":"**/*.ts"}}
+{"ts":"2026-04-14T10:00:20Z","event":"tool_call","skill":"develop","session":"sess-004","tool":"Write","input":{"file":"src/new-feature.ts"}}
+{"ts":"2026-04-14T10:00:30Z","event":"tool_call","skill":"develop","session":"sess-004","tool":"Edit","input":{"file":"src/index.ts"}}
