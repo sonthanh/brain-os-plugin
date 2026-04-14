@@ -26,5 +26,41 @@
     "fixture": "trace-skipped-grill.jsonl",
     "expected_pattern": "produces output without grill",
     "should_detect": true
+  },
+  {
+    "name": "phase4-variant-count",
+    "description": "Phase 4 must require 3-5 candidate edits",
+    "expected_in_skill": ["3-5 candidate", "Minimum 3 candidates required"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "phase4-mutation-strategies",
+    "description": "Phase 4 must define named mutation strategies",
+    "expected_in_skill": ["Narrow rule", "Broad principle", "Gotcha addition", "Example-based", "Restructure"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "phase4-in-memory-eval",
+    "description": "Phase 4 must evaluate candidates in memory, not by writing to disk",
+    "expected_in_skill": ["in memory", "Do NOT write candidates to disk"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "phase4-minimal-diff-tiebreaker",
+    "description": "Phase 4 must use minimal diff as selection tiebreaker",
+    "expected_in_skill": ["Minimal diff", "prefer surgical changes"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "phase4-eval-gate-preserved",
+    "description": "Phase 4 must keep non-negotiable eval gate",
+    "expected_in_skill": ["eval gate", "non-negotiable", "git checkout"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "phase5-variant-table",
+    "description": "Phase 5 report must include per-variant evaluation results",
+    "expected_in_skill": ["Variant evaluation", "Strategy", "Eval pass", "Diff lines", "Selected"],
+    "type": "skill-content-check"
   }
 ]
