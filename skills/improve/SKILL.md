@@ -125,7 +125,7 @@ Write evals to `evals/evals.json` in the skill's source directory. Append to exi
 
 ---
 
-## Phase 4 — Improve the skill (latent + deterministic)
+## Phase 4 — Improve the skill via variant generation (latent + deterministic)
 
 1. **Locate the skill source** — read the `source_repo` field from the outcome log. The SKILL.md to edit is at `{source_repo}/skills/{skill}/SKILL.md`
 2. **Run existing evals** as "before" baseline. Record pass count.
@@ -134,28 +134,25 @@ Write evals to `evals/evals.json` in the skill's source directory. Append to exi
 
 ### Variant generation (3-5 candidates)
 
-Generate 3-5 candidate SKILL.md edits, each addressing the Phase 2 patterns via a different strategy. Every candidate must be a complete, valid SKILL.md — not a diff.
+Generate 3-5 candidate SKILL.md edits, each addressing the Phase 2 patterns via a different mutation strategy. Hold each candidate as complete SKILL.md text **in memory** — do NOT write any candidate to disk until a winner is selected.
 
-**Diversity axes** — vary at least 2 axes across candidates:
+**Mutation strategies** — pick 3-5 that best fit the patterns:
 
-| Axis | Pole A | Pole B |
-|------|--------|--------|
-| Scope | Narrow rule (one specific fix) | Broad guideline (covers pattern family) |
-| Placement | Add to Gotchas section | Add inline near relevant step |
-| Phrasing | Negative constraint ("NEVER do X") | Positive instruction ("ALWAYS do Y instead") |
-| Abstraction | Concrete example with literal values | General principle the executor infers from |
+| Strategy | What it does |
+|----------|-------------|
+| **Narrow rule** | Add a single, specific rule targeting the exact failure pattern |
+| **Broad principle** | Add a general principle covering this and adjacent failure modes |
+| **Gotcha addition** | Add to the Gotchas section as a warning/anti-pattern |
+| **Example-based** | Add a concrete before/after example showing wrong vs. right behavior |
+| **Restructure** | Move/merge existing rules to better cover the gap |
 
-**Candidate generation process:**
-1. For each candidate, pick a unique combination of diversity axes
-2. Translate the Phase 2 patterns into rules using that combination's style
-3. Write the full SKILL.md with the new rules surgically added
-4. Keep all changes minimal — only add/modify lines that address the patterns
+Each candidate must use a meaningfully different strategy — not cosmetic rephrasing of the same rule. Keep all changes surgical — only add/modify lines that address the patterns.
 
-**Minimum 3 candidates required.** Generate up to 5 when patterns are complex or when multiple distinct placement strategies exist.
+**Minimum 3 candidates required.** Generate up to 5 when patterns are complex or when multiple strategies clearly apply.
 
 ### Evaluate and select
 
-5. **Run evals against each candidate** — swap in each candidate SKILL.md, run the eval suite, record pass count and which evals pass/fail
+5. **Evaluate each candidate in memory** — load `evals/evals.json`, check each expectation string against each candidate's text (same text-search logic as `/eval`). Record pass count per candidate. Do NOT write candidates to disk for eval — the expectation check is a string match, not a runtime test.
 6. **Rank candidates** by selection criteria (in priority order):
    - **Eval pass count** — must be >= before baseline (hard gate, disqualifies if not met)
    - **Minimal diff size** — `diff <original> <candidate> | wc -l` — prefer surgical changes
