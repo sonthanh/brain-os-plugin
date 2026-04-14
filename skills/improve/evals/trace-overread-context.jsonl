@@ -1,0 +1,5 @@
+{"ts":"2026-04-14T10:00:00Z","event":"skill_start","skill":"absorb","session":"sess-003","args":"deep-work"}
+{"ts":"2026-04-14T10:00:05Z","event":"tool_call","skill":"absorb","session":"sess-003","tool":"Read","input":{"file":"/Users/thanhdo/work/brain/knowledge/books/deep-work.md"}}
+{"ts":"2026-04-14T10:00:10Z","event":"tool_call","skill":"absorb","session":"sess-003","tool":"Read","input":{"file":"/Users/thanhdo/work/brain/knowledge/books/deep-work.md"}}
+{"ts":"2026-04-14T10:00:15Z","event":"tool_call","skill":"absorb","session":"sess-003","tool":"Read","input":{"file":"/Users/thanhdo/work/brain/knowledge/books/deep-work.md"}}
+{"ts":"2026-04-14T10:00:20Z","event":"tool_call","skill":"absorb","session":"sess-003","tool":"Write","input":{"file":"knowledge/books/deep-work-insights.md"}}
