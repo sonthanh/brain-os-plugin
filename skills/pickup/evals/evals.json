@@ -1,0 +1,20 @@
+[
+  {
+    "id": "no-eligible-tasks-returns-pass",
+    "description": "When no eligible tasks found (empty Ready, only human tasks), outcome log must use pass | score=0/0, not fail",
+    "args": "pickup auto --force",
+    "expect": "score=0/0"
+  },
+  {
+    "id": "correct-source-repo",
+    "description": "Outcome log template must reference ~/work/brain-os-plugin as the source repo, not ~/work/brain",
+    "args": "pickup auto",
+    "expect": "~/work/brain-os-plugin"
+  },
+  {
+    "id": "action-field-documented",
+    "description": "Outcome log must document the action field (not mode field from stash version)",
+    "args": "pickup",
+    "expect": "`action`"
+  }
+]
