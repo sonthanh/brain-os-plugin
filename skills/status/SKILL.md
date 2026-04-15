@@ -17,8 +17,8 @@ Works any time of day. No daily boundary assumption. Shows what needs attention 
 
 2. **Check tasks** — read `{vault}/business/tasks/inbox.md` for all unchecked priority tasks and backlog items.
 
-3. **Check content ideas** (if `ai-leaders-vietnam` plugin is installed):
-   - Read `${vault}/business/projects/ai-leaders-vietnam/content-ideas.md` (or symlinked equivalent)
+3. **Check content ideas** (if `~/work/ai-leaders-vietnam/` exists):
+   - Read `~/work/ai-leaders-vietnam/content-ideas.md` (canonical location — writing focus lives in the ai-leaders-vietnam repo, not the vault)
    - Count items in "Next Up" and "Writing" columns
    - Add to briefing: `### Content\n- X ideas ready, Y in writing`
    - If Writing > 0: list titles so user knows what's in flight
@@ -70,18 +70,10 @@ Works any time of day. No daily boundary assumption. Shows what needs attention 
 
 ## Outcome log
 
-<<<<<<< Updated upstream
 Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/status.log`:
-=======
-After each `/status` run, append one line to `{vault}/daily/skill-outcomes/status.log`:
->>>>>>> Stashed changes
 
 ```
 {date} | status | briefing | ~/work/brain-os-plugin | N/A | commit:N/A | {result}
 ```
 
-<<<<<<< Updated upstream
 - `result`: `pass` (briefing delivered), `fail` (vault unreadable or missing)
-=======
-- `result`: `pass` if briefing completed, `fail` if vault read errors
->>>>>>> Stashed changes
