@@ -85,7 +85,7 @@ If a NEW external message arrived AFTER the team's reply → re-open at the same
 
 Print a diff: how many resolved, how many re-opened, how many still open/breached.
 
-This is the v1.5 local-only resolution detector. Workflow mode skips it (no Gmail API).
+Resolution detection also runs automatically in the GHA workflow (via `/tmp/sla-threads.json` from `gmail-fetch@v0`). This command is for ad-hoc checks between workflow runs.
 
 ## Setup
 
