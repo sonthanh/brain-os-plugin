@@ -26,13 +26,21 @@ Works any time of day. No daily boundary assumption. Shows what needs attention 
 4. **Check email intelligence** (if today's files exist):
    - `{vault}/business/intelligence/emails/YYYY-MM-DD-daily-summary.md` — totals, key signals
    - `{vault}/business/intelligence/emails/YYYY-MM-DD-needs-reply.md` — pending replies with priority
-   - `{vault}/business/intelligence/emails/YYYY-MM-DD-client-support-queue.md` — SLA breaches
 
-4. **Check recent activity** — `git log --oneline --since="24 hours ago"` across the vault repo to show what was done recently.
+5. **Check SLA ledger** — read `{vault}/business/intelligence/emails/sla-open.md`. This is the **single source of truth** for unanswered emails across days, owners, and tiers. The triage workflow maintains it each run.
 
-5. **Read context** — `{vault}/context/strategy.md` and `{vault}/context/goals.md` for priorities.
+   Parse the `## Breached` table and `## Open` table. From the breached items extract:
+   - Count by tier: `fast`, `normal`, `slow`
+   - Group by owner bucket (`me-personal`, `me-business`, `partners`, `support`, `business`, `legal`, `accounting`, `hr`, `license`)
+   - Top 3 most overdue (sorted by tier severity, then by overdue duration)
 
-6. **Present briefing**:
+   If `sla-open.md` is missing, treat as zero — do not error.
+
+6. **Check recent activity** — `git log --oneline --since="24 hours ago"` across the vault repo to show what was done recently.
+
+7. **Read context** — `{vault}/context/strategy.md` and `{vault}/context/goals.md` for priorities.
+
+8. **Present briefing**:
    ```
    ## Status — YYYY-MM-DD HH:MM
 
@@ -47,9 +55,17 @@ Works any time of day. No daily boundary assumption. Shows what needs attention 
    - X ideas ready, Y in writing
 
    ### Email
-   - X needs reply (Y high priority)
-   - Z SLA breaches
+   - X needs reply today (Y high priority)
    - Key: [one-line signal]
+
+   ### SLA  ← always show, even if zero
+   B breached / O open total — fast: F, normal: N, slow: S
+   By owner: me-personal F+N, me-business F+N, partners F+N, ...
+   Top breaches:
+   - 🔴 fast — sender → owner — "Subject" — Nh overdue
+   - 🟠 normal — sender → owner — "Subject" — N business days overdue
+   - 🟡 slow — sender → owner — "Subject" — N business days overdue
+   → Full ledger: [[business/intelligence/emails/sla-open]]
 
    ### Recent Activity (24h)
    - [commit summaries]
@@ -60,13 +76,16 @@ Works any time of day. No daily boundary assumption. Shows what needs attention 
    3. [third priority]
    ```
 
-7. **If pending handover exists**, ask: "Want to pick up [topic]?"
+   When `B == 0 && O == 0`, render `### SLA` as a single line: `All clear — no open items.` Don't omit the section.
+
+9. **If pending handover exists**, ask: "Want to pick up [topic]?"
 
 ## Rules
 - No daily note creation — this is a briefing, not a ritual
 - No "morning" or "evening" framing — works at any hour
 - Keep it concise — if nothing needs attention, say "All clear."
-- SLA breaches always go to top of suggested focus
+- **SLA breaches always go to top of suggested focus.** `fast` breaches outrank everything else (security/financial). `normal` and `slow` breaches outrank routine tasks but yield to user-typed urgent work.
+- Never invent SLA state — if `sla-open.md` doesn't exist, the SLA section reports `All clear (no ledger)` and the system skips SLA-driven priority bumping.
 
 ## Outcome log
 
