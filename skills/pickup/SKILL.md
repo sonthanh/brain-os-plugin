@@ -87,6 +87,7 @@ When the user grills on the remaining questions:
    - **Work hours (09:00–22:00)**: only pick `⚡` (quick) tasks. Skip `🏋️` (heavy).
    - **Off-hours (22:00–09:00) or weekends**: pick any task including `🏋️`.
    - **`--force` flag**: skip time-aware filtering entirely — pick any Ready task regardless of weight or hour. Used by the pickup-auto cron.
+   - **Zero eligible tasks found** → log `pass | score=0/0` and exit. Do NOT continue to steps 2–5.
 2. **Pick eligible tasks** and move to In Progress
 3. **Build dependency DAG** before launching anything:
    - **Step 1 — Scan descriptions:** For each eligible task, parse for `depends on X` / `Depends on P1 Y` free-text patterns

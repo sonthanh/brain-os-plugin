@@ -16,5 +16,11 @@
     "description": "Outcome log must document the action field (not mode field from stash version)",
     "args": "pickup",
     "expect": "`action`"
+  },
+  {
+    "id": "auto-flow-explicit-empty-exit",
+    "description": "The /pickup auto step 1 must explicitly instruct the skill to exit with pass when zero eligible tasks are found",
+    "args": "pickup auto --force (Ready column has only human tasks)",
+    "expect": "log `pass | score=0/0` and exit"
   }
 ]
