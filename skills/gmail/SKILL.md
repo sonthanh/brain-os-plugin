@@ -51,11 +51,41 @@ Fully autonomous mode — reads needs-reply queue, generates drafts, creates the
 3. All drafts must use **Reply All** (include CC) and set **From** to the receiving address
 4. Report results when done
 
-### `/gmail status` — Show pending actions
+### `/gmail status` — Show pending actions + SLA state
 
 1. List all triage reports in `{vault}/daily/gmail-triage/`
 2. Count unchecked actions across reports
 3. Show summary: "3 reports pending, 14 unprocessed actions (5 archive, 3 delete, 2 need reply...)"
+4. Read `{vault}/business/intelligence/emails/sla-open.md`. Print:
+   - Total open / breached
+   - Per-tier breached count (`fast`, `normal`, `slow`)
+   - Top 5 most overdue items grouped by owner
+
+### `/gmail sla` — SLA ledger maintenance
+
+The SLA ledger lives at `{vault}/business/intelligence/emails/sla-open.md`. The triage workflow appends new items each run; resolution/cleanup is interactive via this command.
+
+`/gmail sla list` — render the open ledger to terminal, sorted by tier severity then age.
+
+`/gmail sla resolve <message_id>` — manually mark a ledger row resolved.
+1. Find the row in `## Breached` or `## Open`
+2. Move it to `## Resolved (last 7 days, audit trail)` with `Resolved (UTC)` = now and `Resolved by` = `manual`
+3. Save the file
+4. Report which item was resolved
+
+`/gmail sla check` — for each open item, use Gmail API (`gmail_read_message` on the message ID, walk the thread) to detect resolution per the 4-guard rule in `business/intelligence/gmail-rules.md` § SLA monitoring → Resolution detection:
+1. A reply exists in the thread sent AFTER the original incoming message
+2. Reply sender is a `me` address OR `@emvn.co` / `@melosy.net` / `@musicmaster.io` / `@cremi.ai` team member
+3. Reply addressed TO the original external party
+4. Reply does NOT carry `Auto-Submitted` header
+
+If all 4 met → move to `Resolved` with `Resolved by` = sender of the qualifying reply.
+
+If a NEW external message arrived AFTER the team's reply → re-open at the same tier with `received_at` = the new external message's date.
+
+Print a diff: how many resolved, how many re-opened, how many still open/breached.
+
+This is the v1.5 local-only resolution detector. Workflow mode skips it (no Gmail API).
 
 ## Setup
 
