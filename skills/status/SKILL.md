@@ -47,6 +47,8 @@ Works any time of day. No daily boundary assumption. Shows what needs attention 
 
 7. **Read context** — `{vault}/context/strategy.md` and `{vault}/context/goals.md` for priorities.
 
+   Also check today's daily AI-engineer research signal: if `{vault}/knowledge/research/reports/YYYY-MM-DD-ai-engineer-daily.md` exists (or most recent within 2 days), extract the `## Brain-os applicability` section's bullets. If the file or section is missing, skip silently — do not invent suggestions.
+
 8. **Dedup guard (before render)** — walk the assembled Pending Handovers list. For each entry, check if its handover file path (or bare filename) appears as a wiki-link inside any Ready / In Progress / Blocked task description. If yes → drop it from Pending Handovers (the task already covers it). Belt-and-suspenders on top of step 1's `[Handover]`-prefix rule.
 
 9. **Present briefing**:
@@ -84,6 +86,12 @@ Works any time of day. No daily boundary assumption. Shows what needs attention 
    ### Recent Activity (24h)
    - [commit summaries]
 
+   ### Research Signal (YYYY-MM-DD)  ← only if today's or ≤2-day-old ai-engineer-daily report has a Brain-os applicability section
+   - [bullet 1 verbatim from report]
+   - [bullet 2]
+   - [bullet 3]
+   → Full report: [[knowledge/research/reports/YYYY-MM-DD-ai-engineer-daily]]
+
    ### Email Focus
    1. [top email item needing user action]
    2. [second]
@@ -105,6 +113,7 @@ Works any time of day. No daily boundary assumption. Shows what needs attention 
   - If no me-personal/me-business items breached or open-urgent: `Email Focus: All clear.`
 - Never invent SLA state — if `sla-open.md` doesn't exist, the SLA section reports `All clear (no ledger)` and the system skips SLA-driven priority bumping.
 - **Multi-session concurrency:** inbox.md is edited by multiple sessions. Always re-read at render time; do not cache earlier reads in a long session.
+- **Research Signal is advisory, not a task queue:** display verbatim bullets from the most recent `*-ai-engineer-daily.md` within 2 days, nothing older. Omit the section if the file or its `## Brain-os applicability` block is missing. Never generate or paraphrase suggestions — if the report didn't ship, the section doesn't render.
 
 ## Outcome log
 
