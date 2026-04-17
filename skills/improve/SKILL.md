@@ -13,6 +13,54 @@ description: |
 /improve                     # Scan all outcome logs, rank by error rate, suggest which to improve
 ```
 
+## Clarifications
+
+Answers to the five most common questions about `/improve` behavior — answer inline so nobody has to ask twice.
+
+### Cadence — when does /improve run?
+
+Three modes:
+- **Auto-per-run** — skills auto-invoke `/improve {skill}` immediately after appending an outcome log line with `result != pass`. No user confirmation. See `skill-spec.md § 11 Auto-improve rule`.
+- **Scheduled batch** — daily cron (currently `trig_0183t3F6yec8NsdF6faNVn2m` at 6:07am) scans all outcome logs, ranks by error rate, picks top candidate, and runs full Phase 1–5 on it.
+- **Manual** — user invokes `/improve <skill>` ad hoc to force a learning pass.
+
+### Signals — what counts as evidence?
+
+Five sources, processed in Phase 1 in this order:
+1. **Outcome logs** (primary) — `{vault}/daily/skill-outcomes/{skill}.log`. `corrections=N` and `interrupt="..."` are strongest direct signals.
+2. **Trace JSONL files** — `{vault}/daily/skill-traces/{skill}.jsonl`. Behavioral patterns (tool-call sequences). Supplementary weight.
+3. **Grill sessions** — `{vault}/daily/grill-sessions/`. Clarifying questions about the skill = underspec signal (see Phase 1 step 3).
+4. **Aha moments** — `{vault}/thinking/aha/`. User-recorded insights mentioning the skill.
+5. **User corrections via git diff** — detected against the skill's anchor commit. Substantive content changes only (whitespace/typos filtered).
+
+Weight order: direct corrections > interrupts > partial+low score > trace patterns. Trace patterns must co-occur with an outcome-log signal to justify a SKILL.md edit.
+
+### Auto-apply vs review — does a human gate the change?
+
+**Full auto. No human-in-loop by default.**
+
+Safety relies on the Phase 4 eval gate, not human review:
+- Phase 4 step 8–9: if no variant meets or exceeds the before-baseline eval pass count → `git checkout -- skills/{skill}/SKILL.md` and revert everything.
+- Commit messages are descriptive so the user can revert after the fact if they disagree with a kept variant.
+- Manual review mode is NOT supported. Do not add one — the eval gate is the safety net. Adding optional review flags reintroduces ambiguity about when they apply.
+
+### Scope — single skill or all?
+
+- `/improve <skill>` → full Phase 1–5 on that skill only.
+- `/improve` (no arg) → Phase 1 rank-only: scans all logs, recommends top candidate, **stops and reports**. Does NOT auto-run Phase 2–5.
+- Daily cron batch orchestrates: it runs `/improve` no-arg first to pick the top skill, then separately invokes `/improve <top>` with the chosen argument. Each log entry therefore records a specific skill in the `args="..."` field.
+
+### Optional log fields — how to add one without breaking the parser?
+
+Outcome log format: **7 required pipe-delimited fields** + optional trailing `key=value` pairs (also pipe-delimited). Parser in Phase 1 step 1 ignores unknown keys (forward-compat).
+
+Procedure to add a new optional field:
+1. Add to the canonical optional-fields table in `skill-spec.md § 11` — single source of truth.
+2. Update Phase 2 logic to consume the field when it informs pattern extraction.
+3. Existing logs without the new field continue to parse — no backfill needed.
+
+**Never** change the 7 required fields or their order. That WILL break every prior log line.
+
 ## Vault paths
 
 - Outcome logs: `{vault}/daily/skill-outcomes/`
@@ -47,7 +95,11 @@ When invoked with a skill name:
    - Correlate trace sessions with outcome log entries by timestamp proximity
    - If no trace file exists, skip — traces are supplementary, not required
 
-3. **Scan grill sessions** — grep `{vault}/daily/grill-sessions/` for mentions of the skill name
+3. **Scan grill sessions** — grep `{vault}/daily/grill-sessions/` for mentions of the skill name.
+   - **Clarifying-question detection** — for each match, check whether a `?` appears within 2 lines of the skill-name mention. Each detected question is an **underspec signal**: the user had to ask something SKILL.md should have answered inline.
+   - Emit one pattern per detected question: `Pattern: user asked "<question text>" in grill <file> — answer belongs inline in SKILL.md`.
+   - Weight: an underspec signal counts as a `corrections=1` equivalent for Phase 2 ranking.
+   - Meta-case (`/improve` improving itself): questions about `/improve`'s own triggers, signals, auto/manual semantics, scope, or log fields all mean the Clarifications section is missing an answer — extend it, don't re-route to a reference file.
 
 4. **Scan aha moments** — grep `{vault}/thinking/aha/` for mentions of the skill name
 
@@ -214,6 +266,7 @@ Commit and push the report to the vault.
 - When editing SKILL.md, keep changes surgical. Don't rewrite sections that aren't related to the patterns found.
 - The eval gate is non-negotiable. If evals drop, revert. No exceptions.
 - A skill with zero outcome log entries has nothing to improve — say so and stop. Don't hallucinate patterns.
+- **Meta self-grilling signal** — if a grill session contains a clarifying question about `/improve`'s own mechanism (cadence, signals, auto-apply, scope, log fields), that's a direct signal the Clarifications section is underspecified. Patch the answer inline in SKILL.md, don't file it to a reference. Every user question answered inline = one future user doesn't need to ask.
 
 ---
 

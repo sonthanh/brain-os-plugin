@@ -62,5 +62,47 @@
     "description": "Phase 5 report must include per-variant evaluation results",
     "expected_in_skill": ["Variant evaluation", "Strategy", "Eval pass", "Diff lines", "Selected"],
     "type": "skill-content-check"
+  },
+  {
+    "name": "clarifications-cadence",
+    "description": "Clarifications must answer the cadence question (auto-per-run, cron, manual)",
+    "expected_in_skill": ["Auto-per-run", "Scheduled batch", "Manual"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "clarifications-signals",
+    "description": "Clarifications must enumerate the five signal sources",
+    "expected_in_skill": ["Outcome logs", "Trace JSONL", "Grill sessions", "Aha moments", "User corrections"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "clarifications-auto-apply",
+    "description": "Clarifications must state full auto with eval gate as safety net, no human-in-loop",
+    "expected_in_skill": ["Full auto", "eval gate", "Manual review mode is NOT supported"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "clarifications-scope",
+    "description": "Clarifications must distinguish no-arg rank-only vs named-skill full run",
+    "expected_in_skill": ["full Phase 1\u20135", "stops and reports", "Does NOT auto-run"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "clarifications-optional-fields",
+    "description": "Clarifications must explain how to add optional fields safely",
+    "expected_in_skill": ["7 required pipe-delimited fields", "ignores unknown keys", "Never", "7 required fields"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "phase1-grill-question-detection",
+    "description": "Phase 1 step 3 must detect clarifying questions as underspec signals",
+    "expected_in_skill": ["Clarifying-question detection", "underspec signal", "within 2 lines"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "gotcha-meta-self-grilling",
+    "description": "Gotchas must call out the meta self-grilling signal",
+    "expected_in_skill": ["Meta self-grilling signal", "Clarifications section"],
+    "type": "skill-content-check"
   }
 ]
