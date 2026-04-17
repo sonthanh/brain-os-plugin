@@ -83,7 +83,8 @@ When the user grills on the remaining questions:
 
 ## `/pickup auto` — Launch tasks in background
 
-1. **Find eligible tasks in Ready column** — apply time-aware filtering:
+1. **Find eligible tasks in Ready column** — apply filters in order:
+   - **Owner tag filter (always applied):** skip all `👤` (human-required) tasks — they need a human grill before execution. Only `🤖` (bot-eligible) tasks proceed to time-aware filtering below. This applies even with `--force`.
    - **Work hours (09:00–22:00)**: only pick `⚡` (quick) tasks. Skip `🏋️` (heavy).
    - **Off-hours (22:00–09:00) or weekends**: pick any task including `🏋️`.
    - **`--force` flag**: skip time-aware filtering entirely — pick any Ready task regardless of weight or hour. Used by the pickup-auto cron.

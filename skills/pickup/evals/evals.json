@@ -22,5 +22,11 @@
     "description": "The /pickup auto step 1 must explicitly instruct the skill to exit with pass when zero eligible tasks are found",
     "args": "pickup auto --force (Ready column has only human tasks)",
     "expect": "log `pass | score=0/0` and exit"
+  },
+  {
+    "id": "bot-eligibility-documented",
+    "description": "Auto mode step 1 must explicitly document that only 🤖 (bot-eligible) tasks qualify and 👤 (human-required) tasks are always skipped",
+    "args": "pickup auto (Ready has only 👤 tasks)",
+    "expect": "🤖"
   }
 ]
