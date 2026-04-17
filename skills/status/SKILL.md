@@ -15,7 +15,7 @@ Works any time of day. No daily boundary assumption. Shows what needs attention 
 
 1. **Check pending handovers** — read `{vault}/business/tasks/inbox.md` for unchecked `[Handover]` tasks. If found, list them with links.
 
-2. **Check tasks** — read `{vault}/business/tasks/inbox.md` for all unchecked priority tasks and backlog items.
+2. **Check tasks** — read `{vault}/business/tasks/inbox.md` fresh at render time (multiple sessions may edit concurrently). List unchecked items under each column: `Ready`, `In Progress`, `Blocked`. Show counts + titles. Do not list `Done`. Backlog is summarized (count only) unless user asks for detail.
 
 3. **Check content ideas** (if `~/work/ai-leaders-vietnam/` exists):
    - Read `~/work/ai-leaders-vietnam/content-ideas.md` (canonical location — writing focus lives in the ai-leaders-vietnam repo, not the vault)
@@ -48,8 +48,13 @@ Works any time of day. No daily boundary assumption. Shows what needs attention 
    - [topic] → [[daily/handovers/...]] — [status]
 
    ### Tasks
-   - [ ] Task 1
-   - [ ] Task 2
+   **Ready (N)**
+   - [ ] [P1] ...
+   **In Progress (N)**
+   - [ ] [P1] ...
+   **Blocked (N)**
+   - [ ] [P1] ...
+   **Backlog: N items** (expand on request)
 
    ### Content
    - X ideas ready, Y in writing
@@ -74,11 +79,6 @@ Works any time of day. No daily boundary assumption. Shows what needs attention 
    1. [top email item needing user action]
    2. [second]
    3. [third]
-
-   ### Task Focus
-   1. [top task from inbox with reasoning]
-   2. [second]
-   3. [third]
    ```
 
    When `B == 0 && O == 0`, render `### SLA` as a single line: `All clear — no open items.` Don't omit the section.
@@ -89,13 +89,13 @@ Works any time of day. No daily boundary assumption. Shows what needs attention 
 - No daily note creation — this is a briefing, not a ritual
 - No "morning" or "evening" framing — works at any hour
 - Keep it concise — if nothing needs attention, say "All clear."
-- **Email Focus and Task Focus are independent sections — never merge.** User scans each separately; mixing lets email noise displace task priorities.
+- **Tasks section is the primary task view. Do NOT add a "Task Focus" synthesis.** The inbox is already prioritized by P1/P2 and sorted by column; re-ranking is redundant noise. User picks from the Ready list directly.
+- **Email Focus stays** — email has many SLA items and needs triage/owner filtering. This is different from tasks.
 - **Email Focus = only owner buckets that need user action:** `me-personal` + `me-business`. Team-owned breaches (`support`, `partners`, `business`, `legal`, `accounting`, `hr`, `license`) stay visible in the SLA table but do NOT bubble into Email Focus — team handles routine ops.
   - Within Email Focus, `fast` breaches outrank `normal` outrank `slow`. Cap at 3 items.
   - If no me-personal/me-business items breached or open-urgent: `Email Focus: All clear.`
-- **Task Focus = ranked tasks from inbox.md only.** Prefer `Ready` P1/P2 tasks over Backlog. Never include email items.
-  - If no Ready tasks: suggest top 1-2 Backlog items worth promoting.
 - Never invent SLA state — if `sla-open.md` doesn't exist, the SLA section reports `All clear (no ledger)` and the system skips SLA-driven priority bumping.
+- **Multi-session concurrency:** inbox.md is edited by multiple sessions. Always re-read at render time; do not cache earlier reads in a long session.
 
 ## Outcome log
 
