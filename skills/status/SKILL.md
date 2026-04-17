@@ -70,10 +70,15 @@ Works any time of day. No daily boundary assumption. Shows what needs attention 
    ### Recent Activity (24h)
    - [commit summaries]
 
-   ### Suggested Focus
-   1. [top priority with reasoning]
-   2. [second priority]
-   3. [third priority]
+   ### Email Focus
+   1. [top email item needing user action]
+   2. [second]
+   3. [third]
+
+   ### Task Focus
+   1. [top task from inbox with reasoning]
+   2. [second]
+   3. [third]
    ```
 
    When `B == 0 && O == 0`, render `### SLA` as a single line: `All clear — no open items.` Don't omit the section.
@@ -84,7 +89,12 @@ Works any time of day. No daily boundary assumption. Shows what needs attention 
 - No daily note creation — this is a briefing, not a ritual
 - No "morning" or "evening" framing — works at any hour
 - Keep it concise — if nothing needs attention, say "All clear."
-- **SLA breaches always go to top of suggested focus.** `fast` breaches outrank everything else (security/financial). `normal` and `slow` breaches outrank routine tasks but yield to user-typed urgent work.
+- **Email Focus and Task Focus are independent sections — never merge.** User scans each separately; mixing lets email noise displace task priorities.
+- **Email Focus = only owner buckets that need user action:** `me-personal` + `me-business`. Team-owned breaches (`support`, `partners`, `business`, `legal`, `accounting`, `hr`, `license`) stay visible in the SLA table but do NOT bubble into Email Focus — team handles routine ops.
+  - Within Email Focus, `fast` breaches outrank `normal` outrank `slow`. Cap at 3 items.
+  - If no me-personal/me-business items breached or open-urgent: `Email Focus: All clear.`
+- **Task Focus = ranked tasks from inbox.md only.** Prefer `Ready` P1/P2 tasks over Backlog. Never include email items.
+  - If no Ready tasks: suggest top 1-2 Backlog items worth promoting.
 - Never invent SLA state — if `sla-open.md` doesn't exist, the SLA section reports `All clear (no ledger)` and the system skips SLA-driven priority bumping.
 
 ## Outcome log
