@@ -220,22 +220,12 @@ tags: [{tags}]
 
 ## Outcome log
 
-<<<<<<< Updated upstream
-Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/research.log`:
-
-```
-{date} | research | research | ~/work/brain-os-plugin | knowledge/research/reports/{date}-research-{slug}.md | commit:{hash} | {result}
-```
-
-- `result`: `pass` if report written with citations, `partial` if low signal or few sources, `fail` if search errors
-- Optional: `args="{topic}"`, `score={sources_found}`
-=======
-After each `/research` run, append one line to `{vault}/daily/skill-outcomes/research.log`:
+Follow `skill-spec.md § 11`. Append one line to `{vault}/daily/skill-outcomes/research.log`:
 
 ```
 {date} | research | {action} | ~/work/brain-os-plugin | {vault}/knowledge/research/reports/{date}-research-{slug}.md | commit:{hash} | {result}
 ```
 
-- `mode`: `quick`, `deep`, or `add-voice`
-- `result`: `pass` if report generated with sources, `partial` if some platforms failed, `fail` if errors
->>>>>>> Stashed changes
+- `action`: `quick`, `deep`, or `add-voice`
+- `result`: `pass` if report written with citations, `partial` if low signal, few sources, or some platforms failed, `fail` if search errors
+- Optional: `args="{topic}"`, `score={sources_found}`
