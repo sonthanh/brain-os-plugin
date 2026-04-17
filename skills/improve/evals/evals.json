@@ -104,5 +104,35 @@
     "description": "Gotchas must call out the meta self-grilling signal",
     "expected_in_skill": ["Meta self-grilling signal", "Clarifications section"],
     "type": "skill-content-check"
+  },
+  {
+    "name": "phase4-size-gate-20kb",
+    "description": "Phase 4 must enforce a 20KB (20480 byte) size cap on candidate variants",
+    "expected_in_skill": ["Size limit (20KB)", "20480", "Disqualify"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "phase4-semantic-preservation-judge",
+    "description": "Phase 4 must spawn an LLM judge that checks candidate against pre-edit frontmatter description",
+    "expected_in_skill": ["Semantic preservation", "LLM judge", "original trigger conditions", "pre-edit frontmatter", "PASS", "FAIL"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "phase4-gate-rejection-revert",
+    "description": "Phase 4 must revert via git checkout when any gate rejects all variants",
+    "expected_in_skill": ["Revert if all fail", "size gate", "semantic judge", "git checkout", "regardless of which gate tripped"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "phase4-judge-failure-mode",
+    "description": "Phase 4 must treat malformed judge output as FAIL (conservative default)",
+    "expected_in_skill": ["Output handling", "treat as FAIL", "Conservative default"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "phase5-variant-table-gates",
+    "description": "Phase 5 report table must expose size + semantic gate results per variant",
+    "expected_in_skill": ["Size (bytes)", "Size OK?", "Semantic"],
+    "type": "skill-content-check"
   }
 ]

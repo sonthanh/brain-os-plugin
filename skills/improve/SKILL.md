@@ -205,18 +205,40 @@ Each candidate must use a meaningfully different strategy — not cosmetic rephr
 ### Evaluate and select
 
 5. **Evaluate each candidate in memory** — load `evals/evals.json`, check each expectation string against each candidate's text (same text-search logic as `/eval`). Record pass count per candidate. Do NOT write candidates to disk for eval — the expectation check is a string match, not a runtime test.
-6. **Rank candidates** by selection criteria (in priority order):
+6. **Gate 1 — Size limit (20KB)** — For each candidate, compute `byte-size(candidate)`. Disqualify any variant exceeding **20480 bytes**. Rationale: Anthropic SKILL.md best-practice caps skills at a scannable length; variants inflating past 20KB signal rule sprawl that a human should refactor, not auto-apply. Deterministic check — runs after in-memory eval, before ranking.
+7. **Rank surviving candidates** by selection criteria (in priority order):
    - **Eval pass count** — must be >= before baseline (hard gate, disqualifies if not met)
    - **Minimal diff size** — `diff <original> <candidate> | wc -l` — prefer surgical changes
    - **Pattern coverage** — count how many Phase 2 patterns each candidate addresses
-7. **Tiebreaker:** if multiple candidates tie on all three criteria, prefer the candidate with the smallest absolute file size (less bloat)
+8. **Tiebreaker:** if multiple candidates tie on all three criteria, prefer the candidate with the smallest absolute file size (less bloat)
+
+### Constraint gates
+
+9. **Gate 2 — Semantic preservation (LLM judge)** — Walk the ranked list top-down. For each candidate, spawn an Agent sub-agent (`subagent_type: general-purpose`, model: sonnet) with this prompt:
+
+   > You are judging whether a proposed edit to a skill's SKILL.md still matches the skill's **original trigger conditions**. The pre-edit frontmatter `description` field is the canonical trigger spec — Claude Code uses it to route invocations. Answer whether the candidate still matches those triggers, or whether it drifts into different skill territory.
+   >
+   > Reply strictly `PASS` or `FAIL` on the first line, then a one-sentence rationale on the second line. No other output.
+   >
+   > Pre-edit frontmatter description (ANCHOR — do not treat the candidate's own frontmatter as the spec):
+   > ```
+   > {pre_edit_description}
+   > ```
+   >
+   > Candidate SKILL.md (full text, including any mutated frontmatter):
+   > ```
+   > {candidate_full_text}
+   > ```
+
+   **Output handling:** first line must be exactly `PASS` or `FAIL`. Anything else (malformed, non-`PASS` text, empty) → treat as FAIL. Conservative default protects skill routing.
+
+   First candidate returning `PASS` → select as winner. On `FAIL`, drop the candidate and re-judge the next-ranked one.
 
 ### Eval gate
 
-8. **Select the winning candidate** — highest-ranked variant that passes the eval gate
-9. **If NO candidate passes** (all have eval count < before) → `git checkout -- skills/{skill}/SKILL.md`, report what was tried and why all variants failed
-10. **If winner found** → apply that candidate's SKILL.md, commit with message `improve: {skill} — {one-line summary}`
-11. **Record in report** — which variants were generated, their eval scores, diff sizes, and which was selected (or that all were rejected)
+10. **Apply winner** — write winning candidate's SKILL.md to disk, commit with message `improve: {skill} — {one-line summary}`.
+11. **Revert if all fail** — If all candidates fail eval baseline, OR all are disqualified by the size gate, OR all remaining fail the semantic judge → `git checkout -- skills/{skill}/SKILL.md`, report which gate rejected which variant. Same revert protocol regardless of which gate tripped.
+12. **Record in report** — which variants were generated, their eval scores, diff sizes, size-gate result, semantic-judge verdict + rationale, and which was selected (or that all were rejected).
 
 ---
 
@@ -240,10 +262,10 @@ Write report to `{vault}/daily/improve-reports/{date}-{skill}.md`:
 - {what was added/modified in SKILL.md}
 
 ## Variant evaluation
-| Variant | Strategy | Eval pass | Diff lines | Patterns covered | Selected |
-|---------|----------|-----------|------------|------------------|----------|
-| V1 | {axes used} | {X}/{Y} | {N} | {N}/{total} | {yes/no} |
-| V2 | ... | ... | ... | ... | ... |
+| Variant | Strategy | Eval pass | Diff lines | Patterns covered | Size (bytes) | Size OK? | Semantic | Selected |
+|---------|----------|-----------|------------|------------------|--------------|----------|----------|----------|
+| V1 | {axes used} | {X}/{Y} | {N} | {N}/{total} | {bytes} | {yes/no} | {PASS/FAIL + rationale or skipped} | {yes/no} |
+| V2 | ... | ... | ... | ... | ... | ... | ... | ... |
 
 ## Eval results
 - Before: {X}/{Y} pass ({percent}%)
