@@ -75,7 +75,7 @@ The SLA ledger lives at `{vault}/business/intelligence/emails/sla-open.md`. The 
 
 `/gmail sla check` — for each open item, use Gmail API (`gmail_read_message` on the message ID, walk the thread) to detect resolution per the 4-guard rule in `business/intelligence/gmail-rules.md` § SLA monitoring → Resolution detection:
 1. A reply exists in the thread sent AFTER the original incoming message
-2. Reply sender is a `me` address OR `@team1.example` / `@team2.example` / `@team3.example` / `@team6.example` team member
+2. Reply sender is a `me` address OR a team-member domain listed in `{vault}/business/intelligence/gmail-rules.md` → `### Team domains (internal)`
 3. Reply addressed TO the original external party
 4. Reply does NOT carry `Auto-Submitted` header
 
