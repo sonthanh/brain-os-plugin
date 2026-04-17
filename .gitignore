@@ -12,3 +12,6 @@ package-lock.json
 
 # OS
 .DS_Store
+
+# Transient Claude Code worktrees (from /pickup auto)
+.claude/worktrees/
