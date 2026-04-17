@@ -13,7 +13,14 @@ Works any time of day. No daily boundary assumption. Shows what needs attention 
 
 ## Behavior
 
-1. **Check pending handovers** — read `{vault}/business/tasks/inbox.md` for unchecked `[Handover]` tasks. If found, list them with links.
+1. **Check pending handovers** — read `{vault}/business/tasks/inbox.md` for unchecked tasks whose first non-marker token is literally `[Handover]` (e.g. `- [ ] [Handover] ...` or `- [ ] 📋 [Handover] ...`). If found, list them with links.
+
+   **DO NOT infer pending handovers from any of:**
+   - Files existing in `{vault}/daily/handovers/` directory
+   - SessionStart hook's "Recent Handovers" index (that's context, not a task list)
+   - Wiki-link references like `[[daily/handovers/...]]` inside task descriptions that are NOT `[Handover]`-prefixed
+
+   An In Progress task that mentions a handover file in its description is ONE item (the task), not two. The handover file is the spec for that task — it is not itself a pending handover.
 
 2. **Check tasks** — read `{vault}/business/tasks/inbox.md` fresh at render time (multiple sessions may edit concurrently). List unchecked items under each column: `Ready`, `In Progress`, `Blocked`. Show counts + titles. Do not list `Done`. Backlog is summarized (count only) unless user asks for detail.
 
@@ -40,7 +47,9 @@ Works any time of day. No daily boundary assumption. Shows what needs attention 
 
 7. **Read context** — `{vault}/context/strategy.md` and `{vault}/context/goals.md` for priorities.
 
-8. **Present briefing**:
+8. **Dedup guard (before render)** — walk the assembled Pending Handovers list. For each entry, check if its handover file path (or bare filename) appears as a wiki-link inside any Ready / In Progress / Blocked task description. If yes → drop it from Pending Handovers (the task already covers it). Belt-and-suspenders on top of step 1's `[Handover]`-prefix rule.
+
+9. **Present briefing**:
    ```
    ## Status — YYYY-MM-DD HH:MM
 
@@ -83,7 +92,7 @@ Works any time of day. No daily boundary assumption. Shows what needs attention 
 
    When `B == 0 && O == 0`, render `### SLA` as a single line: `All clear — no open items.` Don't omit the section.
 
-9. **If pending handover exists**, ask: "Want to pick up [topic]?"
+10. **If pending handover exists** (after dedup guard), ask: "Want to pick up [topic]?"
 
 ## Rules
 - No daily note creation — this is a briefing, not a ritual
