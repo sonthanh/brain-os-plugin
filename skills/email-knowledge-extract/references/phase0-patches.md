@@ -10,6 +10,8 @@ source_eval: "daily/eval-reports/2026-04-14-email-pipeline"
 
 Three extraction gaps surfaced in the Phase 0 100-email eval (Sonnet-only, 82/100). Each patch has a **WHY** (what Sonnet missed), a **WHERE** (prompt vs post-processor), and a **HOW TO VALIDATE** (synthetic test case for dry-run).
 
+> Examples below reference the skill author's internal teams (EMVN, Melosy, etc.). Adapt the names for your own setup — the user-specific list lives in `{vault}/context/email-extract.md` under `## Internal Domains` and is spliced into `prompts/extract.md` at runtime.
+
 ## Patch 1 — Payment notification extraction
 
 **Why.** Sonnet's default skip threshold drops payment receipts that carry real business signal. Phase 0 misses included Amadea EUR 14,138 and Brand X USD 899 — both verifiable money flows, both dropped.
@@ -84,7 +86,7 @@ Expected output (people[] must include BOTH Hoang Minh AND Le Thi Hoa):
 }
 ```
 
-## Patch 3 — No EMVN self-reference as external company
+## Patch 3 — No internal-team self-reference as external company
 
 **Why.** Sonnet occasionally adds EMVN / Melosy / Tunebot / Cremi / MusicMaster / SongGen to `companies[]` as if they were external counterparties. They're our internal teams — listing them as counterparties inflates noise and misleads later synthesis.
 
@@ -92,20 +94,22 @@ Expected output (people[] must include BOTH Hoang Minh AND Le Thi Hoa):
 
 **Prompt text** (section in `prompts/extract.md`):
 
-> **Internal team handling.** The following are OUR internal teams, not external entities: `emvn.co`, `melosy.net`, `melosymusic.com`, `musicmaster.io`, `tunebot.io`, `songgen.ai`, `cremi.ai`, `cremi.com`, `dzus.vn`.
+> **Internal team handling.** The following are OUR internal teams, not external entities: `{{INTERNAL_DOMAINS_LIST}}` (spliced in from `{vault}/context/email-extract.md` at prompt-load time).
 >
 > - Do NOT add them to `companies[]` as counterparty context.
 > - DO include them in `decisions[].actors` when they are the subject of a decision (e.g., "EMVN to pay supplier X", "MusicMaster adopted pricing tier Y"). In that case, the corresponding `companies[]` entry is still omitted.
 > - People on these domains → `people[]` entries may still be included (they're internal actors we track).
 
-**Where (TS side).** `scripts/lib/sanity-check.ts`:
+**Where (TS side).** `scripts/lib/sanity-check.ts::patch3Warnings()` loads `{vault}/context/email-extract.md` → `## Internal Domains` via `user-config.ts` and flags drift:
 
 ```
+domains = loadUserConfig().internal_domains
 for each company in result.companies[]:
-  if company.domain ∈ INTERNAL_DOMAINS:
-    if no decision in result.decisions[] has this company.name in actors[] as subject:
-      emit WARN { msg_id, warning: 'internal_team_as_company', company: name, domain }
-      # Do NOT strip. Patch-3 drift signal feeds /improve cycle.
+  domainMatch = company.domain ∈ domains (exact or subdomain)
+  nameMatch   = tokenised(company.name) intersects stems(domains)  # fallback when domain is empty
+  if (domainMatch || nameMatch) AND no decision has company.name in actors[]:
+    emit WARN { msg_id, warning: 'internal_team_as_company', company, domain }
+    # Do NOT strip. Patch-3 drift signal feeds /improve cycle.
 ```
 
 WARN payload is written to `business/intelligence/email-extraction/<run_id>/warnings.jsonl` (gitignored; safety-net path).

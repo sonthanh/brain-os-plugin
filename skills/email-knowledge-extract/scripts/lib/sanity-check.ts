@@ -1,15 +1,8 @@
-export const INTERNAL_DOMAINS = [
-  "emvn.co",
-  "melosy.net",
-  "melosy.com",
-  "melosymusic.com",
-  "musicmaster.io",
-  "tunebot.io",
-  "songgen.ai",
-  "cremi.ai",
-  "cremi.com",
-  "dzus.vn",
-];
+import { loadUserConfig } from "./user-config.js";
+
+export function getInternalDomains(): string[] {
+  return loadUserConfig().internal_domains;
+}
 
 export interface ExtractionResult {
   email_id: string;
@@ -156,16 +149,17 @@ export interface Warning {
   [k: string]: unknown;
 }
 
-const INTERNAL_NAME_TOKENS = Array.from(new Set(INTERNAL_DOMAINS.map((d) => d.split(".")[0])));
-
 export function patch3Warnings(r: ExtractionResult): Warning[] {
+  const domains = getInternalDomains();
+  if (!domains.length) return [];
+  const nameTokens = Array.from(new Set(domains.map((d) => d.split(".")[0])));
   const out: Warning[] = [];
   for (const c of r.companies) {
     const domain = (c.domain || "").toLowerCase();
     const name = (c.name || "").toLowerCase();
-    const domainMatch = !!domain && INTERNAL_DOMAINS.some((d) => domain === d || domain.endsWith("." + d));
+    const domainMatch = !!domain && domains.some((d) => domain === d || domain.endsWith("." + d));
     const nameParts = name.split(/[^a-z0-9]+/).filter(Boolean);
-    const nameMatch = !domainMatch && nameParts.some((p) => INTERNAL_NAME_TOKENS.includes(p));
+    const nameMatch = !domainMatch && nameParts.some((p) => nameTokens.includes(p));
     if (!domainMatch && !nameMatch) continue;
     const subjectInDecision = r.decisions.some((d) =>
       d.actors.some((a) => a.trim().toLowerCase() === c.name.trim().toLowerCase())

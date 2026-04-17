@@ -59,9 +59,9 @@ Personal-only contacts (travel, OTP receivers, one-off form submitters) → `wor
 `worth_page=true` heuristic:
 - Company appears across **3+ email threads**, OR
 - Is the counterparty of a decision (payment, contract, deal), OR
-- Is tagged in partner/distributor/client lists EMVN tracks.
+- Is tagged in partner/distributor/client lists we track.
 
-Internal companies (`emvn.co`, `melosy.net`, `melosymusic.com`, `musicmaster.io`, `tunebot.io`, `songgen.ai`, `cremi.ai`, `cremi.com`, `dzus.vn`) — see `phase0-patches.md` Patch 3 — `worth_page=false` unless subject of a decision.
+Internal companies (domains listed in `{vault}/context/email-extract.md` → `## Internal Domains`, spliced into the prompt at runtime) — see `phase0-patches.md` Patch 3 — are omitted from `companies[]` entirely. They may appear in `decisions[].actors` when they're the subject of a decision.
 
 ## Meeting
 

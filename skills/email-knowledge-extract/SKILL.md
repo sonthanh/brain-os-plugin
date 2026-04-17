@@ -6,6 +6,14 @@ description: "Batch-extract structured business knowledge (people, companies, me
 ## Vault Location
 **Vault path:** Read from `${CLAUDE_PLUGIN_ROOT}/brain-os.config.md`
 
+## User Config
+**Required:** `{vault}/context/email-extract.md` with three sections:
+- `## Internal Domains` — bullet list of domains that are YOUR teams (used by Patch 3 WARN)
+- `## Dry-Run Fixture` — `fixture_path: <relative-to-vault>` for `/email-knowledge-extract dry-run`
+- `## Few-Shot Examples` — your tuned prompt examples (spliced into `prompts/extract.md` at `{{FEW_SHOT_EXAMPLES}}`)
+
+If this file is missing: Patch 3 is a no-op, dry-run errors out, and Sonnet runs without few-shot guidance. The plugin does not ship user data — every user writes their own.
+
 # /email-knowledge-extract — Batch-extract knowledge from Gmail
 
 Codifies the Phase 0-winning Sonnet-only pipeline (eval: `daily/eval-reports/2026-04-14-email-pipeline` → 82/100, Opus-judged) into a resumable batch extractor. Grill design doc: `daily/grill-sessions/2026-04-17-email-knowledge-extract-skill-design.md`.
@@ -39,7 +47,11 @@ Default run-id: `$(date +%Y-%m-%d)-1y`. Default window: 1y. Default batch size: 
       ```
       Capture stdout as JSON array `$BATCH`.
       - If `$BATCH` is `[]` → call `save-state.ts --phase completed`; report summary; stop.
-   2. **Load the extraction prompt ONCE per session.** Read `${CLAUDE_PLUGIN_ROOT}/skills/email-knowledge-extract/prompts/extract.md` into a variable `$PROMPT_PREFIX`. This is the STABLE PREFIX used across every Task subagent call — prompt-cache hits depend on it not changing.
+   2. **Load the extraction prompt ONCE per session.**
+      ```bash
+      PROMPT_PREFIX=$(tsx ${CLAUDE_PLUGIN_ROOT}/skills/email-knowledge-extract/scripts/load-prompt.ts)
+      ```
+      `load-prompt.ts` reads `prompts/extract.md` (generic template) and splices in the user-specific internal-domains + few-shot examples from `{vault}/context/email-extract.md`. The composed output is the STABLE PREFIX used across every Task subagent call — prompt-cache hits depend on it not changing within a run.
    3. **Fan out Task subagents.** Emit one assistant turn containing **one Task tool_use block per email in `$BATCH`** (up to 20). Each block's prompt is the concatenation of `$PROMPT_PREFIX` + the VARIABLE SUFFIX (the single email's headers + labelIds + junk_filter_reason + body). Each subagent MUST return only a single JSON object matching `references/entity-schema.md` — no prose, no code fences.
    4. **Collect outputs.** For each subagent return, the raw JSON string is what we persist — do NOT parse/re-serialize in the parent; `write-pages.ts` validates. Assemble an array `$RESULTS` of rows:
       ```json
@@ -72,17 +84,18 @@ Default run-id: `$(date +%Y-%m-%d)-1y`. Default window: 1y. Default batch size: 
    failed_ids pending retry: {count_with_attempts_lt_3}
    ```
 
-### `/email-knowledge-extract dry-run` — Validate on frozen 100-email sample
+### `/email-knowledge-extract dry-run` — Validate on frozen sample
 
-Runs the full extraction loop against `references/phase0-samples.json` (frozen Phase 0 fixture) instead of live Gmail. Use to verify the skill works end-to-end after edits.
+Runs the full extraction loop against a frozen fixture instead of live Gmail. Use to verify the skill works end-to-end after edits.
 
-1. Set `RUN_ID=dryrun-$(date +%Y-%m-%d-%H%M)`.
-2. Start with a fresh state: remove any `{vault}/daily/email-extraction-state.json` that has the dryrun `run_id` (never touch a real run's state).
-3. Execute the outer loop with `--fixture ${CLAUDE_PLUGIN_ROOT}/skills/email-knowledge-extract/references/phase0-samples.json` added to every `fetch-batch.ts` invocation.
-4. Run until `fetch-batch.ts` returns `[]`. Report:
+1. Resolve fixture path: read `fixture_path:` from `{vault}/context/email-extract.md` (relative paths resolve to vault root). If missing or file not found → tell the user to create one at `{vault}/context/email-extract-fixture.json` (a JSON array matching the `GmailMessage` shape) and stop.
+2. Set `RUN_ID=dryrun-$(date +%Y-%m-%d-%H%M)`.
+3. Start with a fresh state: remove any `{vault}/daily/email-extraction-state.json` that has the dryrun `run_id` (never touch a real run's state).
+4. Execute the outer loop with `--fixture <resolved_path>` added to every `fetch-batch.ts` invocation.
+5. Run until `fetch-batch.ts` returns `[]`. Report:
    - Batches executed, entities created, Patch 3 WARNs emitted, failures.
    - Top 5 entities created (most Timeline entries).
-5. Do NOT commit the dry-run artifacts. They serve as smoke-test output for the caller to inspect, then discard.
+6. Do NOT commit the dry-run artifacts. They serve as smoke-test output for the caller to inspect, then discard.
 
 ### `/email-knowledge-extract reset` — Abandon run (destructive — confirm first)
 
@@ -124,7 +137,7 @@ All three patches from `references/phase0-patches.md` are already in `prompts/ex
 
 1. **Payment notification extraction** — prompt instructs Sonnet to extract `decisions[]` for any payment email with amount ≥ USD 10 equivalent, regardless of sender automation.
 2. **CC-chain actor extraction** — prompt instructs Sonnet to parse signature blocks + quoted-reply chains for actors.
-3. **No EMVN self-reference** — prompt rule + TS WARN in `sanity-check.ts::patch3Warnings()`. Warnings are logged, not auto-stripped.
+3. **No internal-team self-reference** — prompt rule + TS WARN in `sanity-check.ts::patch3Warnings()`. The internal-domains list comes from `{vault}/context/email-extract.md`. Warnings are logged, not auto-stripped.
 
 `/improve email-knowledge` reviews `warnings.jsonl` to propose prompt v2.
 
@@ -160,7 +173,7 @@ Per `skill-spec.md §12`, SKILL.md invocations are captured via the PostToolUse 
 
 A run is "done" for Phase 0.5 when:
 - Skill exists at `~/work/brain-os-plugin/skills/email-knowledge-extract/` with all files listed in the grill Build Checklist.
-- `dry-run` on `references/phase0-samples.json` completes end-to-end without errors.
+- `dry-run` on the user's fixture (`{vault}/context/email-extract-fixture.json` by default) completes end-to-end without errors.
 - At least one Patch 3 WARN observed in `warnings.jsonl` on the dry-run (proves the drift detector is wired).
 - At least one Patch 1 force-extract observed in `skipped.jsonl` ORM payment-email extraction in `raw-extractions.jsonl`.
 - Entity pages created under `{vault}/people/` and/or `{vault}/companies/` with `sources:` frontmatter, Timeline entries with Gmail URLs, Compiled Truth stubs.
