@@ -81,7 +81,6 @@ Create `evals/evals.json` in your skill directory following the schema above. Ea
 
 ## Outcome log
 
-<<<<<<< Updated upstream
 Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/eval.log`:
 
 ```
@@ -91,13 +90,3 @@ Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/eval.log`:
 - `action`: `eval` (single skill) or `eval-all` (all skills)
 - `result`: `pass` if all evals pass, `partial` if some fail, `fail` if errors prevent running
 - Optional: `args="{skill-name}"`, `score={passed}/{total}`
-=======
-After each `/eval` run, append one line to `{vault}/daily/skill-outcomes/eval.log`:
-
-```
-{date} | eval | {action} | ~/work/brain-os-plugin | N/A | commit:N/A | {result}
-```
-
-- `mode`: `single` (specific skill), `all`, or `list`
-- `result`: `pass` if all evals pass, `partial` if some skills fail, `fail` if errors
->>>>>>> Stashed changes
