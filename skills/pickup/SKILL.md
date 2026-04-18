@@ -5,26 +5,62 @@ description: "Use when starting a new session and wanting to resume unfinished w
 
 # Pickup — Resume Work
 
+## Config
+
+**Vault path + GitHub task repo:** read from `${CLAUDE_PLUGIN_ROOT}/brain-os.config.md` (or user-local `~/.brain-os/brain-os.config.md` which takes precedence). Keys: `vault_path:`, `gh_task_repo:`. In shell/hook contexts, `source hooks/resolve-vault.sh` and use `$VAULT_PATH` / `$GH_TASK_REPO`. In skill prose, substitute `$GH_TASK_REPO` below with the configured value.
+
 ## `/pickup` — Single interactive flow
 
-1. Read `{vault}/business/tasks/inbox.md`
+1. **Query open Ready tasks** from GitHub:
+   ```bash
+   gh issue list -R $GH_TASK_REPO --state open --label status:ready --json number,title,labels,body
+   ```
+   Labels carry all metadata (priority, weight, owner, type) — do not parse title for markers.
 
-2. **Handovers first:** Find unchecked 📋 tasks not already In Progress
-   - Found → move to In Progress (session lock) → load handover doc → start
+2. **Handovers first:** filter the Ready list to issues carrying `type:handover`. Do NOT infer handovers from title prefixes or body wiki-links — the label IS the signal.
+   - Found → claim with session-claim protocol (below) → load linked handover doc → start
    - Multiple → show list, ask user which one
    - None → continue to step 3
 
-3. **Ready tasks?**
+3. **Ready tasks remaining?**
    - **Yes** → skip to step 4 (no groom needed)
-   - **No** → groom Backlog: promote unblocked + clear tasks to Ready, ask user about vague ones
+   - **No** → groom Backlog: query `gh issue list -R $GH_TASK_REPO --state open --label status:backlog --json number,title,body`, promote unblocked + clear items to Ready (`gh issue edit N -R $GH_TASK_REPO --remove-label status:backlog --add-label status:ready`); ask user about vague ones
 
-4. **Autogrill Ready tasks** (see Autogrill section below)
+4. **Autogrill Ready tasks** (see Autogrill section below) — skip `type:handover` issues (they already have a spec doc)
 
-5. **Start top remaining task** — first Ready task → In Progress → begin
+5. **Start top remaining task** — claim first Ready task → begin
+
+## Session-claim protocol
+
+Every claim of a `status:ready` issue (interactive or auto) MUST follow this protocol to prevent race conflicts when multiple sessions pick concurrently:
+
+1. **Pick candidate** — issue must have `status:ready` and no `claim:session-*` label.
+2. **Atomic claim** — add a unique claim label:
+   ```bash
+   gh issue edit N -R $GH_TASK_REPO --add-label "claim:session-$$-$(date +%s)"
+   ```
+   `$$` is the shell PID; `$(date +%s)` is epoch seconds. Combined → unique per session.
+3. **Re-fetch and check for race**:
+   ```bash
+   gh issue view N -R $GH_TASK_REPO --json labels --jq '[.labels[].name | select(startswith("claim:session-"))] | length'
+   ```
+   If count > 1 → another session claimed first. Remove own claim and skip this issue:
+   ```bash
+   gh issue edit N -R $GH_TASK_REPO --remove-label "claim:session-$$-$(date +%s)"
+   ```
+4. **Take ownership** — transition status:
+   ```bash
+   gh issue edit N -R $GH_TASK_REPO --remove-label status:ready --add-label status:in-progress
+   ```
+5. **On completion** — close the issue; the claim label stays on the closed issue for audit:
+   ```bash
+   gh issue close N -R $GH_TASK_REPO --reason completed
+   ```
+   (A cron job cleans stale `claim:session-*` labels off open issues whose timestamp is >6h old — out of scope here.)
 
 ## Step 2: Autogrill Ready Tasks
 
-For each non-📋 Ready task, run vault-first Q&A:
+For each non-`type:handover` Ready task, run vault-first Q&A:
 
 1. **Generate grill questions** — the same questions you'd ask a human:
    - What's the goal?
@@ -38,7 +74,7 @@ For each non-📋 Ready task, run vault-first Q&A:
 
 3. **Log the Q&A** to `{vault}/daily/grill-sessions/YYYY-MM-DD-autogrill.md`:
    ```markdown
-   ## HH:MM — <task name>
+   ## HH:MM — <task name> (#N)
 
    ### Q&A
 
@@ -58,7 +94,7 @@ For each non-📋 Ready task, run vault-first Q&A:
    ```
 
 4. **Decide per task:**
-   - **≥80% questions answered** → auto-close: produce the artifact, mark Done, log process
+   - **≥80% questions answered** → auto-close: produce the artifact, `gh issue close N --reason completed`, log process
    - **<80% answered** → escalate: surface specific unanswered questions for human grill
 
 5. **Run tasks in parallel** — launch multiple agents for independent tasks
@@ -66,8 +102,8 @@ For each non-📋 Ready task, run vault-first Q&A:
 6. **Present results:**
    ```
    Autogrill complete:
-   ✅ [Task A] — auto-closed (7/8 questions answered)
-   ❓ [Task B] — needs you on 4 questions:
+   ✅ #12 [Task A] — auto-closed (7/8 questions answered)
+   ❓ #15 [Task B] — needs you on 4 questions:
       - Q3: What pricing model?
       - Q5: What's the timeline?
       - Q7: Who is the target?
@@ -83,20 +119,31 @@ When the user grills on the remaining questions:
 
 ## `/pickup auto` — Launch tasks in background
 
-1. **Find eligible tasks in Ready column** — apply filters in order:
-   - **Owner tag filter (always applied):** skip all `👤` (human-required) tasks — they need a human grill before execution. Only `🤖` (bot-eligible) tasks proceed to time-aware filtering below. This applies even with `--force`.
-   - **Work hours (09:00–22:00)**: only pick `⚡` (quick) tasks. Skip `🏋️` (heavy).
-   - **Off-hours (22:00–09:00) or weekends**: pick any task including `🏋️`.
-   - **`--force` flag**: skip time-aware filtering entirely — pick any Ready task regardless of weight or hour. Used by the pickup-auto cron.
+1. **Find eligible tasks** — query GH with combined filters, then filter out already-claimed issues client-side:
+   ```bash
+   gh issue list -R $GH_TASK_REPO --state open \
+     --label status:ready --label owner:bot \
+     --json number,title,labels,body \
+     --jq '[.[] | select(all(.labels[]; .name | startswith("claim:session-") | not))]'
+   ```
+   The `owner:bot` filter replaces the `👤` exclusion — `owner:human` tasks (which need a human grill) are not returned. The client-side `select(...)` drops any issue already carrying a `claim:session-*` label.
+
+   Then apply time-aware weight filtering on the remaining list:
+   - **Work hours (09:00–22:00)**: only pick issues with `weight:quick`. Skip `weight:heavy`.
+   - **Off-hours (22:00–09:00) or weekends**: pick any task including `weight:heavy`.
+   - **`--force` flag**: skip time-aware filtering entirely — pick any eligible Ready issue regardless of weight or hour. Used by the pickup-auto cron.
    - **Zero eligible tasks found** → log `pass | score=0/0` and exit. Do NOT continue to steps 2–5.
-2. **Pick eligible tasks** and move to In Progress
+
+2. **Claim eligible tasks** via session-claim protocol above (each issue individually; a race-lost issue is dropped from the batch).
+
 3. **Build dependency DAG** before launching anything:
-   - **Step 1 — Scan descriptions:** For each eligible task, parse for `depends on X` / `Depends on P1 Y` free-text patterns
-   - **Step 2 — Read plan docs:** For tasks referencing plan docs (e.g., `vault-redesign-plan`), read the plan and extract Phase numbering (`Phase 1.1`, `1.2`, etc.) — sequential phases within the same plan = sequential tasks
-   - **Step 3 — Build DAG:** nodes = tasks, edges = dependency relationships from Steps 1-2
-   - **Step 4 — Launch root nodes:** only tasks with no incoming edges launch in parallel
-   - **Step 5 — Queue dependents:** dependent tasks launch only after their prereq merges to main
+   - **Step 1 — Scan issue bodies:** for each claimed issue, parse body for `depends on #N` (GH auto-links this) and free-text `depends on X`/`Depends on P1 Y` patterns
+   - **Step 2 — Read plan docs:** for issues referencing plan docs (e.g., `vault-redesign-plan`), read the plan and extract Phase numbering (`Phase 1.1`, `1.2`, etc.) — sequential phases within the same plan = sequential tasks
+   - **Step 3 — Build DAG:** nodes = issues, edges = dependency relationships from Steps 1-2
+   - **Step 4 — Launch root nodes:** only issues with no incoming edges launch in parallel
+   - **Step 5 — Queue dependents:** a dependent issue launches only after its prereq issue is closed on `origin/main`
    - **Default:** if dependency parsing is ambiguous, serialize (cheap insurance vs 90 min cleanup)
+
 4. **Launch as background Claude process in worktree**:
    ```bash
    claude -w "auto-{slug}" \
@@ -105,33 +152,34 @@ When the user grills on the remaining questions:
      -p "<prompt>" \
      > /tmp/auto-task-{slug}.log 2>&1 &
    ```
-   The prompt MUST include the full task description + autogrill Q&A log instructions + Ralph Loop.
+   The prompt MUST include the full issue body + autogrill Q&A log instructions + Ralph Loop + issue number for close-on-done.
    The prompt MUST end with: "DO NOT invoke /pickup, /status, or any other skill after finishing — exit cleanly."
-   Exit protocol (non-negotiable): `commit → push → exit`. Watcher treats missing remote ref as failure.
+   Exit protocol (non-negotiable): `commit → push → gh issue close N --reason completed → exit`. Watcher treats missing remote ref or still-open issue as failure.
+
 5. **Report immediately** (don't wait for completion)
 
 #### `/pickup auto --all` — Launch ALL eligible tasks respecting the dependency DAG
 
-Same as above but for every eligible task. Each gets its own worktree. DAG constraints still apply — only independent tasks launch in parallel; dependent tasks queue behind their prereqs.
+Same as above but for every eligible issue. Each gets its own worktree. DAG constraints still apply — only independent issues launch in parallel; dependents queue behind their prereqs.
 
-#### Weight tags
-- `⚡` — quick task (< 30 min), safe to run anytime
-- `🏋️` — heavy task (1h+), only run off-hours
+#### Weight labels
+- `weight:quick` (⚡) — quick task (< 30 min), safe to run anytime
+- `weight:heavy` (🏋️) — heavy task (1h+), only run off-hours
 
 #### Auto mode rules
 - **Fire-and-forget** — launch in background, report immediately, user continues working.
 - **Worktree isolation** — each task runs via `claude -w` to avoid conflicts.
-- **Self-completing** — execute → log autogrill Q&A → update inbox.md → commit + push.
+- **Self-completing** — execute → log autogrill Q&A → `gh issue close N` → commit + push.
 - **Respect skill flows** — if a task maps to a skill, invoke that skill.
 - **Dependency-aware** — build DAG before parallelizing; serialize sequential phases of same plan.
-- **Time-aware** — never run 🏋️ tasks during work hours unless `--force` is passed.
-- **`--force` override** — `/pickup auto --force` bypasses time-aware filtering entirely. Used by the pickup-auto cron (see `~/.local/bin/pickup-auto-cron.sh`) so scheduled runs can pick 🏋️ during daytime.
+- **Time-aware** — never run `weight:heavy` tasks during work hours unless `--force` is passed.
+- **`--force` override** — `/pickup auto --force` bypasses time-aware filtering entirely. Used by the pickup-auto cron (see `~/.local/bin/pickup-auto-cron.sh`) so scheduled runs can pick `weight:heavy` during daytime.
 - **No budget cap** — tasks run until complete. Ralph Loop ensures completion.
 
 ## Handover Task Behavior
 
-### For each handover task found:
-1. **Read the linked handover doc** completely (all sections)
+### For each handover issue (`type:handover`) found:
+1. **Extract handover doc path** from the issue body — look for a relative markdown link like `[handover](daily/handovers/YYYY-MM-DD-topic.md)` and read that file from the vault completely (all sections)
 2. **Run "Commands to Verify State"** from the handover to confirm nothing changed
 3. **Check for incomplete grills** — scan handover for "INCOMPLETE", "NOT completed", "grill session started but". If found:
    - Do NOT start executing tasks
@@ -139,7 +187,7 @@ Same as above but for every eligible task. Each gets its own worktree. DAG const
    - Resume the grill FIRST using `/grill <topic>` before any implementation
 4. **Present brief summary**:
    ```
-   Picking up: [topic]
+   Picking up: [topic] (#N)
    Status: [status]
    TL;DR: [from handover]
 
@@ -152,9 +200,9 @@ Same as above but for every eligible task. Each gets its own worktree. DAG const
 5. **Start executing step 1** immediately (don't wait for confirmation unless blocked)
 
 ### After completing all steps:
-1. **Mark task done** in inbox.md: `- [x] [Handover] ... ✅ YYYY-MM-DD`
-2. **Update handover status**: `status: completed`
-3. **If new unfinished work emerged**: run `/handover` to create a new handover
+1. **Close the issue**: `gh issue close N -R $GH_TASK_REPO --reason completed`
+2. **Update handover status** in the vault doc: `status: completed`
+3. **If new unfinished work emerged**: run `/handover` to create a new handover (which opens a new issue)
 
 ## Rules
 
@@ -170,23 +218,29 @@ If handover is > 7 days old:
 ⚠️ This handover is [N] days old. Verifying current state first...
 ```
 
-### The vault is the task queue
-- `/handover` writes tasks to `inbox.md`
-- `/pickup` reads tasks from `inbox.md`
-- No external system, no arguments to remember
+### GitHub Issues are the task queue
+- `/handover` opens an issue in `$GH_TASK_REPO` with `type:handover` + `status:ready` + handover doc link in body
+- `/pickup` queries `$GH_TASK_REPO` for Ready issues, filters `type:handover` first
+- State lives on the GH server (atomic labels) — no file merge conflicts across sessions
 - The user just types `/pickup` and work resumes
+
+### Always re-query at render time
+Labels change across sessions. Never cache the Ready list within a long interactive session — re-query before claiming.
 
 ## Flow
 ```
 Session A:
-  /handover → creates handover doc + writes task to inbox.md
+  /handover → creates handover doc + opens GH issue (status:ready, type:handover)
 
 Session B (new Claude):
-  /pickup → straight to handovers → load doc → start working
+  /pickup → queries GH → filters type:handover → claims (session-claim protocol)
+        → loads handover doc → starts working
   ... work done ...
-  marks task ✅ in inbox.md
+  gh issue close N --reason completed
 
-  /pickup auto → launch eligible in background → self-completes
+  /pickup auto → queries GH for status:ready + owner:bot, unclaimed
+              → launches eligible in background (worktrees)
+              → each self-closes its issue on success
 ```
 
 ## Outcome log
@@ -198,6 +252,7 @@ Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/pickup.log
 ```
 
 - `action`: `pickup` (interactive) or `auto` (background launch)
-- `result`: `pass` if tasks started/completed, `partial` if some escalated to user, `fail` if unrecoverable error (e.g. inbox.md unreadable)
-- **No eligible tasks** (empty Ready column, only 👤 tasks) → log `pass | score=0/0`, not `fail`
-- Optional: `args="{task-slug}"`, `score={completed}/{launched}` (for auto mode)
+- `result`: `pass` if issues started/completed, `partial` if some escalated to user, `fail` if unrecoverable error (e.g. `gh` auth failure or network)
+- **No eligible tasks** (empty Ready column, only `owner:human` issues, or all claimed) → log `pass | score=0/0`, not `fail`
+- **Race lost on all claims** → log `pass | score=0/N`
+- Optional: `args="{issue-number}"`, `score={completed}/{launched}` (for auto mode)
