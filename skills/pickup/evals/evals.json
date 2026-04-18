@@ -28,5 +28,29 @@
     "description": "Auto mode step 1 must explicitly document that only 🤖 (bot-eligible) tasks qualify and 👤 (human-required) tasks are always skipped",
     "args": "pickup auto (Ready has only 👤 tasks)",
     "expect": "🤖"
+  },
+  {
+    "id": "gh-status-ready-query",
+    "description": "Skill must document the core GH query pattern used to fetch Ready tasks (gh issue list with status:ready label)",
+    "args": "pickup",
+    "expect": "gh issue list -R $GH_TASK_REPO --state open --label status:ready"
+  },
+  {
+    "id": "session-claim-atomic-protocol",
+    "description": "Skill must document the claim:session- label-based atomic claim protocol that prevents concurrent pickup races",
+    "args": "pickup",
+    "expect": "claim:session-"
+  },
+  {
+    "id": "config-reference-block",
+    "description": "Skill must have a ## Config block pointing at brain-os.config.md so vault_path + gh_task_repo can be resolved",
+    "args": "pickup",
+    "expect": "## Config"
+  },
+  {
+    "id": "owner-bot-filter-in-auto",
+    "description": "`/pickup auto` eligibility must document owner:bot filter (replacing the 👤 exclusion) so bot-runnable issues are selected",
+    "args": "pickup auto",
+    "expect": "owner:bot"
   }
 ]

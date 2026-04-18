@@ -1,37 +1,20 @@
-{
-  "skill_name": "chain",
-  "evals": [
-    {
-      "id": 1,
-      "prompt": "What is the exact order of the chain pipeline steps?",
-      "expected_output": "self-learn → ingest → verify → absorb → sync → notify",
-      "expectations": [
-        "Lists self-learn as step 1",
-        "Lists ingest as step 2",
-        "Lists verify as step 3",
-        "Lists absorb as step 4",
-        "Lists sync as step 5"
-      ]
-    },
-    {
-      "id": 2,
-      "prompt": "How does the pipeline track state and handle resume?",
-      "expected_output": "Uses audit-flag.json with pipeline_completed field",
-      "expectations": [
-        "Mentions audit-flag.json for state tracking",
-        "Mentions pipeline_completed timestamp",
-        "Mentions --resume flag to continue interrupted pipelines"
-      ]
-    },
-    {
-      "id": 3,
-      "prompt": "What happens when verify fails in the pipeline?",
-      "expected_output": "Pipeline stops, flag stays false, task written to inbox",
-      "expectations": [
-        "States pipeline stops on verify failure",
-        "States audited flag stays false",
-        "Mentions notification to user via task or inbox"
-      ]
-    }
-  ]
-}
+[
+  {
+    "id": "pipeline-order",
+    "description": "Study pipeline must start with /self-learn as Step 1 (sets the canonical pipeline order)",
+    "args": "study <epub> --notebook-id <id>",
+    "expect": "Step 1: /self-learn"
+  },
+  {
+    "id": "audit-flag-tracks-pipeline",
+    "description": "Pipeline state must be tracked in audit-flag.json so --resume can determine which step to resume from",
+    "args": "study --resume",
+    "expect": "audit-flag.json"
+  },
+  {
+    "id": "step5-gh-issue-create",
+    "description": "Step 5 must create the review task as a GH issue via `gh issue create -R $GH_TASK_REPO` (replaces the old append-to-inbox.md flow)",
+    "args": "study",
+    "expect": "gh issue create -R $GH_TASK_REPO"
+  }
+]

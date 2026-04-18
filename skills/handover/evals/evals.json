@@ -1,0 +1,20 @@
+[
+  {
+    "id": "gh-issue-create-command",
+    "description": "Handover must document `gh issue create -R $GH_TASK_REPO` as the way to open a new task issue (replaces the old append-to-inbox.md flow)",
+    "args": "handover",
+    "expect": "gh issue create -R $GH_TASK_REPO"
+  },
+  {
+    "id": "type-handover-label",
+    "description": "The GH issue opened by /handover must carry --label type:handover so /pickup can filter handover issues by label",
+    "args": "handover",
+    "expect": "--label type:handover"
+  },
+  {
+    "id": "config-reference-block",
+    "description": "Skill must have a ## Config block pointing at brain-os.config.md so vault_path + gh_task_repo can be resolved",
+    "args": "handover",
+    "expect": "## Config"
+  }
+]

@@ -1,0 +1,14 @@
+[
+  {
+    "id": "stale-gh-issue-phase",
+    "description": "Phase B must be Stale GH issue detection (replacing the old inbox.md task dedup phase)",
+    "args": "vault-lint",
+    "expect": "Phase B — Stale GH issue detection"
+  },
+  {
+    "id": "no-inbox-md-reference",
+    "description": "Skill must NOT reference inbox.md anywhere — tasks are GH issues now. Positive marker verifies the replacement phase heading is in place.",
+    "args": "vault-lint",
+    "expect": "Stale GH issue detection"
+  }
+]
