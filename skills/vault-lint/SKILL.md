@@ -3,22 +3,23 @@ name: vault-lint
 description: >
   Nightly vault maintenance — fix broken wiki-links, detect orphan pages,
   enforce bidirectional linking, sync directory indexes, detect CLAUDE.md
-  drift/SSOT violations, dedupe tasks, archive stale entries, flag dead
-  entities. Use when: vault maintenance, broken links, orphan pages, task
-  cleanup, nightly cron, wiki-links, dedupe, stale tasks, vault health,
-  inbox cleanup, lint vault.
+  drift/SSOT violations, flag stale GH-issue tasks, flag dead entities.
+  Use when: vault maintenance, broken links, orphan pages, nightly cron,
+  wiki-links, vault health, lint vault, stale tasks.
 ---
 
 # /vault-lint — Nightly Vault Maintenance
 
 Pipeline skill. Runs nightly (2am CEST, sonnet) via `/brain-os:schedule`. Auto from day 1 per `working-rules.md § 2` — no review phase for cron/maintenance skills.
 
+## Config
+**Vault path + GitHub task repo:** read from `${CLAUDE_PLUGIN_ROOT}/brain-os.config.md` (or user-local `~/.brain-os/brain-os.config.md`). Keys: `vault_path:`, `gh_task_repo:`. Substitute `$GH_TASK_REPO` below with the configured value.
+
 ## Vault paths
 
-- Vault root: read from `${CLAUDE_PLUGIN_ROOT}/brain-os.config.md`
+- Vault root: read from config (above)
 - Reports: `{vault}/daily/organize-reports/YYYY-MM-DD.md`
 - Outcome log: `{vault}/daily/skill-outcomes/vault-lint.log`
-- Task inbox: `{vault}/business/tasks/inbox.md`
 - Conventions: `{vault}/thinking/references/bidirectional-linking.md`, `{vault}/thinking/references/compiled-truth-template.md`
 
 ## Flags
@@ -98,37 +99,30 @@ List violations in the report under `## CLAUDE.md Drift`. Include which file sho
 
 ---
 
-## Phase B — Task inbox [deterministic]
+## Phase B — Stale GH issue detection [deterministic]
 
-Read `{vault}/business/tasks/inbox.md`. Preserve kanban format (frontmatter + `%% kanban:settings %%` block).
+Tasks live as GitHub issues at `$GH_TASK_REPO`. This phase flags open issues that have not been touched in >90 days — the `/status` panel hides them silently, so they accumulate as silent backlog rot.
 
-### B1. Dedupe
+### B1. Query open issues
 
-Compare all task titles (text between `**...**`) across all sections. Match: case-insensitive, whitespace-normalized, strip emoji prefixes.
+```bash
+gh issue list -R $GH_TASK_REPO --state open --limit 100 \
+  --json number,title,updatedAt,labels,url
+```
 
-If exact title match found → keep the one in the higher-priority section (Ready > In Progress > Backlog > Done). Remove the duplicate. Add to report under `## Duplicates Removed`.
+If `$GH_TASK_REPO` is unset, skip Phase B entirely and note in the report: `Phase B skipped — gh_task_repo not configured.`
 
-### B2. Superseded umbrellas
+### B2. Stale flag (>90 days)
 
-A task is a superseded umbrella when:
-- It references a handover (`[[daily/handovers/...]]` or `[[handovers/...]]`)
-- AND ≥3 other tasks in inbox.md reference the same handover link
+For each issue where `updatedAt` is older than 90 days:
+1. List in the report under `## Stale Issues` as `#N — [title] (updated YYYY-MM-DD, Nd ago) — url`.
+2. If not `--dry-run`, post a comment:
+   ```bash
+   gh issue comment N -R $GH_TASK_REPO --body "vault-lint: no activity for Nd. Review and either close, re-label \`status:backlog\`, or update the body to keep it alive."
+   ```
+3. Do NOT auto-close — human judgment required.
 
-The umbrella has been granularized — move it to Done with `✅ {today}` and note `(superseded — granularized into N tasks)`.
-
-### B3. Stale entry flagging
-
-| Condition | Action |
-|-----------|--------|
-| Task in Ready >14 days with no move | Flag in report (do not move) |
-| Task in Backlog >30 days | Flag in report (do not move) |
-| Task in Done >90 days | Compress: collapse description to title-only line |
-
-Age is measured from the date in the task text (ISO date, `✅ YYYY-MM-DD`, or `[[daily/...YYYY-MM-DD...]]`). If no date found, use git blame for the line's last-modified date.
-
-### B4. Apply changes
-
-If `--dry-run`: skip. Otherwise write the cleaned inbox.md, preserving kanban format exactly.
+Skip issues that already received a `vault-lint:` comment in the last 30 days (idempotency — query comments via `gh issue view N --json comments`).
 
 ---
 
@@ -140,7 +134,7 @@ Scan vault for references to external entities that may no longer exist:
 Grep vault `.md` files for absolute paths matching `~/work/...` or `/Users/.../work/...`. For each unique path, check if the directory exists. Flag missing paths.
 
 ### C2. Stale handovers [deterministic]
-Scan `{vault}/daily/handovers/` for files older than 30 days that are still referenced by unchecked tasks in inbox.md. Flag as potentially stale.
+Scan `{vault}/daily/handovers/` for files older than 30 days. For each, query `gh issue list -R $GH_TASK_REPO --state open --search "<handover-filename>"` — flag as potentially stale if any open issue still references it.
 
 ### C3. Empty grill sessions [deterministic]
 Scan `{vault}/daily/grill-sessions/` for files with no `## Decisions` section or where that section is empty. Flag as incomplete.
@@ -171,9 +165,7 @@ mode: {full | dry-run}
 - One-way entity links: N
 - Index out of sync: N directories
 - CLAUDE.md drift: N violations
-- Task duplicates removed: N
-- Superseded umbrellas archived: N
-- Stale tasks flagged: N
+- Stale issues flagged: N
 - Dead entities flagged: N
 - Items needing review: N
 
@@ -192,13 +184,7 @@ mode: {full | dry-run}
 ## CLAUDE.md Drift
 {list or "No drift detected."}
 
-## Duplicates Removed
-{list or "No duplicates."}
-
-## Superseded Umbrellas
-{list or "None."}
-
-## Stale Tasks
+## Stale Issues
 {list or "None."}
 
 ## Dead Entities
@@ -233,7 +219,7 @@ Skip if `--dry-run`.
 
 ```bash
 cd {vault}
-git add daily/organize-reports/ daily/skill-outcomes/ business/tasks/inbox.md
+git add daily/organize-reports/ daily/skill-outcomes/
 git commit -m "vault-lint: nightly run {date}"
 git pull --rebase && git push
 ```
@@ -242,8 +228,8 @@ git pull --rebase && git push
 
 ## Gotchas
 
-- Kanban format in inbox.md is fragile — the `kanban-plugin: board` frontmatter and `%% kanban:settings %%` block must be preserved exactly. Test by checking the file still opens as a kanban board in Obsidian.
 - Wiki-link resolution follows Obsidian's shortest-unique-path rule, not filesystem paths. `[[foo]]` matches `any/nested/foo.md` if there's only one `foo.md`.
-- Never delete files. This skill flags, archives to Done, or compresses — but never `rm`. The git tag enables rollback if anything goes wrong.
+- Never delete files. This skill flags or compresses — but never `rm`. The git tag enables rollback if anything goes wrong.
 - Entity pages are scoped: `people/`, `companies/`, `meetings/`, `business/decisions/`, `business/projects/`. Don't enforce bidirectional links on grill notes, aha moments, or research reports.
 - The `scripts/update-readmes.sh` script must exist in the vault. If missing, skip A4 and note it in the report.
+- Phase B requires `gh` CLI authenticated (`gh auth status`). If unauthenticated or `gh_task_repo:` unset, the phase skips silently with a report note — it does not fail the whole run.

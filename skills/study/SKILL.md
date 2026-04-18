@@ -4,6 +4,9 @@ description: "Use when running the complete knowledge pipeline for a book, from 
 context: fork
 ---
 
+## Config
+**Vault path + GitHub task repo:** read from `${CLAUDE_PLUGIN_ROOT}/brain-os.config.md` (or user-local `~/.brain-os/brain-os.config.md`). Keys: `vault_path:`, `gh_task_repo:`. Substitute `$GH_TASK_REPO` below with the configured value.
+
 # Study — Full Knowledge Pipeline Orchestrator
 
 ## Usage
@@ -29,7 +32,7 @@ Step 3: /absorb (book note → vault connections, bypass approval since audited:
 Step 4: commit + push (git commit + push all changes)
         ↓
 Step 5: Notify all 3 channels
-  ├── Obsidian task in business/tasks/inbox.md
+  ├── GH issue at $GH_TASK_REPO (review task)
   ├── Daily note entry
   └── Audit flag updated with pipeline_completed timestamp
 ```
@@ -59,7 +62,7 @@ Run the `/absorb` skill. Since verify is true, bypass approval — apply all vau
 Commit and push all vault changes to git.
 
 ### Step 5: Notify
-- Add review task to `business/tasks/inbox.md`
+- Create a review task as a GH issue: `gh issue create -R $GH_TASK_REPO --title "Review $BOOK_TITLE notes" --body "..." --label status:ready --label owner:human --label weight:quick`
 - Create/update daily note with pipeline log
 - Update audit flag with `pipeline_completed` timestamp
 

@@ -387,30 +387,8 @@ zone: context
 
 logsection "Creating business files..."
 
-write_file "$VAULT_PATH/business/tasks/inbox.md" "---
-
-kanban-plugin: board
-
----
-
-## Ready
-
-- [ ] 👤 Populate context files with real business information
-
-## In Progress
-
-
-## Backlog
-
-
-## Done
-
-%% kanban:settings
-\`\`\`
-{\"kanban-plugin\":\"board\"}
-\`\`\`
-%%
-"
+# Tasks now live as GitHub issues — no inbox.md scaffolding needed.
+# See README "GitHub tasks setup" for the gh_task_repo config + label bootstrap.
 
 # ─── 4. Personal files ────────────────────────────────────────────────────────
 
@@ -535,7 +513,7 @@ You are an AI agent with access to my second brain — a unified Obsidian vault 
 | Goals (personal + business) | \`context/goals.md\` |
 | What happened today/recently | \`daily/\` (latest files) |
 | Business projects | \`business/projects/\` |
-| Tasks and to-dos | \`business/tasks/inbox.md\` |
+| Tasks and to-dos | GitHub issues at your \`gh_task_repo\` (see brain-os.config.md) |
 | Book notes | \`knowledge/books/\` |
 | Raw knowledge input | \`knowledge/raw/\` |
 | Ideas | \`thinking/ideas/\` |
@@ -552,10 +530,12 @@ You are an AI agent with access to my second brain — a unified Obsidian vault 
 
 ## Task Management
 
-Inbox is a **kanban board** at \`business/tasks/inbox.md\` (requires Obsidian Kanban plugin).
+Tasks live as **GitHub issues** in a repo you own (configure \`gh_task_repo\` in \`brain-os.config.md\`).
 
-**Columns:** Ready → In Progress → Backlog → Done
-**Tags:** 🤖 auto (Claude can execute) | 👤 manual (needs human input)
+**Status labels:** \`status:ready\`, \`status:in-progress\`, \`status:blocked\`, \`status:backlog\` (closed issue = done)
+**Other labels:** \`priority:p1..p4\`, \`weight:heavy|quick\`, \`owner:human|bot\`, \`type:handover|plan\`
+**Session-claim (multi-session concurrency):** dynamic \`claim:session-*\` label
+**Commands:** \`/status\` (briefing) · \`/pickup\` (resume) · \`/handover\` (end session)
 
 ## Zone Rules
 
@@ -584,6 +564,20 @@ if [ "$DRY_RUN" = false ] && [ -f "$CONFIG_FILE" ]; then
   logok "Updated vault_path in $CONFIG_FILE"
 else
   logdim "[dry-run] Would update vault_path in $CONFIG_FILE → $VAULT_PATH"
+fi
+
+# GH task repo — prompt user to set it and bootstrap labels
+GH_REPO=$(grep 'gh_task_repo:' "$CONFIG_FILE" 2>/dev/null | sed 's/gh_task_repo: *//' | tr -d ' ')
+if [ -z "$GH_REPO" ] || [ "$GH_REPO" = "your-username/your-task-repo" ]; then
+  echo ""
+  echo "📝 GitHub tasks setup (optional but recommended):"
+  echo "   Tasks live as GitHub issues. Edit $CONFIG_FILE:"
+  echo "     gh_task_repo: your-username/your-repo"
+  echo "   Then bootstrap labels:"
+  echo "     gh label create status:ready --color 0E8A16 -R your-username/your-repo"
+  echo "     (plus status:{in-progress,blocked,backlog}, priority:p{1-4},"
+  echo "      weight:{heavy,quick}, owner:{human,bot}, type:{handover,plan})"
+  echo "   See README.md 'GitHub tasks setup' for the full list."
 fi
 
 # ─── Done ────────────────────────────────────────────────────────────────────

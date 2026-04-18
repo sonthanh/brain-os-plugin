@@ -34,6 +34,39 @@ Not generic advice. Your priorities, your situation.
 
 See [Getting Started](GETTING-STARTED.md) for the full setup walkthrough and first use cases.
 
+## GitHub tasks setup
+
+Tasks (`/pickup`, `/handover`, `/status`, and the auto-pickup cron) live as GitHub issues in a repo you own — not in Markdown files. This solves multi-session concurrency (atomic state, stable IDs, no merge conflicts).
+
+**One-time setup:**
+
+1. Pick or create a GitHub repo you own (private or public) — e.g. `your-username/my-tasks`.
+2. `gh auth login` if not already authenticated.
+3. Set `gh_task_repo:` in `~/.brain-os/brain-os.config.md`:
+   ```
+   gh_task_repo: your-username/my-tasks
+   ```
+4. Bootstrap the 15 labels (status, priority, weight, owner, type):
+   ```bash
+   R=your-username/my-tasks
+   gh label create status:ready        --color 0E8A16 -R $R
+   gh label create status:in-progress  --color 1D76DB -R $R
+   gh label create status:blocked      --color B60205 -R $R
+   gh label create status:backlog      --color C5DEF5 -R $R
+   gh label create priority:p1         --color D93F0B -R $R
+   gh label create priority:p2         --color FBCA04 -R $R
+   gh label create priority:p3         --color FEF2C0 -R $R
+   gh label create priority:p4         --color E1E4E8 -R $R
+   gh label create weight:heavy        --color 5319E7 -R $R
+   gh label create weight:quick        --color 006B75 -R $R
+   gh label create owner:human         --color F9D0C4 -R $R
+   gh label create owner:bot           --color BFDADC -R $R
+   gh label create type:handover       --color FF6B6B -R $R
+   gh label create type:plan           --color 8A2BE2 -R $R
+   ```
+
+Without `gh_task_repo` configured, skills silently skip the task panel and work in read-only vault mode.
+
 ## Why Brain OS
 
 Claude Code skills solve specific tasks. But context is scattered across projects, skills, and agents. Each one knows a piece — none sees the full picture. Decisions from fragmented context are generic: "correct but not yours."

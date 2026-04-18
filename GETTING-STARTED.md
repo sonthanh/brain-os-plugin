@@ -8,6 +8,7 @@ From zero to working Brain OS in under 2 minutes.
 |------------|-------|
 | [Claude Code](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview) | The Claude CLI — required for all skills |
 | [Obsidian](https://obsidian.md/) | Your vault lives here (free) |
+| [GitHub CLI](https://cli.github.com/) (`gh`) | Task system lives in GH issues — see README § "GitHub tasks setup" for the `gh_task_repo` config + label bootstrap |
 
 **Optional** (for the self-learn + verify pipeline only):
 - Python 3.12+
