@@ -6,7 +6,7 @@ description: "Interview the user relentlessly about a topic until reaching a bul
 ## Vault Location
 **Vault path:** Read from `${CLAUDE_PLUGIN_ROOT}/brain-os.config.md`
 
-Interview me relentlessly about every aspect of this until we reach a shared understanding. Walk down each branch of the design tree resolving dependencies between decisions one by one. If a question can be answered by research — vault, web, code — do that instead of asking me. For each question, provide your recommended best practice answer. Options get pros/cons then ONE pick — never per-option. Grill until bulletproof.
+Interview me relentlessly about every aspect of this until we reach a shared understanding. Walk down each branch of the design tree resolving dependencies between decisions one by one. If a question can be answered by research — vault, web, code — do that instead of asking me. Before fresh vault scans, check the SessionStart index + recent tool results for the topic; if matched, read that file directly. For each question, provide your recommended best practice answer. Options get pros/cons then ONE pick — never per-option. Grill until bulletproof.
 
 Save decisions to `{vault}/daily/grill-sessions/YYYY-MM-DD-<topic-slug>.md`
 
@@ -17,7 +17,6 @@ Save decisions to `{vault}/daily/grill-sessions/YYYY-MM-DD-<topic-slug>.md`
 
 ## Outcome log
 
-<<<<<<< Updated upstream
 Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/grill.log`:
 
 ```
@@ -26,12 +25,3 @@ Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/grill.log`
 
 - `result`: `pass` if bulletproof plan reached, `partial` if gaps remain, `fail` if abandoned
 - Optional: `args="{topic}"`
-=======
-After each `/grill` run, append one line to `{vault}/daily/skill-outcomes/grill.log`:
-
-```
-{date} | grill | grill | ~/work/brain-os-plugin | {vault}/daily/grill-sessions/{date}-{topic-slug}.md | commit:{hash} | {result}
-```
-
-- `result`: `pass` if reached actionable plan, `partial` if session ended early, `fail` if errors
->>>>>>> Stashed changes

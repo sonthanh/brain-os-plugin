@@ -43,8 +43,17 @@
       "prompt": "How long is the grill skill instruction body (excluding frontmatter and usage)?",
       "expected_output": "Very short — one paragraph plus one output line",
       "expectations": [
-        "Instruction body is under 100 words",
+        "Instruction body is under 120 words",
         "No separate Rules or Protocol sections exist"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "What should grill check before doing a fresh vault scan?",
+      "expected_output": "The SessionStart index + recent tool results in the current conversation — if the topic is already matched there, read that file directly instead of re-scanning.",
+      "expectations": [
+        "Mentions checking SessionStart index or recent tool results first",
+        "Mentions reading the matched file directly instead of fresh vault scan"
       ]
     }
   ]
