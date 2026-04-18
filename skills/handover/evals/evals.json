@@ -1,15 +1,27 @@
 [
   {
-    "id": "gh-issue-create-command",
-    "description": "Handover must document `gh issue create -R $GH_TASK_REPO` as the way to open a new task issue (replaces the old append-to-inbox.md flow)",
+    "id": "uses-create-issue-script",
+    "description": "Handover must call scripts/create-handover-issue.sh instead of inlining `gh issue create` — prose-level shell blocks get silently skipped (memory feedback_md_instructions_untrustworthy).",
     "args": "handover",
-    "expect": "gh issue create -R $GH_TASK_REPO"
+    "expect": "scripts/create-handover-issue.sh"
   },
   {
     "id": "type-handover-label",
-    "description": "The GH issue opened by /handover must carry --label type:handover so /pickup can filter handover issues by label",
+    "description": "Skill must still document `type:handover` so /pickup's label-based filter contract is explicit.",
     "args": "handover",
-    "expect": "--label type:handover"
+    "expect": "type:handover"
+  },
+  {
+    "id": "script-owns-outcome-log",
+    "description": "Outcome log section must document that the script writes the log line (so Claude does not hand-write a `pass` line without the `issue={N}` marker — the original bug).",
+    "args": "handover",
+    "expect": "script appends the log line"
+  },
+  {
+    "id": "prose-untrustworthy-rationale",
+    "description": "Skill must reference the MD-untrustworthy rationale so future editors understand why the script is mandatory, not optional.",
+    "args": "handover",
+    "expect": "feedback_md_instructions_untrustworthy"
   },
   {
     "id": "config-reference-block",

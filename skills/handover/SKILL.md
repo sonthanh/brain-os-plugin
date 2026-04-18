@@ -17,29 +17,23 @@ Creates a handover document in the vault and opens a GitHub issue that the next 
 
 1. **Scan the current session** — what was discussed, decided, built, still pending
 2. **Create handover file** at `{vault}/daily/handovers/YYYY-MM-DD-topic.md` using the template below
-3. **Open a GitHub issue** tagged for `/pickup`:
+3. **Open a GitHub issue via the script** — do NOT inline `gh issue create`. Prose-level commands get silently skipped (memory `feedback_md_instructions_untrustworthy`). The script is the only supported path, it fails loudly on error, and it writes the `issue={N}` marker to the outcome log atomically:
    ```bash
-   gh issue create -R $GH_TASK_REPO \
+   bash "${CLAUDE_PLUGIN_ROOT}/skills/handover/scripts/create-handover-issue.sh" \
+     --handover-path "daily/handovers/YYYY-MM-DD-topic.md" \
      --title "Handover: <topic>" \
-     --body "$(cat <<'EOF'
-   Continue unfinished work from the prior session.
-
-   - TL;DR: <one-liner from the handover doc>
-   - Next step: <first action from the handover's "What's Next">
-   - [handover](daily/handovers/YYYY-MM-DD-topic.md)
-   EOF
-   )" \
-     --label status:ready \
-     --label type:handover \
-     --label owner:human \
-     --label priority:p1 \
-     --label weight:heavy
+     --tldr "<one-line summary from the handover doc's TL;DR>" \
+     --next-step "<first action from the handover's 'What's Next'>" \
+     --priority p1 \
+     --weight heavy \
+     --owner human
    ```
-   Rules for the command:
-   - `--label priority:pN` — carry over the priority the work will resume at (`p1` by default for an active session handover; drop lower if explicitly less urgent)
-   - `--label weight:heavy` — include only if remaining work is 1h+; omit or use `weight:quick` for small continuations
-   - Body MUST include a relative markdown link `[handover](daily/handovers/...)` — GH renders it on the web and `/pickup` parses it to locate the doc. Do NOT use `[[wiki-link]]` syntax; GH won't resolve it.
-   - `owner:human` is the default for handovers (they need a human-aware grill before proceeding). Only switch to `owner:bot` if the remaining steps are fully self-executing.
+   Flag rules:
+   - `--priority pN` — the priority work resumes at (`p1` default for an active session handover; drop lower only if explicitly less urgent)
+   - `--weight heavy|quick` — `heavy` if remaining work is 1h+; `quick` for small continuations
+   - `--owner human|bot` — `human` default (handovers usually need a human-aware grill first). Only use `bot` if the remaining steps are fully self-executing
+   - The script constructs the body with `[handover](<path>)` automatically — do NOT pre-format
+   - If the script exits non-zero, the handover is NOT complete; fix the underlying issue (gh auth, missing repo, wrong vault path) and re-run — do not write a `pass` log entry manually
 
 4. **Update MEMORY.md** with pointer to handover doc (vault-relative path)
 
@@ -118,11 +112,14 @@ When `/pickup` completes the handover's "What's Next", it runs `gh issue close N
 
 ## Outcome log
 
-Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/handover.log`:
+The `create-handover-issue.sh` script appends the log line automatically with the shape:
 
 ```
-{date} | handover | handover | ~/work/brain-os-plugin | daily/handovers/{date}-{topic}.md | commit:{hash} | {result}
+{date} | handover | handover | {vault} | daily/handovers/{date}-{topic}.md | commit:{hash} issue={N} | pass | args={topic}
 ```
 
-- `result`: `pass` if handover doc + GH issue created, `partial` if doc created but `gh issue create` failed, `fail` if nothing to hand over
-- Optional: `args="{topic}"`, append `issue={N}` to `commit:{hash}` column when the issue is created (e.g. `commit:abc123 issue=42`)
+Do NOT hand-write this line — let the script own it so the `issue={N}` marker is guaranteed accurate.
+
+- `pass` only valid when the script exits 0 (doc + issue both created, log line written with `issue={N}`)
+- `partial` — handover doc created but script failed; re-run script after fixing the error. Do not leave the skill in `partial` state
+- `fail` — nothing to hand over (skill should not have been invoked)
