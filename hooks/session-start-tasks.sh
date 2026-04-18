@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Show open tasks + vault index on session start.
+# Show open tasks (from GH issues at $GH_TASK_REPO) + vault index on session start.
+# Tasks live in GH Issues since Phase 1 of inbox.md → GH migration.
 # Vault index enables brain-first lookup: agent sees recent research, aha notes,
 # active plans, and grill sessions before deciding to do external research.
 
@@ -8,54 +9,76 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/resolve-vault.sh"
 
-INBOX="$VAULT_PATH/business/tasks/inbox.md"
-if [ ! -f "$INBOX" ]; then
-  exit 0
-fi
+# Tasks panel — query GH issues (3 parallel calls). Silent if gh missing/unauthed/offline
+# or if GH_TASK_REPO not configured in brain-os.config.md.
+if [ -n "${GH_TASK_REPO:-}" ] && command -v gh >/dev/null 2>&1; then
+  TMP_DIR=$(mktemp -d)
+  trap 'rm -rf "$TMP_DIR"' EXIT
 
-get_column() {
-  local col="$1"
-  local next="$2"
-  sed -n "/^## ${col}$/,/^## ${next}$/p" "$INBOX" | grep '^- \[ \]' | sed 's/^- \[ \] //'
-}
+  fetch_titles() {
+    local status="$1"
+    local out="$2"
+    gh issue list -R "$GH_TASK_REPO" --state open --label "status:${status}" \
+      --limit 100 --json title \
+      --template '{{range .}}{{.title}}{{"\n"}}{{end}}' \
+      > "$out" 2>/dev/null || true
+  }
 
-READY=$(get_column "Ready" "In Progress")
-IN_PROGRESS=$(get_column "In Progress" "Backlog")
-BACKLOG=$(get_column "Backlog" "Done")
+  fetch_count() {
+    local status="$1"
+    local out="$2"
+    gh issue list -R "$GH_TASK_REPO" --state open --label "status:${status}" \
+      --limit 200 --json number --jq 'length' \
+      > "$out" 2>/dev/null || echo 0 > "$out"
+  }
 
-count_lines() {
-  [ -z "$1" ] && echo 0 && return
-  printf '%s' "$1" | grep -c '^' 2>/dev/null || echo 0
-}
+  fetch_titles in-progress "$TMP_DIR/in_progress" &
+  fetch_titles ready "$TMP_DIR/ready" &
+  fetch_count backlog "$TMP_DIR/backlog_count" &
+  wait
 
-R_COUNT=$(count_lines "$READY")
-IP_COUNT=$(count_lines "$IN_PROGRESS")
-B_COUNT=$(count_lines "$BACKLOG")
+  IN_PROGRESS=$(cat "$TMP_DIR/in_progress" 2>/dev/null)
+  READY=$(cat "$TMP_DIR/ready" 2>/dev/null)
+  BACKLOG_COUNT=$(cat "$TMP_DIR/backlog_count" 2>/dev/null | tr -d '[:space:]')
+  case "$BACKLOG_COUNT" in
+    ''|*[!0-9]*) BACKLOG_COUNT=0 ;;
+  esac
 
-if [ "$R_COUNT" -gt 0 ] || [ "$IP_COUNT" -gt 0 ] || [ "$B_COUNT" -gt 0 ]; then
-  echo "📋 Open Tasks"
+  count_lines() {
+    [ -z "$1" ] && echo 0 && return
+    printf '%s' "$1" | grep -c '^' 2>/dev/null || echo 0
+  }
 
-  if [ "$IP_COUNT" -gt 0 ]; then
-    echo ""
-    echo "▶ In Progress ($IP_COUNT):"
-    echo "$IN_PROGRESS" | while IFS= read -r line; do
-      clean=$(echo "$line" | sed 's/\[\[.*|\(.*\)\]\]/\1/g; s/\[\[.*\]\]//g; s/\*\*//g' | cut -c1-120)
-      echo "  • $clean"
-    done
-  fi
+  IP_COUNT=$(count_lines "$IN_PROGRESS")
+  R_COUNT=$(count_lines "$READY")
 
-  if [ "$R_COUNT" -gt 0 ]; then
-    echo ""
-    echo "⏳ Ready ($R_COUNT):"
-    echo "$READY" | while IFS= read -r line; do
-      clean=$(echo "$line" | sed 's/\[\[.*|\(.*\)\]\]/\1/g; s/\[\[.*\]\]//g; s/\*\*//g' | cut -c1-120)
-      echo "  • $clean"
-    done
-  fi
+  if [ "$R_COUNT" -gt 0 ] || [ "$IP_COUNT" -gt 0 ] || [ "$BACKLOG_COUNT" -gt 0 ]; then
+    echo "📋 Open Tasks"
 
-  if [ "$B_COUNT" -gt 0 ]; then
-    echo ""
-    echo "📦 Backlog ($B_COUNT)"
+    if [ "$IP_COUNT" -gt 0 ]; then
+      echo ""
+      echo "▶ In Progress ($IP_COUNT):"
+      echo "$IN_PROGRESS" | while IFS= read -r line; do
+        [ -z "$line" ] && continue
+        clean=$(echo "$line" | sed 's/\*\*//g; s/\[\[.*|\(.*\)\]\]/\1/g; s/\[\[.*\]\]//g' | cut -c1-120)
+        echo "  • $clean"
+      done
+    fi
+
+    if [ "$R_COUNT" -gt 0 ]; then
+      echo ""
+      echo "⏳ Ready ($R_COUNT):"
+      echo "$READY" | while IFS= read -r line; do
+        [ -z "$line" ] && continue
+        clean=$(echo "$line" | sed 's/\*\*//g; s/\[\[.*|\(.*\)\]\]/\1/g; s/\[\[.*\]\]//g' | cut -c1-120)
+        echo "  • $clean"
+      done
+    fi
+
+    if [ "$BACKLOG_COUNT" -gt 0 ]; then
+      echo ""
+      echo "📦 Backlog ($BACKLOG_COUNT)"
+    fi
   fi
 fi
 
