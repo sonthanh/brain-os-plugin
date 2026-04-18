@@ -25,9 +25,9 @@
   },
   {
     "id": "bot-eligibility-documented",
-    "description": "Auto mode step 1 must explicitly document that only 🤖 (bot-eligible) tasks qualify and 👤 (human-required) tasks are always skipped",
-    "args": "pickup auto (Ready has only 👤 tasks)",
-    "expect": "🤖"
+    "description": "Auto mode step 1 must explicitly document that only bot-eligible tasks (owner:bot label) qualify and human-required tasks (owner:human) are always skipped",
+    "args": "pickup auto (Ready has only owner:human tasks)",
+    "expect": "owner:human"
   },
   {
     "id": "gh-status-ready-query",
