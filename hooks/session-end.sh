@@ -3,6 +3,10 @@
 
 set -uo pipefail
 
+# Skip in non-interactive claude -p subprocess context (e.g. email extraction workers).
+# These subprocesses run in parallel; the hook racing 10× on git causes index.lock failures.
+[[ -n "${CLAUDE_SUBPROCESS:-}" ]] && exit 0
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/resolve-vault.sh"
 
