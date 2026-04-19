@@ -55,6 +55,15 @@
         "Mentions checking SessionStart index or recent tool results first",
         "Mentions reading the matched file directly instead of fresh vault scan"
       ]
+    },
+    {
+      "id": 7,
+      "prompt": "When grill is analyzing an external system or comparing with a tool, what should it establish first?",
+      "expected_output": "The user's actual problem or needs — before any analysis of the external system's features.",
+      "expectations": [
+        "Mentions anchoring on user problems or needs before analyzing external systems",
+        "Problem-first before solution-first framing"
+      ]
     }
   ]
 }
