@@ -36,6 +36,11 @@ fi
 mkdir -p "$SESSIONS_DIR"
 SUMMARY_FILE="$SESSIONS_DIR/${TIMESTAMP}-${REPO_NAME}.md"
 
+# Dedup: when multiple concurrent sessions end in the same minute+cwd, they
+# otherwise stomp on this filename and emit N redundant commits. First writer
+# wins; later arrivals exit cleanly.
+[ -f "$SUMMARY_FILE" ] && exit 0
+
 SINCE=$(date -v-2H +%Y-%m-%dT%H:%M:%S 2>/dev/null || date -d "2 hours ago" +%Y-%m-%dT%H:%M:%S 2>/dev/null)
 
 {
