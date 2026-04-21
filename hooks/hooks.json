@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "H=$(ls -d ~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/hooks 2>/dev/null | sort -Vr | head -1) && bash \"$H/session-start-tasks.sh\""
+            "command": "H=$(ls -d ~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/hooks 2>/dev/null | grep -E '/[0-9]+\\.[0-9]+\\.[0-9]+/hooks$' | sort -Vr | head -1) && bash \"$H/session-start-tasks.sh\""
           }
         ]
       }
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "H=$(ls -d ~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/hooks 2>/dev/null | sort -Vr | head -1) && bash \"$H/smart-diff-check.sh\""
+            "command": "H=$(ls -d ~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/hooks 2>/dev/null | grep -E '/[0-9]+\\.[0-9]+\\.[0-9]+/hooks$' | sort -Vr | head -1) && bash \"$H/smart-diff-check.sh\""
           }
         ]
       },
@@ -26,7 +26,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "H=$(ls -d ~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/hooks 2>/dev/null | sort -Vr | head -1) && bash \"$H/touch-status-dirty.sh\""
+            "command": "H=$(ls -d ~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/hooks 2>/dev/null | grep -E '/[0-9]+\\.[0-9]+\\.[0-9]+/hooks$' | sort -Vr | head -1) && bash \"$H/touch-status-dirty.sh\""
           }
         ]
       },
@@ -34,7 +34,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "H=$(ls -d ~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/hooks 2>/dev/null | sort -Vr | head -1) && bash \"$H/trace-capture.sh\""
+            "command": "H=$(ls -d ~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/hooks 2>/dev/null | grep -E '/[0-9]+\\.[0-9]+\\.[0-9]+/hooks$' | sort -Vr | head -1) && bash \"$H/trace-capture.sh\""
           }
         ]
       }
@@ -44,7 +44,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "H=$(ls -d ~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/hooks 2>/dev/null | sort -Vr | head -1) && bash \"$H/session-end.sh\""
+            "command": "H=$(ls -d ~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/hooks 2>/dev/null | grep -E '/[0-9]+\\.[0-9]+\\.[0-9]+/hooks$' | sort -Vr | head -1) && bash \"$H/session-end.sh\""
           }
         ]
       }
