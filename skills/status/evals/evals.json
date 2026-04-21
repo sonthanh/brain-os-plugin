@@ -1,20 +1,44 @@
 [
   {
-    "id": "gh-issue-list-queries",
-    "description": "Status must query GH via `gh issue list -R $GH_TASK_REPO --state open --label status:*` for Ready/In Progress/Blocked/Backlog counts",
+    "id": "regen-gate-invocation",
+    "description": "Skill must invoke render-status.sh --if-stale so the cache regens lazily (not on every call)",
     "args": "status",
-    "expect": "gh issue list -R $GH_TASK_REPO --state open --label status:"
+    "expect": "render-status.sh --if-stale"
   },
   {
-    "id": "type-handover-detection",
-    "description": "Pending-handover detection must use the --label type:handover filter, not the old `[Handover]` title prefix heuristic",
+    "id": "cache-path-documented",
+    "description": "Skill must document the cache file path ~/.cache/brain-os/status.md so the reader knows what to Read",
     "args": "status",
-    "expect": "--label type:handover"
+    "expect": "~/.cache/brain-os/status.md"
+  },
+  {
+    "id": "dirty-marker-path",
+    "description": "Skill must document the dirty marker path so the hook + script share one contract",
+    "args": "status",
+    "expect": "~/.cache/brain-os/status.dirty"
+  },
+  {
+    "id": "force-flag-behavior",
+    "description": "Skill must describe the -f flag behavior (force regen by omitting --if-stale)",
+    "args": "status",
+    "expect": "-f"
   },
   {
     "id": "config-reference-block",
     "description": "Skill must have a ## Config block pointing at brain-os.config.md so vault_path + gh_task_repo can be resolved",
     "args": "status",
     "expect": "## Config"
+  },
+  {
+    "id": "max-age-safety-net",
+    "description": "Skill must document the STATUS_CACHE_MAX_AGE safety net — external gh mutations bypass the hook, so a max-age backstop is required",
+    "args": "status",
+    "expect": "STATUS_CACHE_MAX_AGE"
+  },
+  {
+    "id": "email-focus-owner-filter",
+    "description": "Email Focus must be restricted to me-personal + me-business owners so team-handled breaches don't bubble into the user's briefing",
+    "args": "status",
+    "expect": "me-personal"
   }
 ]

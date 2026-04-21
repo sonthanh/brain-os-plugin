@@ -1,120 +1,117 @@
 ---
 name: status
-description: "Use when user wants a briefing on current state — tasks, emails, handovers, priorities. Replaces /today and /close. Triggers on: status, what should I do, what's pending, brief me, morning review, wrap up, end of day"
+description: "Use when user wants a briefing on current state — tasks, emails, handovers, priorities. Reads a lazily-regenerated cache. Triggers on: status, what should I do, what's pending, brief me, morning review, wrap up, end of day"
 model: sonnet
 ---
 
 ## Config
 
-**Vault path + GitHub task repo:** read from `${CLAUDE_PLUGIN_ROOT}/brain-os.config.md` (or user-local `~/.brain-os/brain-os.config.md` which takes precedence). The keys are `vault_path:` and `gh_task_repo:`. In shell/hook contexts, `source hooks/resolve-vault.sh` and use `$VAULT_PATH` / `$GH_TASK_REPO`. In skill prose, substitute `$GH_TASK_REPO` below with the configured value.
+**Vault path + GitHub task repo:** read from `${CLAUDE_PLUGIN_ROOT}/brain-os.config.md` (or user-local `~/.brain-os/brain-os.config.md` which takes precedence). The keys are `vault_path:` and `gh_task_repo:`. In shell/hook contexts, `source hooks/resolve-vault.sh` and use `$VAULT_PATH` / `$GH_TASK_REPO`.
 
 # /status — Briefing at Any Time
 
-Works any time of day. No daily boundary assumption. Shows what needs attention right now.
+Works any time of day. No daily boundary assumption. Shows what needs attention right now. **Reads from a prebuilt cache; does not query GH or parse files on the hot path.**
+
+## Architecture
+
+`/status` displays a bash-regenerated markdown file at `~/.cache/brain-os/status.md`. The briefing is produced by `render-status.sh` (pure bash, no LLM) — queries GitHub Issues, parses `sla-open.md`, filters `git log`, extracts research signals, etc. Regeneration is lazy: it runs only when the cache is stale. Hot-path cost is one `Read` of a ~2 KB markdown file.
+
+**Cache:** `~/.cache/brain-os/status.md`
+**Dirty marker:** `~/.cache/brain-os/status.dirty`
+**Regen script:** `${CLAUDE_PLUGIN_ROOT}/skills/status/render-status.sh`
+
+### Why this design
+
+Every `/status` invocation previously ran 4 `gh issue list` calls + 7 file reads + LLM synthesis, bloating session context past 41k tokens. The briefing is 99% mechanical aggregation (counts, filters, table parsing, date math), so the regen is implemented as pure bash. The LLM only reads the output.
+
+Freshness is guaranteed by:
+
+- **mtime watch** of every file the briefing depends on (`sla-open.md`, today's `daily-summary.md` / `needs-reply.md`, `content-ideas.md`, `context/*.md`, latest `*-ai-engineer-weekly.md`) — any source newer than the cache ⇒ regen.
+- **Dirty marker** (`status.dirty`) touched by the `touch-status-dirty.sh` PostToolUse hook whenever a Bash command mutates a GitHub issue (`gh issue edit|close|reopen|comment|delete|...`). GH state is the one source that has no file on disk, so it needs an explicit signal.
+- **Daily reset** via a `<!-- cache-date: YYYY-MM-DD -->` header at the top of `status.md` — if the header date ≠ today, regen. No cron job; survives reboots.
+- **Max-age safety net** — regen forced when cache mtime is older than `STATUS_CACHE_MAX_AGE` seconds (default 1800 / 30 min). Catches external GH mutations that bypass the hook: cron jobs, launchd tasks, or `gh issue close` run from a plain terminal outside Claude Code. Bounds drift to at most 30 min for those blind spots without pounding GitHub on every invocation.
+
+### Concurrency
+
+Two sessions running `/status` at the same moment each call `render-status.sh --if-stale`. Worst case both regen and race on the output; `render-status.sh` writes atomically via `mv tmpfile status.md` (atomic on the same filesystem) so the last writer wins with fully fresh data.
+
+The dirty marker is cleared on the **first line** of regen, before any source is read. If a concurrent mutation touches the marker mid-regen, the next `/status` sees it and regenerates again — no lost-signal race.
 
 ## Behavior
 
-1. **Check pending handovers** — `gh issue list -R $GH_TASK_REPO --state open --label type:handover --json number,title,body`. The `type:handover` label IS the signal — do not infer from `daily/handovers/` filenames, the SessionStart hook's "Recent Handovers" index (context, not a task list), or wiki-link references inside other issues' bodies.
+1. **Run the regen gate.** Invoke:
 
-   An In Progress issue that mentions a handover file in its body is ONE item (the issue), not two. The handover file is the spec for that issue — it is not itself a pending handover.
-
-2. **Check tasks** — query GH at render time (other sessions may have changed labels):
    ```
-   gh issue list -R $GH_TASK_REPO --state open --label status:in-progress --json number,title,labels
-   gh issue list -R $GH_TASK_REPO --state open --label status:ready --json number,title,labels
-   gh issue list -R $GH_TASK_REPO --state open --label status:blocked --json number,title,labels
-   gh issue list -R $GH_TASK_REPO --state open --label status:backlog --json number --jq 'length'
-   ```
-   List `In Progress` / `Ready` / `Blocked` with counts + titles (prefix each with `#N`). Backlog = count only unless user asks for detail. Closed issues = Done; do not list.
-
-3. **Check content ideas** (if `~/work/ai-leaders-vietnam/` exists):
-   - Read `~/work/ai-leaders-vietnam/content-ideas.md` (canonical location — writing focus lives in the ai-leaders-vietnam repo, not the vault)
-   - Count items in "Next Up" and "Writing" columns
-   - Add to briefing: `### Content\n- X ideas ready, Y in writing`
-   - If Writing > 0: list titles so user knows what's in flight
-
-4. **Check email intelligence** (if today's files exist):
-   - `{vault}/business/intelligence/emails/YYYY-MM-DD-daily-summary.md` — totals, key signals
-   - `{vault}/business/intelligence/emails/YYYY-MM-DD-needs-reply.md` — pending replies with priority
-
-5. **Check SLA ledger** — read `{vault}/business/intelligence/emails/sla-open.md`. This is the **single source of truth** for unanswered emails across days, owners, and tiers. The triage workflow maintains it each run.
-
-   Parse the `## Breached` table and `## Open` table. From the breached items extract:
-   - Count by tier: `fast`, `normal`, `slow`
-   - Group by owner bucket (`me-personal`, `me-business`, `partners`, `support`, `business`, `legal`, `accounting`, `hr`, `license`)
-   - Top 3 most overdue (sorted by tier severity, then by overdue duration)
-
-   If `sla-open.md` is missing, treat as zero — do not error.
-
-6. **Check recent activity** — `git log --oneline --since="24 hours ago"` across the vault repo to show what was done recently.
-
-7. **Read context** — `{vault}/context/strategy.md` and `{vault}/context/goals.md` for priorities.
-
-   Also check this week's AI-engineer research signal: look for the most recent `{vault}/knowledge/research/reports/*-ai-engineer-weekly.md` (preferred) or `*-ai-engineer-daily.md` (historical fallback), capped at **≤8 days old**. Extract the `## Brain-os applicability` section's bullets. If the file or section is missing, skip silently — do not invent suggestions.
-
-8. **Present briefing**:
-   ```
-   ## Status — YYYY-MM-DD HH:MM
-
-   ### Pending Handovers
-   - #N — [title] → handover doc link from body
-
-   ### Tasks
-   **Ready (N)**
-   - #N — [P1] ...
-   **In Progress (N)**
-   - #N — [P1] ...
-   **Blocked (N)**
-   - #N — [P1] ...
-   **Backlog: N items** (expand on request)
-
-   ### Content
-   - X ideas ready, Y in writing
-
-   ### Email
-   - X needs reply today (Y high priority)
-   - Key: [one-line signal]
-
-   ### SLA  ← always show, even if zero
-   B breached / O open total — fast: F, normal: N, slow: S
-   By owner: me-personal F+N, me-business F+N, partners F+N, ...
-   Top breaches:
-   - 🔴 fast — sender → owner — "Subject" — Nh overdue
-   - 🟠 normal — sender → owner — "Subject" — N business days overdue
-   - 🟡 slow — sender → owner — "Subject" — N business days overdue
-   → Full ledger: [[business/intelligence/emails/sla-open]]
-
-   ### Recent Activity (24h)
-   - [commit summaries]
-
-   ### Research Signal (YYYY-MM-DD)  ← only if ≤8-day-old ai-engineer-weekly (or historical -daily) report has a Brain-os applicability section
-   - [bullet 1 verbatim from report]
-   - [bullet 2]
-   - [bullet 3]
-   → Full report: [[knowledge/research/reports/YYYY-MM-DD-ai-engineer-weekly]]
-
-   ### Email Focus
-   1. [top email item needing user action]
-   2. [second]
-   3. [third]
+   bash ${CLAUDE_PLUGIN_ROOT}/skills/status/render-status.sh --if-stale
    ```
 
-   When `B == 0 && O == 0`, render `### SLA` as a single line: `All clear — no open items.` Don't omit the section.
+   - If user passed `-f` (force): omit `--if-stale` — regen unconditionally.
+   - The script exits 0 in ≤100 ms when cache is fresh; regen is typically 1–3 s.
 
-9. **If pending handover exists**, ask: "Want to pick up [topic] (#N)?"
+2. **Read the cache** — `Read ~/.cache/brain-os/status.md` — and display its contents verbatim. Do not re-aggregate, re-sort, or re-phrase the briefing. The cache IS the briefing.
+
+3. **If a pending handover is present in the briefing**, ask: "Want to pick up [topic] (#N)?"
+
+## Output format (produced by `render-status.sh`)
+
+```
+## Status — YYYY-MM-DD HH:MM
+
+### Pending Handovers                  ← omitted when none
+- #N — [title]
+
+### Tasks
+**Ready (N)**
+- #N — [P1] ...
+**In Progress (N)**
+**Blocked (N)**                        ← omitted when N=0
+**Backlog: N items** (expand on request)
+
+### Content                            ← omitted when ai-leaders-vietnam repo absent
+- X ideas ready, Y in writing
+(Writing list if Y > 0)
+
+### Email                              ← omitted when no daily-summary today
+- X needs reply today
+- Key: [first Key Signals bullet]
+
+### SLA                                ← always shown
+B breached / O open total — fast: F, normal: N, slow: S
+By owner: ...
+Top breaches: (up to 3)
+→ Full ledger: [[business/intelligence/emails/sla-open]]
+
+### Recent Activity (24h)
+- [commit summaries, auto:/gmail-triage:/OAuth churn filtered]
+"All quiet (routine auto-saves only)" if filter leaves nothing
+
+### Research Signal (YYYY-MM-DD)       ← ≤8 days old + Brain-os applicability present
+- [verbatim bullet 1]
+- [verbatim bullet 2]
+- [verbatim bullet 3]
+→ Full report: [[knowledge/research/reports/YYYY-MM-DD-ai-engineer-weekly]]
+
+### Email Focus                        ← me-personal + me-business only, capped at 3
+1. [tier/owner] sender — "subject"
+```
+
+When no SLA items exist, the `### SLA` section renders as `All clear — no open items.` — it is never omitted.
 
 ## Rules
-- No daily note creation — this is a briefing, not a ritual
-- No "morning" or "evening" framing — works at any hour
-- Keep it concise — if nothing needs attention, say "All clear."
-- **Tasks section is the primary task view. Do NOT add a "Task Focus" synthesis.** Issues are already prioritized by `priority:p*` labels and sorted by column; re-ranking is redundant noise. User picks from the Ready list directly.
-- **Email Focus stays** — email has many SLA items and needs triage/owner filtering. This is different from tasks.
-- **Email Focus = only owner buckets that need user action:** `me-personal` + `me-business`. Team-owned breaches (`support`, `partners`, `business`, `legal`, `accounting`, `hr`, `license`) stay visible in the SLA table but do NOT bubble into Email Focus — team handles routine ops.
-  - Within Email Focus, `fast` breaches outrank `normal` outrank `slow`. Cap at 3 items.
-  - If no me-personal/me-business items breached or open-urgent: `Email Focus: All clear.`
-- Never invent SLA state — if `sla-open.md` doesn't exist, the SLA section reports `All clear (no ledger)` and the system skips SLA-driven priority bumping.
-- **Multi-session concurrency:** GH issues are server-side SSOT — labels reflect the latest state across all sessions. Always re-query at render time; do not cache earlier reads in a long session.
-- **Research Signal is advisory, not a task queue:** display verbatim bullets from the most recent `*-ai-engineer-weekly.md` (preferred) or `*-ai-engineer-daily.md` (historical), capped at ≤8 days old. Omit the section if the file or its `## Brain-os applicability` block is missing. Never generate or paraphrase suggestions — if the report didn't ship, the section doesn't render.
+
+- No daily note creation — this is a briefing, not a ritual.
+- No "morning" or "evening" framing — works at any hour.
+- **Do not rerun GH queries or reparse source files in prose.** The cache is authoritative. If the user asks a follow-up ("what's Ready?", "show me #91"), query GH directly for that specific issue; don't regen the briefing.
+- **Email Focus = only owner buckets that need user action:** `me-personal` + `me-business`. Team-owned breaches (`support`, `partners`, `business`, `legal`, `accounting`, `hr`, `license`) stay visible in the SLA table but do not bubble into Email Focus.
+- **Cache trust envelope:** the cache is correct for the set of sources watched + the dirty marker. If the user reports a staleness bug, investigate the regen gate (missing mtime-watch target? gh issue event type not matched by the hook?) rather than disabling the cache.
+- **Never invent SLA state** — if `sla-open.md` doesn't exist, the SLA section reports `All clear (no ledger)` and no SLA-driven prioritization happens.
+
+## Troubleshooting
+
+- **Briefing looks stale:** `rm -f ~/.cache/brain-os/status.md` then `/status`, or run `/status -f`.
+- **Regen fails silently:** `bash render-status.sh 2>&1` in a terminal shows the first error. Common causes: `gh` unauthed (tasks section skipped with "GH unavailable"), `jq` missing, `VAULT_PATH` misconfigured.
+- **Hook not firing on GH mutations:** check `~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/hooks/hooks.json` registers `touch-status-dirty.sh` under `PostToolUse` with matcher `Bash`.
+- **Tighter freshness for live debugging:** export `STATUS_CACHE_MAX_AGE=60` before running `/status` to force regen on any cache older than 60 s. Revert by unsetting the var — the 1800 s default is a deliberate tradeoff between drift and GitHub load.
 
 ## Outcome log
 
@@ -124,4 +121,4 @@ Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/status.log
 {date} | status | briefing | ~/work/brain-os-plugin | N/A | commit:N/A | {result}
 ```
 
-- `result`: `pass` (briefing delivered), `fail` (vault unreadable or missing)
+- `result`: `pass` (briefing delivered), `fail` (cache unreadable and regen failed)

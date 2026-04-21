@@ -22,6 +22,15 @@
         ]
       },
       {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "H=$(ls -d ~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/hooks 2>/dev/null | sort -Vr | head -1) && bash \"$H/touch-status-dirty.sh\""
+          }
+        ]
+      },
+      {
         "hooks": [
           {
             "type": "command",
