@@ -1,7 +1,6 @@
 ---
 name: status
 description: "Use when user wants a briefing on current state — tasks, emails, handovers, priorities. Reads a lazily-regenerated cache. Triggers on: status, what should I do, what's pending, brief me, morning review, wrap up, end of day"
-model: sonnet
 ---
 
 ## Config
