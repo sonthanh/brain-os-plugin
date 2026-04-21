@@ -313,6 +313,89 @@ else
 fi
 echo "" >> "$TMP_FILE"
 
+# --- Cron (last 24h) -----------------------------------------------------
+# Surface what local launchd jobs have been doing. Especially pickup-auto,
+# which can claim+spawn auto-worker sessions in the background.
+CRON_CUTOFF=$(date -u -v-24H +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null)
+CRON_LINES=""
+
+# auto-journal — detect via latest YYYY-MM-DD.log in journal logs dir
+JOURNAL_LOG_DIR="$VAULT_PATH/daily/journal/logs"
+if [ -d "$JOURNAL_LOG_DIR" ]; then
+  AJ_LATEST_LOG=$(find "$JOURNAL_LOG_DIR" -maxdepth 1 -name '????-??-??.log' -type f 2>/dev/null | sort -r | head -1)
+  if [ -n "$AJ_LATEST_LOG" ]; then
+    AJ_TARGET=$(basename "$AJ_LATEST_LOG" .log)
+    if grep -q "Journal completed successfully" "$AJ_LATEST_LOG" 2>/dev/null; then
+      AJ_LINE="**auto-journal** (daily 08:00) — ✅ wrote $AJ_TARGET"
+    elif grep -q "SKIP — weekly usage" "$AJ_LATEST_LOG" 2>/dev/null; then
+      AJ_LINE="**auto-journal** (daily 08:00) — ⏭️ $AJ_TARGET skipped (quota)"
+    elif grep -q "All .* attempts failed" "$AJ_LATEST_LOG" 2>/dev/null; then
+      REASON=""
+      grep -q "hit your limit" "$AJ_LATEST_LOG" 2>/dev/null && REASON=" quota exhausted"
+      AJ_LINE="**auto-journal** (daily 08:00) — ❌ $AJ_TARGET failed${REASON}"
+    else
+      AJ_LINE="**auto-journal** (daily 08:00) — ⚠️ $AJ_TARGET status unclear"
+    fi
+    CRON_LINES="${CRON_LINES}${AJ_LINE}
+"
+  fi
+fi
+
+# pickup-auto — parse cron.log for last-24h ticks / claims / spawns
+PICKUP_LOG="$HOME/.local/state/pickup-auto/cron.log"
+if [ -f "$PICKUP_LOG" ] && [ -n "$CRON_CUTOFF" ]; then
+  PU_RECENT=$(awk -v cutoff="$CRON_CUTOFF" '
+    /^\[/ {
+      ts = substr($1, 2, length($1) - 2)
+      if (ts >= cutoff) print
+    }
+  ' "$PICKUP_LOG")
+  PU_TICKS=$(printf '%s\n' "$PU_RECENT" | grep -c "=== pickup-auto tick" || true)
+  PU_SKIPS=$(printf '%s\n' "$PU_RECENT" | grep -c "SKIP — weekly usage" || true)
+  PU_PROCEEDS=$(printf '%s\n' "$PU_RECENT" | grep -c "PROCEED — weekly usage" || true)
+  PU_CLAIMS=$(printf '%s\n' "$PU_RECENT" | grep -c "\] claimed:" || true)
+  PU_SPAWNS=$(printf '%s\n' "$PU_RECENT" | grep -c "\] spawned:" || true)
+  # Force-numeric (grep -c can print empty in some edge cases under set -u)
+  : "${PU_TICKS:=0}"; : "${PU_SKIPS:=0}"; : "${PU_PROCEEDS:=0}"; : "${PU_CLAIMS:=0}"; : "${PU_SPAWNS:=0}"
+  if [ "$PU_TICKS" -gt 0 ]; then
+    PU_ICON="✅"
+    [ "$PU_PROCEEDS" -eq 0 ] && PU_ICON="⏭️"
+    PU_DETAIL="${PU_TICKS} ticks · ${PU_PROCEEDS} proceed / ${PU_SKIPS} skip · ${PU_CLAIMS} claimed, ${PU_SPAWNS} spawned"
+    if [ "$PU_SPAWNS" -gt 0 ]; then
+      PU_ISSUES=$(printf '%s\n' "$PU_RECENT" | grep "\] spawned:" | grep -oE "auto-issue-[0-9]+" | sort -u | sed 's/auto-issue-/#/' | tr '\n' ' ' | sed 's/ $//')
+      [ -n "$PU_ISSUES" ] && PU_DETAIL="${PU_DETAIL}: ${PU_ISSUES}"
+    fi
+    CRON_LINES="${CRON_LINES}**pickup-auto** (every 2h) — ${PU_ICON} ${PU_DETAIL}
+"
+  fi
+fi
+
+# clean-temp-git-cache — parse log for tick count + total cleaned
+CTGC_LOG="$HOME/.local/state/clean-temp-git-cache.log"
+if [ -f "$CTGC_LOG" ] && [ -n "$CRON_CUTOFF" ]; then
+  CTGC_RECENT=$(awk -v cutoff="$CRON_CUTOFF" '
+    /^\[/ {
+      ts = substr($1, 2, length($1) - 2)
+      if (ts >= cutoff) print
+    }
+  ' "$CTGC_LOG")
+  CTGC_TICKS=$(printf '%s\n' "$CTGC_RECENT" | grep -c "cleaned=" || true)
+  CTGC_TOTAL=$(printf '%s\n' "$CTGC_RECENT" | grep -oE "cleaned=[0-9]+" | awk -F= '{sum+=$2} END {print sum+0}')
+  : "${CTGC_TICKS:=0}"; : "${CTGC_TOTAL:=0}"
+  if [ "$CTGC_TICKS" -gt 0 ]; then
+    CRON_LINES="${CRON_LINES}**clean-temp-git-cache** (every 30m) — ✅ ${CTGC_TICKS} ticks · ${CTGC_TOTAL} cleaned
+"
+  fi
+fi
+
+if [ -n "$CRON_LINES" ]; then
+  {
+    echo "### Cron (last 24h)"
+    printf '%s' "$CRON_LINES"
+    echo ""
+  } >> "$TMP_FILE"
+fi
+
 # --- Research Signal (≤8 days old) --------------------------------------
 latest_report=$(find "$VAULT_PATH/knowledge/research/reports" -maxdepth 1 -name '*-ai-engineer-weekly.md' -type f 2>/dev/null | sort -r | head -1)
 if [ -z "$latest_report" ]; then
