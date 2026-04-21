@@ -388,6 +388,68 @@ if [ -f "$CTGC_LOG" ] && [ -n "$CRON_CUTOFF" ]; then
   fi
 fi
 
+# vault-lint — parse cron.log for last-24h ticks / decision / completion
+VL_LOG="$HOME/.local/state/vault-lint/cron.log"
+if [ -f "$VL_LOG" ] && [ -n "$CRON_CUTOFF" ]; then
+  VL_RECENT=$(awk -v cutoff="$CRON_CUTOFF" '
+    /^\[/ {
+      ts = substr($1, 2, length($1) - 2)
+      if (ts >= cutoff) print
+    }
+  ' "$VL_LOG")
+  VL_TICKS=$(printf '%s\n' "$VL_RECENT" | grep -c "=== vault-lint tick" || true)
+  VL_SKIPS=$(printf '%s\n' "$VL_RECENT" | grep -c "SKIP — weekly usage" || true)
+  VL_PROCEEDS=$(printf '%s\n' "$VL_RECENT" | grep -c "PROCEED — weekly usage" || true)
+  VL_OK=$(printf '%s\n' "$VL_RECENT" | grep -c "vault-lint completed successfully" || true)
+  VL_FAIL=$(printf '%s\n' "$VL_RECENT" | grep -c "vault-lint failed" || true)
+  : "${VL_TICKS:=0}"; : "${VL_SKIPS:=0}"; : "${VL_PROCEEDS:=0}"; : "${VL_OK:=0}"; : "${VL_FAIL:=0}"
+  if [ "$VL_TICKS" -gt 0 ]; then
+    if [ "$VL_FAIL" -gt 0 ]; then
+      VL_ICON="❌"
+    elif [ "$VL_OK" -gt 0 ]; then
+      VL_ICON="✅"
+    elif [ "$VL_SKIPS" -gt 0 ] && [ "$VL_PROCEEDS" -eq 0 ]; then
+      VL_ICON="⏭️"
+    else
+      VL_ICON="⚠️"
+    fi
+    VL_DETAIL="${VL_TICKS} ticks · ${VL_PROCEEDS} proceed / ${VL_SKIPS} skip · ${VL_OK} ok / ${VL_FAIL} fail"
+    CRON_LINES="${CRON_LINES}**vault-lint** (daily 03:00) — ${VL_ICON} ${VL_DETAIL}
+"
+  fi
+fi
+
+# improve — parse cron.log for last-24h ticks / decision / completion
+IMP_LOG="$HOME/.local/state/improve/cron.log"
+if [ -f "$IMP_LOG" ] && [ -n "$CRON_CUTOFF" ]; then
+  IMP_RECENT=$(awk -v cutoff="$CRON_CUTOFF" '
+    /^\[/ {
+      ts = substr($1, 2, length($1) - 2)
+      if (ts >= cutoff) print
+    }
+  ' "$IMP_LOG")
+  IMP_TICKS=$(printf '%s\n' "$IMP_RECENT" | grep -c "=== improve tick" || true)
+  IMP_SKIPS=$(printf '%s\n' "$IMP_RECENT" | grep -c "SKIP — weekly usage" || true)
+  IMP_PROCEEDS=$(printf '%s\n' "$IMP_RECENT" | grep -c "PROCEED — weekly usage" || true)
+  IMP_OK=$(printf '%s\n' "$IMP_RECENT" | grep -c "improve completed successfully" || true)
+  IMP_FAIL=$(printf '%s\n' "$IMP_RECENT" | grep -c "improve failed" || true)
+  : "${IMP_TICKS:=0}"; : "${IMP_SKIPS:=0}"; : "${IMP_PROCEEDS:=0}"; : "${IMP_OK:=0}"; : "${IMP_FAIL:=0}"
+  if [ "$IMP_TICKS" -gt 0 ]; then
+    if [ "$IMP_FAIL" -gt 0 ]; then
+      IMP_ICON="❌"
+    elif [ "$IMP_OK" -gt 0 ]; then
+      IMP_ICON="✅"
+    elif [ "$IMP_SKIPS" -gt 0 ] && [ "$IMP_PROCEEDS" -eq 0 ]; then
+      IMP_ICON="⏭️"
+    else
+      IMP_ICON="⚠️"
+    fi
+    IMP_DETAIL="${IMP_TICKS} ticks · ${IMP_PROCEEDS} proceed / ${IMP_SKIPS} skip · ${IMP_OK} ok / ${IMP_FAIL} fail"
+    CRON_LINES="${CRON_LINES}**improve** (Sun 04:00) — ${IMP_ICON} ${IMP_DETAIL}
+"
+  fi
+fi
+
 if [ -n "$CRON_LINES" ]; then
   {
     echo "### Cron (last 24h)"
