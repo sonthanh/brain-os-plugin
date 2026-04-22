@@ -200,5 +200,59 @@
     "description": "Outcome log spec must describe the new feedback action + encoded=N/M optional field",
     "expected_in_skill": ["`feedback` (Phase 0 only)", "encoded={N}/{M}", "feedback mode"],
     "type": "skill-content-check"
+  },
+  {
+    "name": "phase0-scope-validation-substep",
+    "description": "Phase 0.3 must include a scope-validation substep that runs before proposing encoding",
+    "expected_in_skill": ["Scope validation first", "Mis-routed rules", "defense-in-depth"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "phase0-scope-short-circuits",
+    "description": "Phase 0.3 must list the three short-circuits that skip scope validation",
+    "expected_in_skill": ["Skip scope validation when", "is a list", "already routing to the shared layer", "no sibling `references/`"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "phase0-scope-deterministic-detection",
+    "description": "Phase 0.3 must describe deterministic keyword detection via references/ section titles",
+    "expected_in_skill": ["Deterministic scope detection", "Extract section titles", "key terms", "distinct section titles matched"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "phase0-scope-latent-fallback",
+    "description": "Phase 0.3 must spawn an Agent sub-agent as latent fallback with a conservative default on malformed output",
+    "expected_in_skill": ["Latent fallback", "subagent_type", "UNIVERSAL", "SKILL-SPECIFIC", "Conservative default"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "phase0-scope-override-policy",
+    "description": "Phase 0.3 must define the override policy — override only when detected universal + individual SKILL.md target",
+    "expected_in_skill": ["Override policy", "final_target_path", "respect declared", "no override"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "phase0-scope-archive-frontmatter",
+    "description": "Phase 0.5 archive frontmatter must record scope_declared, scope_detected, override_applied, final_target_path",
+    "expected_in_skill": ["scope_declared:", "scope_detected:", "override_applied:", "final_target_path:"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "phase0-scope-report-line",
+    "description": "Phase 0.6 report line must surface the four scope fields",
+    "expected_in_skill": ["scope_declared", "scope_detected", "override_applied", "final_target_path"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "phase5-feedback-encoded-table",
+    "description": "Phase 5 report template must include a Feedback encoded table with scope columns",
+    "expected_in_skill": ["Feedback encoded (Phase 0)", "Scope declared", "Scope detected", "Override", "Final target path"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "outcome-log-scope-overrides-field",
+    "description": "Outcome log section must document the scope_overrides optional field",
+    "expected_in_skill": ["scope_overrides={N}", "target_path overridden"],
+    "type": "skill-content-check"
   }
 ]

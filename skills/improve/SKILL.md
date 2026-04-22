@@ -96,13 +96,66 @@ Missing / unresolvable `target_skill` → flip `status: stale` in frontmatter wi
 
 ### Step 0.3 — Latent: propose encoding
 
-Read the file body (Rule / Why / How to apply / Suggested encoding) plus current contents of the target file. Propose the **smallest change** that enforces the rule:
+**Scope validation first.** Before proposing the encoding, validate that the declared `target_path` matches the rule's actual scope. Mis-routed rules (a universal rule encoded into a single SKILL.md when the plugin has a shared-reference layer) create SSOT violations — sibling skills that should inherit the rule never see it. This check is defense-in-depth for upstream feedback-creation logic; when upstream classifies correctly the check is a no-op.
 
-- **Spec-level rule** → bullet added to an existing section of SKILL.md (or the equivalent markdown spec file, e.g. `commands/gmail-triage.md`).
+Skip scope validation when any of the following hold:
+
+- `target_skill` is a list (e.g. `[fb-writer, substack-writer, news-analyst]`) — multi-skill declaration already signals universal intent.
+- `target_path` resolves inside a `references/` directory — already routing to the shared layer.
+- The target skill has no sibling `references/` directory (walk from `<source-repo>/skills/<target_skill>/` up one level and check `<source-repo>/references/`). No shared layer exists to route to.
+
+Otherwise — target resolves to an individual `SKILL.md` AND a sibling `references/` exists — run the hybrid detector below.
+
+**Deterministic scope detection:**
+
+1. Locate the references dir by walking from `<source-repo>/skills/<target_skill>/` up one level to `<source-repo>/references/`.
+2. Extract section titles from every `*.md` in that dir — grep `^##+ ` headers.
+3. Normalize the rule body (Rule / Why / How to apply — **exclude** Suggested encoding, which often cross-references shared sections without making the rule universal) to lowercase.
+4. For each section title, extract distinctive key terms (2+ word phrases, or single words longer than 4 chars that aren't common stopwords). Check whether any key term appears in the normalized rule body.
+5. Distinct-section matches:
+   - ≥2 distinct section titles matched → **likely universal**, flag scope mismatch.
+   - Exactly 1 match → **inconclusive**, fall through to latent fallback.
+   - Zero matches → **likely skill-specific**, no override.
+
+**Latent fallback** (runs only when deterministic is inconclusive OR when references dir has fewer than 3 section titles to grep against):
+
+Spawn an Agent sub-agent (`subagent_type: general-purpose`, model: sonnet) with this prompt:
+
+> You are judging whether a feedback rule is UNIVERSAL (applies to every skill in a category and belongs in a shared reference file) or SKILL-SPECIFIC (only for one skill, belongs in its own SKILL.md).
+>
+> Reply strictly on line 1: `UNIVERSAL` or `SKILL-SPECIFIC`. One-sentence rationale on line 2. No other output.
+>
+> Rule body (Rule / Why / How to apply):
+> ```
+> {rule_body}
+> ```
+>
+> Existing shared reference contents (what already lives in the shared layer for this plugin):
+> ```
+> {shared_reference_contents_truncated_to_4000_chars}
+> ```
+>
+> Declared target: {target_path}
+
+**Output handling:** first line must be exactly `UNIVERSAL` or `SKILL-SPECIFIC`. Malformed / non-conforming / empty → treat as `SKILL-SPECIFIC`. Conservative default — respect declared target when uncertain.
+
+**Override policy:**
+
+- `scope_detected: universal` + declared `target_path` = individual SKILL.md → **override**. Set `final_target_path` to the references file whose section titles matched (deterministic path) or to `references/shared-rules.md` if it exists (latent path), falling back to the references file with the most section titles overall.
+- `scope_detected: skill-specific` → respect declared `target_path`, no override.
+- `scope_detected: uncertain` (latent returned malformed or ambiguous) → respect declared `target_path`, no override, but record uncertainty for the Phase 5 report so routing drift is visible.
+
+Record per-file into the Phase 5 report: `scope_declared`, `scope_detected`, `override_applied`, `final_target_path`.
+
+---
+
+Once `final_target_path` is resolved, propose the **smallest change** that enforces the rule at that path:
+
+- **Spec-level rule** → bullet added to an existing section of the target file (SKILL.md, shared reference, or markdown spec file like `commands/gmail-triage.md`).
 - **Deterministic pattern** (regex, filter, constant) → script edit (e.g. `scripts/foo.ts`, `lib/bar.ts`).
 - **Acceptance case** → new fixture in the skill's eval suite (`evals/`, `commands/<skill>-evals/`).
 
-If the file provides `Suggested encoding`, treat it as a strong hint — deviate only if it would produce a broken or dead change. Otherwise, choose the location that makes the rule most enforceable at the skill's next invocation.
+If the file provides `Suggested encoding`, treat it as a strong hint — deviate only if it would produce a broken or dead change, OR if scope detection overrode the target (the suggested encoding location then points at the now-wrong file; re-derive for `final_target_path`). Otherwise, choose the location that makes the rule most enforceable at the skill's next invocation.
 
 Keep the change surgical. Do not refactor surrounding code. Do not add comments that restate the rule — the pending-file Why/How-to-apply IS the explanation, and it will live permanently in `feedback-encoded/`.
 
@@ -133,18 +186,25 @@ On accept:
    encoded_at: YYYY-MM-DD HH:MM
    encoded_in_commit: <short-sha>
    eval_pass_after: <N>/<M>
+   scope_declared: <target_path as declared in pending frontmatter, or "n/a" if absent>
+   scope_detected: universal | skill-specific | uncertain | skipped
+   override_applied: true | false
+   final_target_path: <path actually written to — equals scope_declared when override_applied=false>
    ```
+   (`scope_detected: skipped` covers the short-circuits in Step 0.3 — list target, references target, no references dir.)
 3. `mv` the file from `daily/feedback-pending/` to `daily/feedback-encoded/` (preserving filename). Commit the move.
 4. Push both commits in one `git push` at the end of the phase.
 
 ### Step 0.6 — Report
 
-Append one line per file to Phase 5 report (and to the outcome log):
+Append one line per file to the Phase 5 report "Feedback encoded" table (and to the outcome log):
 
 ```
-| <slug> | <target_skill> | encoded | <before>/<total> → <after>/<total> | <commit-sha> |
-| <slug> | <target_skill> | stale   | <reason> | — |
+| <slug> | <target_skill> | encoded | <before>/<total> → <after>/<total> | <commit-sha> | <scope_declared> | <scope_detected> | <override_applied> | <final_target_path> |
+| <slug> | <target_skill> | stale   | <reason> | — | <scope_declared> | <scope_detected> | false | <scope_declared> |
 ```
+
+When `override_applied: true` the final_target_path differs from scope_declared — that is the signal upstream feedback-creation routed incorrectly. Track these counts in the outcome log via `scope_overrides={N}` so routing drift surfaces across runs.
 
 ---
 
@@ -354,6 +414,14 @@ Write report to `{vault}/daily/improve-reports/{date}-{skill}.md`:
 
 ## Auto-generated evals
 - {N} new eval cases added from user corrections
+
+## Feedback encoded (Phase 0)
+| Slug | Target skill | Status | Eval | Commit | Scope declared | Scope detected | Override | Final target path |
+|------|--------------|--------|------|--------|----------------|----------------|----------|-------------------|
+| {slug} | {skill} | encoded | {before}/{total} → {after}/{total} | {sha} | {declared_path} | universal\|skill-specific\|uncertain\|skipped | true\|false | {final_path} |
+
+## Scope overrides
+- {N} feedback files had scope detected as universal but declared an individual SKILL.md target → routing was overridden to the shared reference layer. High counts signal upstream feedback-creation drift; companion issue tracks the upstream fix.
 ```
 
 Commit and push the report to the vault.
@@ -381,4 +449,4 @@ Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/improve.lo
 - `action`: `improve` (Phase 1–5 single-skill), `feedback` (Phase 0 only), `rank` (no-arg rank-only report)
 - `output_path`: `daily/improve-reports/{date}-{skill}.md` for improve/rank; `daily/feedback-encoded/` (or last archived slug) for feedback
 - `result`: `pass` if evals improved and changes kept (or ≥1 feedback file encoded); `partial` if some changes reverted or some feedback stale; `fail` if all reverted, all stale, or no input data
-- Optional: `args="{skill-name}"`, `score={after_pass}/{after_total}`, `encoded={N}/{M}` (feedback mode: N encoded of M pending)
+- Optional: `args="{skill-name}"`, `score={after_pass}/{after_total}`, `encoded={N}/{M}` (feedback mode: N encoded of M pending), `scope_overrides={N}` (feedback mode: N files had target_path overridden by scope detection — see Phase 0.3)

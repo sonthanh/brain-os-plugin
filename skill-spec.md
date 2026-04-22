@@ -34,6 +34,8 @@ Pipe-delimited, 7 required fields + optional trailing key=value pairs:
 - `args="..."` — original input/topic (replayed as eval case by `/improve`)
 - `score=N.N` — rubric score from evaluator (correlate with result for severity)
 - `interrupt="..."` — user-stated reason for stopping (explicit failure reason)
+- `encoded=N/M` — `/improve` feedback action only: N feedback files encoded out of M pending
+- `scope_overrides=N` — `/improve` feedback action only: N files had their declared `target_path` overridden by Phase 0 scope-routing intelligence (see `skills/improve/SKILL.md` Phase 0.3). High counts signal upstream feedback-creation is mis-classifying rule scope.
 
 Unknown keys are ignored (forward-compat). Missing trailing fields are fine (backwards-compat).
 
