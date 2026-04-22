@@ -34,5 +34,11 @@
     "description": "Skill must document the canonical cross-session flow: /handover in current session (creates issue + doc) → sp tab new → /pickup <N> in new tab. No hand-crafted start prompts — pickup reads the issue + handover doc as SSOT.",
     "args": "handover",
     "expect": "Cross-session handover"
+  },
+  {
+    "id": "tasks-by-source-not-entity",
+    "description": "Skill must document that seeding / ingestion handovers should be framed by source (e.g. 'Seed from Airtable') not output entity (e.g. 'Seed people'). A single pass through one source produces all entity types — splitting by entity hides that fact and forces redundant scans.",
+    "args": "handover",
+    "expect": "Tasks by source"
   }
 ]

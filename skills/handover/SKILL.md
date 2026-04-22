@@ -120,6 +120,12 @@ When the user wraps up a session and wants to continue in a new Supaterm tab (cy
 
 Do NOT hand-craft a start prompt and pipe it via `sp pane send`. `/pickup` reads the issue body + linked handover doc — that's the single source of truth for next-session context. Manual prompts drift and skip context the handover doc captured.
 
+### Tasks by source, not by entity (for seeding / ingestion handovers)
+
+When the handover covers a seeding or ingestion task that pulls from an external system, frame the task by **source** (e.g. "Seed from Airtable", "Seed from Gmail") rather than by **output entity** (e.g. "Seed people", "Seed companies", "Seed meetings").
+
+A single pass through one source produces all entity types at once — splitting by entity forces redundant scans and hides that gmail / airtable / slack each need their own one-pass extractor. Entity types go in the task description as outputs, not as separate tasks. Downstream dependencies should reference the source task ("Depends on Seed from Airtable"), not an entity task.
+
 ## Outcome log
 
 The `create-handover-issue.sh` script appends the log line automatically with the shape:
