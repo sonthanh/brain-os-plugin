@@ -36,10 +36,22 @@
     "expect": "gh issue list -R $GH_TASK_REPO --state open --label status:ready"
   },
   {
-    "id": "session-claim-atomic-protocol",
-    "description": "Skill must document the claim:session- label-based atomic claim protocol that prevents concurrent pickup races",
+    "id": "claim-via-status-label-flip",
+    "description": "Skill must document the simplified claim protocol: atomic status:ready → status:in-progress flip as the lock (replaces prior claim:session- label approach, which broke because gh --add-label won't auto-create labels).",
     "args": "pickup",
-    "expect": "claim:session-"
+    "expect": "--remove-label status:ready --add-label status:in-progress"
+  },
+  {
+    "id": "direct-claim-by-issue-number",
+    "description": "Skill must support /pickup <N> as a direct-claim mode: skip Ready-list filtering, claim the specific issue, load its body (or handover doc), start. So `cyrc /pickup 100` resolves to issue #100 immediately instead of running the interactive handover-first flow.",
+    "args": "pickup 100",
+    "expect": "Direct claim"
+  },
+  {
+    "id": "no-ephemeral-claim-labels-in-protocol",
+    "description": "Active claim protocol must NOT instruct creating ephemeral claim:session-* labels — they required gh label create before --add-label (failed 'label not found'), didn't actually solve the TOCTOU race, and polluted the label namespace. Historical mention in a race-note explanation is allowed, but no active `gh issue edit --add-label \"claim:session-` command should remain.",
+    "args": "pickup",
+    "expect-not-command": "gh issue edit N -R $GH_TASK_REPO --add-label \"claim:session-"
   },
   {
     "id": "config-reference-block",

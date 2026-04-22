@@ -9,7 +9,30 @@ description: "Use when starting a new session and wanting to resume unfinished w
 
 **Vault path + GitHub task repo:** read from `${CLAUDE_PLUGIN_ROOT}/brain-os.config.md` (or user-local `~/.brain-os/brain-os.config.md` which takes precedence). Keys: `vault_path:`, `gh_task_repo:`. In shell/hook contexts, `source hooks/resolve-vault.sh` and use `$VAULT_PATH` / `$GH_TASK_REPO`. In skill prose, substitute `$GH_TASK_REPO` below with the configured value.
 
-## `/pickup` — Single interactive flow
+## Invocation modes
+
+- **`/pickup`** — no args: interactive flow over Ready list (handovers first, then top task)
+- **`/pickup <N>`** — direct claim of issue #N, skipping Ready-list filtering entirely
+- **`/pickup auto [--all] [--force]`** — background spawner (see dedicated section)
+
+## `/pickup <N>` — Direct claim of a specific issue
+
+When the user passes a bare integer (e.g. `/pickup 100`, `cyrc /pickup 100`), treat it as "claim this issue and start." Do NOT run the interactive Ready-list flow.
+
+1. **Fetch the issue**:
+   ```bash
+   gh issue view N -R $GH_TASK_REPO --json number,title,state,labels,body
+   ```
+2. **Validate**:
+   - Closed → abort with "Issue #N is already closed." Do not reopen.
+   - No `status:*` label → treat as unclaimed; proceed.
+3. **Claim** via the single protocol below (no-op if already `status:in-progress` — user explicitly requested this issue, so continue either way).
+4. **Load context**:
+   - Labels include `type:handover` → extract the relative `[handover](daily/handovers/…)` link from the body, read that file, follow the "Handover Task Behavior" section.
+   - Otherwise → treat the issue body as the spec; read any linked grill / plan docs referenced in the body.
+5. **Start executing immediately.** Never re-grill locked decisions.
+
+## `/pickup` — Interactive flow (no args)
 
 1. **Query open Ready tasks** from GitHub:
    ```bash
@@ -18,7 +41,7 @@ description: "Use when starting a new session and wanting to resume unfinished w
    Labels carry all metadata (priority, weight, owner, type) — do not parse title for markers.
 
 2. **Handovers first:** filter the Ready list to issues carrying `type:handover`. Do NOT infer handovers from title prefixes or body wiki-links — the label IS the signal.
-   - Found → claim with session-claim protocol (below) → load linked handover doc → start
+   - Found → claim → load linked handover doc → start
    - Multiple → show list, ask user which one
    - None → continue to step 3
 
@@ -30,33 +53,29 @@ description: "Use when starting a new session and wanting to resume unfinished w
 
 5. **Start top remaining task** — claim first Ready task → begin
 
-## Session-claim protocol
+## Claim protocol
 
-Every claim of a `status:ready` issue (interactive or auto) MUST follow this protocol to prevent race conflicts when multiple sessions pick concurrently:
+The claim IS the `status:in-progress` label. No ephemeral `claim:session-*` labels — they were overengineering for a single-user repo and caused "label not found" errors because `gh issue edit --add-label` won't auto-create.
 
-1. **Pick candidate** — issue must have `status:ready` and no `claim:session-*` label.
-2. **Atomic claim** — add a unique claim label:
+1. **Check current status** (skip if already in-progress and we've been asked explicitly for this issue):
    ```bash
-   gh issue edit N -R $GH_TASK_REPO --add-label "claim:session-$$-$(date +%s)"
+   current=$(gh issue view N -R $GH_TASK_REPO --json labels --jq '[.labels[].name | select(startswith("status:"))] | .[0]')
    ```
-   `$$` is the shell PID; `$(date +%s)` is epoch seconds. Combined → unique per session.
-3. **Re-fetch and check for race**:
-   ```bash
-   gh issue view N -R $GH_TASK_REPO --json labels --jq '[.labels[].name | select(startswith("claim:session-"))] | length'
-   ```
-   If count > 1 → another session claimed first. Remove own claim and skip this issue:
-   ```bash
-   gh issue edit N -R $GH_TASK_REPO --remove-label "claim:session-$$-$(date +%s)"
-   ```
-4. **Take ownership** — transition status:
+   - `status:ready` → proceed to transition
+   - `status:in-progress` → already claimed; in `/pickup <N>` continue anyway (user chose), in interactive `/pickup` skip to the next candidate
+   - `status:blocked` or closed → abort, surface to user
+
+2. **Atomic transition** (one `gh` call, both labels flipped in a single request):
    ```bash
    gh issue edit N -R $GH_TASK_REPO --remove-label status:ready --add-label status:in-progress
    ```
-5. **On completion** — close the issue; the claim label stays on the closed issue for audit:
+
+3. **On completion** — close the issue:
    ```bash
    gh issue close N -R $GH_TASK_REPO --reason completed
    ```
-   (A cron job cleans stale `claim:session-*` labels off open issues whose timestamp is >6h old — out of scope here.)
+
+Race note: two sessions reading `status:ready` simultaneously and transitioning in the same second will both succeed (GitHub has no label CAS). In practice — solo user, a handful of sessions — this is rare and benign: duplicate work at worst, and the handover / issue body converges the outputs. Do not bring back `claim:session-*` labels as "safety"; they don't solve the race (still TOCTOU between create-label and add-label) and they pollute the label namespace.
 
 ## Step 2: Autogrill Ready Tasks
 
@@ -119,14 +138,13 @@ When the user grills on the remaining questions:
 
 ## `/pickup auto` — Launch tasks in background
 
-1. **Find eligible tasks** — query GH with combined filters, then filter out already-claimed issues client-side:
+1. **Find eligible tasks** — query GH for Ready + bot-eligible issues:
    ```bash
    gh issue list -R $GH_TASK_REPO --state open \
      --label status:ready --label owner:bot \
-     --json number,title,labels,body \
-     --jq '[.[] | select(all(.labels[]; .name | startswith("claim:session-") | not))]'
+     --json number,title,labels,body
    ```
-   The `owner:bot` filter replaces the `👤` exclusion — `owner:human` tasks (which need a human grill) are not returned. The client-side `select(...)` drops any issue already carrying a `claim:session-*` label.
+   The `owner:bot` filter replaces the `👤` exclusion — `owner:human` tasks (which need a human grill) are not returned. Any issue already at `status:in-progress` is automatically excluded by the `status:ready` filter.
 
    Then apply time-aware weight filtering on the remaining list:
    - **Work hours (09:00–22:00)**: only pick issues with `weight:quick`. Skip `weight:heavy`.
@@ -134,7 +152,7 @@ When the user grills on the remaining questions:
    - **`--force` flag**: skip time-aware filtering entirely — pick any eligible Ready issue regardless of weight or hour. Used by the pickup-auto cron.
    - **Zero eligible tasks found** → log `pass | score=0/0` and exit. Do NOT continue to steps 2–5.
 
-2. **Claim eligible tasks** via session-claim protocol above (each issue individually; a race-lost issue is dropped from the batch).
+2. **Claim each eligible task** via the Claim protocol (atomic `status:ready → status:in-progress` flip). If the flip fails because the issue was already `status:in-progress` when re-checked, drop it from the batch and continue.
 
 3. **Build dependency DAG** before launching anything:
    - **Step 1 — Scan issue bodies:** for each claimed issue, parse body for `depends on #N` (GH auto-links this) and free-text `depends on X`/`Depends on P1 Y` patterns
@@ -233,12 +251,16 @@ Session A:
   /handover → creates handover doc + opens GH issue (status:ready, type:handover)
 
 Session B (new Claude):
-  /pickup → queries GH → filters type:handover → claims (session-claim protocol)
+  /pickup → queries GH → filters type:handover → claims (status:ready → status:in-progress)
         → loads handover doc → starts working
   ... work done ...
   gh issue close N --reason completed
 
-  /pickup auto → queries GH for status:ready + owner:bot, unclaimed
+Session B with explicit issue:
+  /pickup 100 → skip list, directly claim #100 → load body/handover → start
+
+Background:
+  /pickup auto → queries GH for status:ready + owner:bot
               → launches eligible in background (worktrees)
               → each self-closes its issue on success
 ```
@@ -251,8 +273,7 @@ Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/pickup.log
 {date} | pickup | {action} | ~/work/brain-os-plugin | N/A | commit:N/A | {result}
 ```
 
-- `action`: `pickup` (interactive) or `auto` (background launch)
+- `action`: `pickup` (interactive), `pickup:N` (direct claim of issue N), or `auto` (background launch)
 - `result`: `pass` if issues started/completed, `partial` if some escalated to user, `fail` if unrecoverable error (e.g. `gh` auth failure or network)
-- **No eligible tasks** (empty Ready column, only `owner:human` issues, or all claimed) → log `pass | score=0/0`, not `fail`
-- **Race lost on all claims** → log `pass | score=0/N`
+- **No eligible tasks** (empty Ready column, only `owner:human` issues, or all already in-progress) → log `pass | score=0/0`, not `fail`
 - Optional: `args="{issue-number}"`, `score={completed}/{launched}` (for auto mode)
