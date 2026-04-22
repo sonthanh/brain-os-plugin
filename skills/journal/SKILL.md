@@ -144,7 +144,6 @@ The user copies the journey doc to ai-leaders-vietnam and runs the content pipel
 
 ## Outcome log
 
-<<<<<<< Updated upstream
 Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/journal.log`:
 
 ```
@@ -154,13 +153,3 @@ Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/journal.lo
 - `action`: `journal` (single day) or `backfill` (catch-up)
 - `result`: `pass` if journal written with all data sources, `partial` if some sources missing, `fail` if no data found
 - Optional: `args="{date-or-day}"`, `score={days_written}/{days_attempted}` (for backfill)
-=======
-After each `/journal` run, append one line to `{vault}/daily/skill-outcomes/journal.log`:
-
-```
-{date} | journal | {action} | ~/work/brain-os-plugin | {vault}/daily/journal/{date}-journey.md | commit:{hash} | {result}
-```
-
-- `mode`: `backfill`, `single-day`, or `specific-date`
-- `result`: `pass` if journey doc created, `partial` if some sources missing, `fail` if errors
->>>>>>> Stashed changes

@@ -154,7 +154,6 @@ python3 ${CLAUDE_PLUGIN_ROOT}/skills/self-learn/scripts/summary.py {vault}/knowl
 
 ## Outcome log
 
-<<<<<<< Updated upstream
 Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/self-learn.log`:
 
 ```
@@ -164,13 +163,3 @@ Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/self-learn
 - `action`: `extract`, `validate`, or `extend`
 - `result`: `pass` if phase completed (validate = 100% pass rate), `partial` if progress but not complete, `fail` if stuck or errors
 - Optional: `args="--book {epub} --notebook-id {id}"`, `score={pass_rate}%`
-=======
-After each `/self-learn` run, append one line to `{vault}/daily/skill-outcomes/self-learn.log`:
-
-```
-{date} | self-learn | {action} | ~/work/brain-os-plugin | {vault}/knowledge/raw/{book-slug}/ | commit:{hash} | {result}
-```
-
-- `mode`: `full`, `extract`, `validate`, `extend`, or `status`
-- `result`: `pass` if phase(s) completed, `partial` if some concepts failed extraction, `fail` if errors
->>>>>>> Stashed changes

@@ -51,7 +51,6 @@ Results saved to `{book_vault}/_validation/audit-results-{date}.jsonl`.
 
 ## Outcome log
 
-<<<<<<< Updated upstream
 Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/verify.log`:
 
 ```
@@ -60,13 +59,3 @@ Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/verify.log
 
 - `result`: `pass` if 100% questions score ≥95 (audited=true), `fail` if any question fails (audited=false)
 - Optional: `args="{book-name}"`, `score={passed}/{total}`
-=======
-After each `/verify` run, append one line to `{vault}/daily/skill-outcomes/verify.log`:
-
-```
-{date} | verify | {action} | ~/work/brain-os-plugin | {book_vault}/_validation/audit-results-{date}.jsonl | commit:{hash} | {result}
-```
-
-- `mode`: `verify`, `status`, or `set-flag`
-- `result`: `pass` if 100% questions pass, `partial` if <100% pass rate, `fail` if errors
->>>>>>> Stashed changes

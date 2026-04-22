@@ -53,7 +53,6 @@ When triggered (by `/aha`, `/aha <note>`, or natural language like "aha"):
 
 ## Outcome log
 
-<<<<<<< Updated upstream
 Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/aha.log`:
 
 ```
@@ -62,12 +61,3 @@ Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/aha.log`:
 
 - `result`: `pass` (captured successfully), `fail` (context too sparse to capture)
 - Optional: `args="{user-one-liner}"`
-=======
-After each `/aha` run, append one line to `{vault}/daily/skill-outcomes/aha.log`:
-
-```
-{date} | aha | capture | ~/work/brain-os-plugin | {vault}/daily/sessions/{date}-aha.md | commit:{hash} | {result}
-```
-
-- `result`: `pass` if captured cleanly, `fail` if write error
->>>>>>> Stashed changes

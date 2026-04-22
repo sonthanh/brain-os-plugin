@@ -87,7 +87,6 @@ Approve updates? (all / pick numbers / skip)
 
 ## Outcome log
 
-<<<<<<< Updated upstream
 Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/absorb.log`:
 
 ```
@@ -98,14 +97,3 @@ Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/absorb.log
 - `output_path`: path to absorption report or synthesis file
 - `result`: `pass` if vault updates applied, `partial` if user skipped some proposals, `fail` if blocked by verify
 - Optional: `args="{book-name}"`, `corrections=N`
-=======
-After each `/absorb` run, append one line to `{vault}/daily/skill-outcomes/absorb.log`:
-
-```
-{date} | absorb | {action} | ~/work/brain-os-plugin | {output_path} | commit:{hash} | {result}
-```
-
-- `mode`: `single-book` or `cross-book`
-- `artifact_path`: path to synthesis doc or `N/A` if no file written
-- `result`: `pass` if completed cleanly, `partial` if some zones skipped, `fail` if errors
->>>>>>> Stashed changes

@@ -98,7 +98,6 @@ Do NOT ask for confirmation — execute the full chain.
 
 ## Outcome log
 
-<<<<<<< Updated upstream
 Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/ingest.log`:
 
 ```
@@ -107,14 +106,3 @@ Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/ingest.log
 
 - `result`: `pass` if all files processed, `partial` if some skipped, `fail` if errors
 - Optional: `args="{filepath}"`, `score={processed}/{total}`
-=======
-After each `/ingest` run, append one line to `{vault}/daily/skill-outcomes/ingest.log`:
-
-```
-{date} | ingest | {action} | ~/work/brain-os-plugin | {output_path} | commit:{hash} | {result}
-```
-
-- `mode`: `single-file` or `batch`
-- `artifact_path`: path to ingested book/article note
-- `result`: `pass` if all files processed, `partial` if some files skipped, `fail` if errors
->>>>>>> Stashed changes
