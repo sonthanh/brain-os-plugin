@@ -28,5 +28,11 @@
     "description": "Phase 5 must include a long-run quota gate — check /usage (not the stale ~/.cache/ccstatusline/usage.json) before multi-batch / multi-hour runs, with thresholds session≥95% stop 5h and weekly≥80% stop weekly",
     "args": "develop",
     "expect": "Long-run quota gate"
+  },
+  {
+    "id": "semantic-pipeline-tdd",
+    "description": "Phase 2 test-first must cover semantic LLM pipelines (extraction, classification, judge, summarization) — small slice first 5-10 batches, review output + token cost, then scale. Pipeline must support --batches N or --review-stop-after N flag.",
+    "args": "develop",
+    "expect": "Semantic LLM pipelines"
   }
 ]

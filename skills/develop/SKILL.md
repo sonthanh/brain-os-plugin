@@ -81,6 +81,15 @@ Before writing ANY implementation, define and write the verification:
 - [ ] Dry-run in restricted environment
 - [ ] Rollback plan identified
 
+#### Semantic LLM pipelines (extraction, classification, judge, summarization):
+
+TDD is not code-only. For any expensive semantic LLM pipeline, run a **small slice first** (5–10 batches), review output quality AND token cost, adjust prompt/schema/scope, THEN scale. One-shot on the full corpus is the semantic equivalent of shipping an untested refactor — rework cost becomes N× instead of 1×.
+
+- [ ] Pipeline supports `--batches N` or `--review-stop-after N` flag
+- [ ] First run stops after 5–10 batches with output + per-item token cost visible for review
+- [ ] Review gate decision: proceed / tweak prompt / rethink scope — before committing to the full run
+- [ ] Incident (pipeline-v2, 2026-04-18): extracted ~15k email threads one-shot with Sonnet; Phase 1.5 Opus validation re-judged 949 pages to find fabricated emails, wrong first-observed dates, source-id confusion — patterns a 50-page slice would have surfaced in minutes. Applies to extraction, classification, summarization, entity-linking, any LLM-as-judge gate.
+
 ### Phase 3: BUILD (Green)
 
 1. Write minimal code to make the test pass — nothing more
