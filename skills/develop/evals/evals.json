@@ -1,0 +1,32 @@
+[
+  {
+    "id": "iron-laws-section",
+    "description": "Skill must declare the four Iron Laws governing the develop lifecycle — non-negotiable TDD-style rules",
+    "args": "develop",
+    "expect": "Iron Laws"
+  },
+  {
+    "id": "first-principles-phase-0",
+    "description": "Phase 0 must require first-principles check — does it already exist, what's the minimal change, can existing code do it with < 10 lines",
+    "args": "develop",
+    "expect": "FIRST PRINCIPLES CHECK"
+  },
+  {
+    "id": "no-code-before-tests",
+    "description": "Iron Law 2 must enforce test-before-implementation — code without a prior failing test is deleted",
+    "args": "develop",
+    "expect": "No code before tests"
+  },
+  {
+    "id": "three-strike-rule",
+    "description": "Bug fix protocol must include a 3-strike rule — after 3 failed fix attempts on the same issue, STOP and report to user",
+    "args": "develop",
+    "expect": "3-strike rule"
+  },
+  {
+    "id": "long-run-quota-gate",
+    "description": "Phase 5 must include a long-run quota gate — check /usage (not the stale ~/.cache/ccstatusline/usage.json) before multi-batch / multi-hour runs, with thresholds session≥95% stop 5h and weekly≥80% stop weekly",
+    "args": "develop",
+    "expect": "Long-run quota gate"
+  }
+]

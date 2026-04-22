@@ -116,6 +116,17 @@ Full end-to-end verification in the real environment:
 5. **Eval**: for skills → run `/eval` and confirm pass
 6. **CI**: after push → verify pipeline green
 
+#### Long-run quota gate (multi-batch / multi-hour pipelines)
+
+Before launching any multi-batch validation, bulk extraction, judge, or multi-hour pipeline:
+
+1. Ask the user to paste `/usage` output (source of truth — queries live Anthropic API). Do NOT trust `~/.cache/ccstatusline/usage.json` — the statusline cache can be hours stale (incident 2026-04-21: file claimed 69% session when the true mtime was 5h30m before a session reset).
+2. Thresholds:
+   - **Session ≥95%** → stop, wait for 5h reset
+   - **Weekly ≥80%** → stop, wait for weekly reset (defer to next week)
+3. Stop mechanism for in-flight runs: `sp tab close <space/tab>` or kill the xargs PID. Flag files remain; re-run resumes from the last completed batch (idempotent contract).
+4. Weekly threshold is stricter because the reset is a full 7-day wait — defer conservatively.
+
 ### Phase 6: SHIP
 
 1. Commit + push
