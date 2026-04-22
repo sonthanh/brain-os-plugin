@@ -9,8 +9,9 @@ description: |
 ## Usage
 
 ```
-/improve <skill-name>        # Improve a specific skill
+/improve <skill-name>        # Improve a specific skill (Phase 1–5, from outcome logs)
 /improve                     # Scan all outcome logs, rank by error rate, suggest which to improve
+/improve feedback            # Scan daily/feedback-pending/, encode each rule into target skill (Phase 0)
 ```
 
 ## Clarifications
@@ -21,8 +22,8 @@ Answers to the five most common questions about `/improve` behavior — answer i
 
 Three modes:
 - **Auto-per-run** — skills auto-invoke `/improve {skill}` immediately after appending an outcome log line with `result != pass`. No user confirmation. See `skill-spec.md § 11 Auto-improve rule`.
-- **Scheduled batch** — daily cron (currently `trig_0183t3F6yec8NsdF6faNVn2m` at 6:07am) scans all outcome logs, ranks by error rate, picks top candidate, and runs full Phase 1–5 on it.
-- **Manual** — user invokes `/improve <skill>` ad hoc to force a learning pass.
+- **Scheduled batch** — daily cron (currently `trig_0183t3F6yec8NsdF6faNVn2m` at 6:07am) runs Phase 0 first (feedback-pending encode), then scans outcome logs, ranks by error rate, picks top candidate, and runs full Phase 1–5.
+- **Manual** — user invokes `/improve <skill>` ad hoc to force a learning pass. `/improve feedback` runs Phase 0 only.
 
 ### Signals — what counts as evidence?
 
@@ -67,6 +68,83 @@ Procedure to add a new optional field:
 - Grill sessions: `{vault}/daily/grill-sessions/`
 - Aha moments: `{vault}/thinking/aha/`
 - Reports: `{vault}/daily/improve-reports/`
+- **Feedback queue:** `{vault}/daily/feedback-pending/` (input) + `{vault}/daily/feedback-encoded/` (archive)
+
+---
+
+## Phase 0 — Encode pending feedback (deterministic scan + latent encoding)
+
+Phase 0 runs **before** Phase 1 in the daily cron and when invoked via `/improve feedback`. Skip entirely when `daily/feedback-pending/` contains no files other than `README.md`.
+
+Explicit user feedback is higher-signal than log-derived patterns — it's a direct rule the user wants enforced, not an inferred hypothesis. Phase 0 translates each pending file into code in its target skill, validates via the skill's eval suite, and archives the file on success. No LLM judgment about *what* the rule should be; only about *where* and *how* to encode it.
+
+### Step 0.1 — Collect pending files
+
+```bash
+find {vault}/daily/feedback-pending -maxdepth 1 -name '*.md' ! -name 'README.md' | sort
+```
+
+Zero files → stop. Report "no pending feedback" and exit Phase 0.
+
+### Step 0.2 — Per file, resolve target
+
+Parse frontmatter:
+- `target_skill` (REQUIRED) → locate `<source-repo>/skills/<target_skill>/SKILL.md`. Source-repo resolution follows the installed-plugin convention (e.g., `target_skill: gmail-triage` → `~/work/brain/commands/gmail-triage.md` for vault-level skills OR `~/work/brain-os-plugin/skills/gmail/SKILL.md` for plugin skills; resolver reads `source_repo` hints in the skill itself or walks known roots).
+- `target_path` (OPTIONAL) → exact file the encoding goes into; overrides the default SKILL.md.
+
+Missing / unresolvable `target_skill` → flip `status: stale` in frontmatter with `stale_reason: "unresolved target_skill"`, leave in pending/, notify user, skip to next file.
+
+### Step 0.3 — Latent: propose encoding
+
+Read the file body (Rule / Why / How to apply / Suggested encoding) plus current contents of the target file. Propose the **smallest change** that enforces the rule:
+
+- **Spec-level rule** → bullet added to an existing section of SKILL.md (or the equivalent markdown spec file, e.g. `commands/gmail-triage.md`).
+- **Deterministic pattern** (regex, filter, constant) → script edit (e.g. `scripts/foo.ts`, `lib/bar.ts`).
+- **Acceptance case** → new fixture in the skill's eval suite (`evals/`, `commands/<skill>-evals/`).
+
+If the file provides `Suggested encoding`, treat it as a strong hint — deviate only if it would produce a broken or dead change. Otherwise, choose the location that makes the rule most enforceable at the skill's next invocation.
+
+Keep the change surgical. Do not refactor surrounding code. Do not add comments that restate the rule — the pending-file Why/How-to-apply IS the explanation, and it will live permanently in `feedback-encoded/`.
+
+### Step 0.4 — Deterministic: eval gate
+
+Identify the skill's eval suite. Typical locations:
+- Plugin skills: `{source-repo}/skills/<skill>/evals/evals.json` (run via `/eval <skill>` or `scripts/eval-<skill>.sh`).
+- Vault-level commands: `{vault}/commands/<skill>-evals/` + `{vault}/scripts/eval-<skill>.sh`.
+
+```bash
+before_pass=$(run_eval | tee /tmp/improve-feedback-before.log | tail -1)
+apply_change
+after_pass=$(run_eval | tee /tmp/improve-feedback-after.log | tail -1)
+```
+
+- `after_pass >= before_pass` → encoding accepted.
+- `after_pass < before_pass` → revert (`git checkout -- <changed files>`), flip `status: stale` with `stale_reason: "eval regression {before} → {after}"`, leave in pending/.
+
+When the target skill has no eval suite, fall back to a spec-only check: apply the change, run the skill on a dry-run fixture if one exists, else accept the encoding but mark `eval_pass_after: n/a` in the archived frontmatter (so future readers know it was not regression-tested).
+
+### Step 0.5 — Commit + archive
+
+On accept:
+1. Stage + commit the target-file edit with message `improve: encoded feedback — <slug> → <target_skill>`.
+2. Rewrite the pending file's frontmatter:
+   ```yaml
+   status: encoded
+   encoded_at: YYYY-MM-DD HH:MM
+   encoded_in_commit: <short-sha>
+   eval_pass_after: <N>/<M>
+   ```
+3. `mv` the file from `daily/feedback-pending/` to `daily/feedback-encoded/` (preserving filename). Commit the move.
+4. Push both commits in one `git push` at the end of the phase.
+
+### Step 0.6 — Report
+
+Append one line per file to Phase 5 report (and to the outcome log):
+
+```
+| <slug> | <target_skill> | encoded | <before>/<total> → <after>/<total> | <commit-sha> |
+| <slug> | <target_skill> | stale   | <reason> | — |
+```
 
 ---
 
@@ -297,8 +375,10 @@ Commit and push the report to the vault.
 Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/improve.log`:
 
 ```
-{date} | improve | improve | ~/work/brain-os-plugin | daily/improve-reports/{date}-{skill}.md | commit:{hash} | {result}
+{date} | improve | {action} | ~/work/brain-os-plugin | {output_path} | commit:{hash} | {result}
 ```
 
-- `result`: `pass` if evals improved and changes kept, `partial` if changes reverted (evals dropped), `fail` if no outcome data
-- Optional: `args="{skill-name}"`, `score={after_pass}/{after_total}`
+- `action`: `improve` (Phase 1–5 single-skill), `feedback` (Phase 0 only), `rank` (no-arg rank-only report)
+- `output_path`: `daily/improve-reports/{date}-{skill}.md` for improve/rank; `daily/feedback-encoded/` (or last archived slug) for feedback
+- `result`: `pass` if evals improved and changes kept (or ≥1 feedback file encoded); `partial` if some changes reverted or some feedback stale; `fail` if all reverted, all stale, or no input data
+- Optional: `args="{skill-name}"`, `score={after_pass}/{after_total}`, `encoded={N}/{M}` (feedback mode: N encoded of M pending)

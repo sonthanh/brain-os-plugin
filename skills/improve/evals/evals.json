@@ -134,5 +134,71 @@
     "description": "Phase 5 report table must expose size + semantic gate results per variant",
     "expected_in_skill": ["Size (bytes)", "Size OK?", "Semantic"],
     "type": "skill-content-check"
+  },
+  {
+    "name": "phase0-feedback-mode-documented",
+    "description": "/improve feedback usage mode must be documented so the cron + user know it exists",
+    "expected_in_skill": ["/improve feedback", "Phase 0"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "phase0-runs-before-phase1",
+    "description": "Phase 0 spec must state it runs before Phase 1 so cron orchestration is unambiguous",
+    "expected_in_skill": ["Phase 0 runs **before** Phase 1", "daily cron"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "phase0-pending-and-encoded-paths",
+    "description": "Phase 0 must reference both the input queue and archive directories",
+    "expected_in_skill": ["daily/feedback-pending/", "daily/feedback-encoded/"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "phase0-frontmatter-target-skill",
+    "description": "Phase 0 must require target_skill in frontmatter and support optional target_path",
+    "expected_in_skill": ["target_skill", "REQUIRED", "target_path", "OPTIONAL"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "phase0-encoding-locations",
+    "description": "Phase 0 must document the three encoding locations: spec, script, eval fixture",
+    "expected_in_skill": ["Spec-level rule", "Deterministic pattern", "Acceptance case"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "phase0-eval-gate",
+    "description": "Phase 0 must run the skill's eval suite and compare before/after pass counts",
+    "expected_in_skill": ["before_pass", "after_pass", "after_pass >= before_pass"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "phase0-revert-and-stale",
+    "description": "Phase 0 must revert on eval regression and flip frontmatter to status: stale",
+    "expected_in_skill": ["git checkout --", "status: stale", "eval regression"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "phase0-archive-frontmatter",
+    "description": "Phase 0 must write encoded_at, encoded_in_commit, eval_pass_after into the archived file",
+    "expected_in_skill": ["encoded_at", "encoded_in_commit", "eval_pass_after"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "phase0-no-eval-suite-fallback",
+    "description": "Phase 0 must document the fallback when the target skill has no eval suite",
+    "expected_in_skill": ["no eval suite", "n/a", "not regression-tested"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "phase0-commit-messages",
+    "description": "Phase 0 must produce two specific commit messages: the encoding and the archive",
+    "expected_in_skill": ["improve: encoded feedback", "Commit the move"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "outcome-log-feedback-action",
+    "description": "Outcome log spec must describe the new feedback action + encoded=N/M optional field",
+    "expected_in_skill": ["`feedback` (Phase 0 only)", "encoded={N}/{M}", "feedback mode"],
+    "type": "skill-content-check"
   }
 ]
