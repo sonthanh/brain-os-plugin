@@ -232,10 +232,14 @@ if [ -f "$SUMMARY_FILE" ] || [ -f "$NEEDS_REPLY_FILE" ]; then
 fi
 
 # --- SLA ledger ----------------------------------------------------------
-# Parse sla-open.md markdown tables. Column layout:
-# | Tier | Owner | From | To | Subject | MsgID | Received | Breach At | Overdue/Remaining | Status |
+# Parse sla-open.md markdown tables. Column layout (ai-brain#100 Phase 2):
+# | Tier | Owner | From | To | Subject | MsgID | Received | Breach At | Overdue/Remaining | Status | Category |
 # After awk "|" split, fields are: f[1]="" f[2]=tier f[3]=owner f[4]=from
-# f[5]=to f[6]=subject f[7]=msgid f[8]=received f[9]=breach f[10]=overdue f[11]=status f[12]=""
+# f[5]=to f[6]=subject f[7]=msgid f[8]=received f[9]=breach f[10]=overdue f[11]=status f[12]=category f[13]=""
+# We emit 6 pipe-delimited fields downstream: tier|owner|from|subject|overdue|category
+# Legacy rows without Category (pre-Phase-2) produce an empty 6th field — the
+# Email Focus filter shows them under an "uncategorized" bucket so nothing is
+# silently dropped.
 SLA_FILE="$EMAIL_DIR/sla-open.md"
 echo "### SLA" >> "$TMP_FILE"
 BREACHED_RAW=""
@@ -247,7 +251,7 @@ if [ -f "$SLA_FILE" ]; then
       /^## / && in_sec { exit }
       in_sec && /^\| / && !/^\| *Tier/ && !/---/ {
         for (i=1; i<=NF; i++) { gsub(/^ +| +$/, "", $i) }
-        if ($2 != "" && $3 != "") print $2 "|" $3 "|" $4 "|" $6 "|" $10
+        if ($2 != "" && $3 != "") print $2 "|" $3 "|" $4 "|" $6 "|" $10 "|" $12
       }
     ' "$SLA_FILE"
   }
@@ -261,55 +265,40 @@ if [ -f "$SLA_FILE" ]; then
   if [ "$B_TOTAL" -eq 0 ] && [ "$O_TOTAL" -eq 0 ]; then
     echo "All clear — no open items." >> "$TMP_FILE"
   else
-    b_fast=$(echo "$BREACHED_RAW" | awk -F'|' '$1=="fast"{n++} END{print n+0}')
-    b_norm=$(echo "$BREACHED_RAW" | awk -F'|' '$1=="normal"{n++} END{print n+0}')
-    b_slow=$(echo "$BREACHED_RAW" | awk -F'|' '$1=="slow"{n++} END{print n+0}')
-    echo "$B_TOTAL breached / $O_TOTAL open total — fast: $b_fast, normal: $b_norm, slow: $b_slow" >> "$TMP_FILE"
-
-    OWNER_LINE=$(printf '%s\n%s\n' "$BREACHED_RAW" "$OPEN_RAW" \
-      | awk -F'|' 'NF>=2 && $2 != "" { c[$2]++ } END {
-          out=""
-          for (o in c) out = out o " " c[o] ", "
-          sub(/, $/, "", out)
-          print out
-        }')
-    [ -n "$OWNER_LINE" ] && echo "By owner: $OWNER_LINE" >> "$TMP_FILE"
+    # mine = user_category=r-user (user owes reply)
+    # team = user_category=team-sla-at-risk (team owes reply, user awareness)
+    # aware = user_category=awareness (info only, counted separately)
+    b_mine=$(echo "$BREACHED_RAW" | awk -F'|' '$6=="r-user"{n++} END{print n+0}')
+    b_team=$(echo "$BREACHED_RAW" | awk -F'|' '$6=="team-sla-at-risk"{n++} END{print n+0}')
+    b_aware=$(echo "$BREACHED_RAW" | awk -F'|' '$6=="awareness"{n++} END{print n+0}')
+    b_uncat=$(echo "$BREACHED_RAW" | awk -F'|' 'NF>=5 && ($6=="" || $6==$5){n++} END{print n+0}')
+    echo "$B_TOTAL breached ($b_mine mine / $b_team team / $b_aware awareness) + $O_TOTAL open" >> "$TMP_FILE"
+    [ "$b_uncat" -gt 0 ] && echo "⚠️ $b_uncat breached row(s) missing Category — run migration to refresh." >> "$TMP_FILE"
 
     if [ "$B_TOTAL" -gt 0 ]; then
       echo "Top breaches:" >> "$TMP_FILE"
-      echo "$BREACHED_RAW" | head -3 | while IFS='|' read -r tier owner from subj overdue; do
+      # Rank breached rows for "Top breaches": r-user first, then team-sla-at-risk,
+      # then others. Within category, preserve ledger order (fast→normal→slow).
+      echo "$BREACHED_RAW" | awk -F'|' '
+        BEGIN { catp["r-user"]=1; catp["team-sla-at-risk"]=2; catp["awareness"]=3 }
+        NF>=5 { p = (catp[$6] ? catp[$6] : 9); print p "\t" $0 }
+      ' | sort -k1,1n | head -3 | while IFS=$'\t' read -r _ row; do
+        IFS='|' read -r tier owner from subj overdue category <<<"$row"
         icon="🟡"
         [ "$tier" = "normal" ] && icon="🟠"
         [ "$tier" = "fast" ] && icon="🔴"
         sender=$(echo "$from" | sed 's/ *<.*//' | cut -c1-40)
         subj_short=$(echo "$subj" | tr -d '"' | cut -c1-60)
         over=$(echo "$overdue" | sed 's/ *⚠️//g; s/^ *//; s/ *$//')
-        echo "- $icon $tier — $sender → $owner — \"$subj_short\" — $over overdue" >> "$TMP_FILE"
+        cat_tag=""
+        [ -n "$category" ] && cat_tag=" [$category]"
+        echo "- $icon $tier — $sender → $owner — \"$subj_short\" — $over overdue$cat_tag" >> "$TMP_FILE"
       done
     fi
     echo "→ Full ledger: [[business/intelligence/emails/sla-open]]" >> "$TMP_FILE"
   fi
 else
   echo "All clear (no ledger)" >> "$TMP_FILE"
-fi
-echo "" >> "$TMP_FILE"
-
-# --- Recent Activity (24h, auto: commits filtered) -----------------------
-echo "### Recent Activity (24h)" >> "$TMP_FILE"
-RECENT=""
-if [ -d "$VAULT_PATH/.git" ]; then
-  RECENT=$(git -C "$VAULT_PATH" log --oneline --since="24 hours ago" \
-    --invert-grep \
-    --grep='^auto:' \
-    --grep='^gmail-triage:' \
-    --grep='Update OAuth token' 2>/dev/null)
-fi
-if [ -n "$RECENT" ]; then
-  echo "$RECENT" | while IFS= read -r line; do
-    [ -n "$line" ] && echo "- $line" >> "$TMP_FILE"
-  done
-else
-  echo "All quiet (routine auto-saves only)" >> "$TMP_FILE"
 fi
 echo "" >> "$TMP_FILE"
 
@@ -486,34 +475,67 @@ if [ -n "$latest_report" ]; then
   fi
 fi
 
-# --- Email Focus (me-personal + me-business only, top 3) ----------------
+# --- Email Focus (Category filter — Phase 2 ai-brain#100) ----------------
+# Replaces the old me-personal/me-business owner-bucket filter with
+# user_category-based filtering per the dual-perspective taxonomy. Rank:
+#   1. r-user (user must reply) → always shown
+#   2. team-sla-at-risk + breached (team missing SLA, surface for CEO awareness)
+#   3. team-sla-at-risk + open (team responsible but SLA not yet breached)
+# Awareness items are counted in the header but not listed inline — they
+# clutter the focus list. Noise items never enter the ledger.
 echo "### Email Focus" >> "$TMP_FILE"
 if [ -f "$SLA_FILE" ] && { [ -n "$BREACHED_RAW" ] || [ -n "$OPEN_RAW" ]; }; then
-  FOCUS=$(
+  # Combine breached (flag as B) + open (flag as O) so we can prefer breached.
+  FOCUS_RANKED=$(
     {
-      printf '%s\n' "$BREACHED_RAW"
-      printf '%s\n' "$OPEN_RAW"
+      printf '%s\n' "$BREACHED_RAW" | awk -F'|' 'NF>=5{print "B|" $0}'
+      printf '%s\n' "$OPEN_RAW"     | awk -F'|' 'NF>=5{print "O|" $0}'
     } | awk -F'|' '
-      BEGIN { tierp["fast"]=1; tierp["normal"]=2; tierp["slow"]=3 }
-      NF>=4 && ($2 == "me-personal" || $2 == "me-business") {
-        tier=$1; owner=$2; from=$3; subj=$4
-        sub(/ *<.*/, "", from)
-        gsub(/"/, "", subj)
-        p = (tierp[tier] ? tierp[tier] : 9)
-        print p "\t" tier "\t" owner "\t" from "\t" subj
+      BEGIN {
+        # Priority: lower wins
+        # r-user  breached → 1   r-user  open → 2
+        # team-SLA breached → 3   team-SLA open → 4 (only if fast/normal)
+        # All others excluded.
       }
-    ' | sort -k1,1n | head -3
+      {
+        state=$1; tier=$2; owner=$3; from=$4; subj=$5; overdue=$6; cat=$7
+        if (cat == "r-user")            p = (state == "B" ? 1 : 2)
+        else if (cat == "team-sla-at-risk") {
+          if (state == "B")              p = 3
+          else if (tier == "fast" || tier == "normal") p = 4
+          else                            next   # slow team-sla-at-risk + open = too quiet
+        }
+        else next  # awareness + noise + uncategorized excluded from focus list
+        print p "\t" state "\t" tier "\t" owner "\t" from "\t" subj "\t" overdue "\t" cat
+      }
+    ' | sort -k1,1n | head -5
   )
-  if [ -n "$FOCUS" ]; then
-    N=1
-    echo "$FOCUS" | while IFS=$'\t' read -r _ tier owner from subj; do
-      sender=$(echo "$from" | cut -c1-35)
-      subj_short=$(echo "$subj" | cut -c1-55)
-      echo "$N. [$tier/$owner] $sender — \"$subj_short\"" >> "$TMP_FILE"
-      N=$((N+1))
+  if [ -n "$FOCUS_RANKED" ]; then
+    echo "$FOCUS_RANKED" | while IFS=$'\t' read -r _ state tier owner from subj overdue cat; do
+      sender=$(echo "$from" | sed 's/ *<.*//' | cut -c1-35)
+      subj_short=$(echo "$subj" | tr -d '"' | cut -c1-55)
+      over=$(echo "$overdue" | sed 's/ *⚠️//g; s/^ *//; s/ *$//')
+      case "$cat" in
+        r-user)            prefix="⭐ r-user" ;;
+        team-sla-at-risk)  prefix="🟡 team" ;;
+        *)                 prefix="? $cat" ;;
+      esac
+      case "$state" in
+        B) state_tag="breached, $over overdue" ;;
+        *) state_tag="open, $over" ;;
+      esac
+      echo "- $prefix ($tier/$owner) — $sender — \"$subj_short\" — $state_tag" >> "$TMP_FILE"
     done
+    # Awareness summary line (header-only signal)
+    aware_total=$(
+      {
+        printf '%s\n' "$BREACHED_RAW" | awk -F'|' '$6=="awareness"{n++} END{print n+0}'
+        printf '%s\n' "$OPEN_RAW" | awk -F'|' '$6=="awareness"{n++} END{print n+0}'
+      } | awk '{s+=$1} END{print s+0}'
+    )
+    [ "$aware_total" -gt 0 ] && echo "_+ $aware_total awareness item(s) — glance via full ledger._" >> "$TMP_FILE"
   else
-    echo "All clear." >> "$TMP_FILE"
+    echo "All clear — no r-user or team-SLA-at-risk items." >> "$TMP_FILE"
   fi
 else
   echo "All clear." >> "$TMP_FILE"
