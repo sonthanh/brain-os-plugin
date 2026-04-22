@@ -122,6 +122,42 @@ format_issues() {
     "- #\(.number) — \(if $pri != "" then "[\($pri)] " else "" end)\(.title)"' "$file" 2>/dev/null
 }
 
+# Detect issues that look picked-up in another session without status:in-progress.
+# Returns 0 if stealth-picked (recent vault commit referencing #N OR recent
+# handover/grill/task file matching the issue number), 1 otherwise.
+check_stealth_picked() {
+  local issue_num="$1"
+  # Git log: recent commits in vault referencing #N (word-boundary, avoid matching #N0)
+  if git -C "$VAULT_PATH" log --grep="#${issue_num}\b" --since="24 hours ago" --oneline 2>/dev/null | grep -q .; then
+    return 0
+  fi
+  # Vault files: matching handover/grill/task naming conventions, modified within 24h
+  if find "$VAULT_PATH/daily/handovers" "$VAULT_PATH/daily/grill-sessions" "$VAULT_PATH/business/tasks" \
+       -type f \( -name "*-issue-${issue_num}-*" -o -name "*issue-${issue_num}*" \) \
+       -mtime -1 2>/dev/null | grep -q .; then
+    return 0
+  fi
+  return 1
+}
+
+# Like format_issues but appends 🔄 + pickup footnote for stealth-picked items.
+# Used for Ready bucket where stealth-work creates misleading "untouched" signal.
+format_ready_issues() {
+  local file="$1"
+  [ ! -s "$file" ] && return
+  jq -r '.[] |
+    ((.labels // []) | map(.name) | map(select(startswith("priority:"))) | (.[0] // "")) as $raw_pri |
+    ($raw_pri | sub("priority:"; "") | ascii_upcase) as $pri |
+    "\(.number)\t\(if $pri != "" then "[\($pri)] " else "" end)\(.title)"' "$file" 2>/dev/null | \
+  while IFS=$'\t' read -r num prefix_title; do
+    if check_stealth_picked "$num"; then
+      echo "- #${num} — ${prefix_title} 🔄 _looks picked up elsewhere; run \`/pickup ${num}\`_"
+    else
+      echo "- #${num} — ${prefix_title}"
+    fi
+  done
+}
+
 # --- Pending Handovers ---------------------------------------------------
 if $GH_AVAILABLE; then
   H_COUNT=$(json_count "$TMP_DIR/handovers.json")
@@ -143,7 +179,7 @@ if $GH_AVAILABLE; then
 
   {
     echo "**Ready ($R_COUNT)**"
-    [ "$R_COUNT" -gt 0 ] && format_issues "$TMP_DIR/ready.json"
+    [ "$R_COUNT" -gt 0 ] && format_ready_issues "$TMP_DIR/ready.json"
     echo ""
     echo "**In Progress ($IP_COUNT)**"
     [ "$IP_COUNT" -gt 0 ] && format_issues "$TMP_DIR/in-progress.json"

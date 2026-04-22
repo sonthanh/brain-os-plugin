@@ -46,5 +46,11 @@
     "description": "Spec must name the two categories that surface inline (r-user, team-sla-at-risk) so implementers know what to filter on",
     "args": "status",
     "expect": "r-user"
+  },
+  {
+    "id": "stealth-picked-detection",
+    "description": "Output format must document the 🔄 stealth-picked marker + pickup footnote — Ready issues that look picked up in another session without status:in-progress flip, detected via recent vault commit referencing #N OR recent handover/grill/task file matching the issue number.",
+    "args": "status",
+    "expect": "stealth-picked detection"
   }
 ]

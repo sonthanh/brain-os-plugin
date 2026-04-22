@@ -62,6 +62,7 @@ The dirty marker is cleared on the **first line** of regen, before any source is
 ### Tasks
 **Ready (N)**
 - #N — [P1] ...
+- #N — [P1] ... 🔄 _looks picked up elsewhere; run `/pickup N`_   ← stealth-picked detection (recent vault commit referencing #N OR recent handover/grill/task file match)
 **In Progress (N)**
 **Blocked (N)**                        ← omitted when N=0
 **Backlog: N items** (expand on request)
