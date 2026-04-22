@@ -28,5 +28,11 @@
     "description": "Skill must have a ## Config block pointing at brain-os.config.md so vault_path + gh_task_repo can be resolved",
     "args": "handover",
     "expect": "## Config"
+  },
+  {
+    "id": "cross-session-pickup-flow",
+    "description": "Skill must document the canonical cross-session flow: /handover in current session (creates issue + doc) → sp tab new → /pickup <N> in new tab. No hand-crafted start prompts — pickup reads the issue + handover doc as SSOT.",
+    "args": "handover",
+    "expect": "Cross-session handover"
   }
 ]

@@ -110,6 +110,16 @@ The handover doc is useless if nobody picks it up. The GH issue with `type:hando
 ### Closing a handover issue
 When `/pickup` completes the handover's "What's Next", it runs `gh issue close N -R $GH_TASK_REPO --reason completed`. The closed issue + the handover doc together are the audit trail; no file marker needs to flip.
 
+### Cross-session handover → pickup flow
+
+When the user wraps up a session and wants to continue in a new Supaterm tab (cyolo), always use this canonical flow — never hand-craft a start prompt:
+
+1. Run `/handover` in the current session — creates the GH issue (`type:handover` + `status:ready`) + handover doc
+2. Launch a new Supaterm tab: `sp tab new --focus -- claude --effort=max --dangerously-skip-permissions`
+3. First prompt in the new tab: `/pickup <N>` (issue number from step 1)
+
+Do NOT hand-craft a start prompt and pipe it via `sp pane send`. `/pickup` reads the issue body + linked handover doc — that's the single source of truth for next-session context. Manual prompts drift and skip context the handover doc captured.
+
 ## Outcome log
 
 The `create-handover-issue.sh` script appends the log line automatically with the shape:
