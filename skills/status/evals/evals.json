@@ -36,9 +36,15 @@
     "expect": "STATUS_CACHE_MAX_AGE"
   },
   {
-    "id": "email-focus-owner-filter",
-    "description": "Email Focus must be restricted to me-personal + me-business owners so team-handled breaches don't bubble into the user's briefing",
+    "id": "email-focus-category-filter",
+    "description": "Email Focus must filter by user_category from the dual-perspective taxonomy (ai-brain#100 Phase 2) — replaces the old me-personal/me-business owner-bucket filter",
     "args": "status",
-    "expect": "me-personal"
+    "expect": "user_category"
+  },
+  {
+    "id": "email-focus-category-values",
+    "description": "Spec must name the two categories that surface inline (r-user, team-sla-at-risk) so implementers know what to filter on",
+    "args": "status",
+    "expect": "r-user"
   }
 ]

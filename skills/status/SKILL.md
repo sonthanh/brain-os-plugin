@@ -75,14 +75,12 @@ The dirty marker is cleared on the **first line** of regen, before any source is
 - Key: [first Key Signals bullet]
 
 ### SLA                                ← always shown
-B breached / O open total — fast: F, normal: N, slow: S
-By owner: ...
-Top breaches: (up to 3)
+B breached (X mine / Y team / Z awareness) + O open
+Top breaches: (up to 3, ranked by user_category r-user → team-sla-at-risk → other)
 → Full ledger: [[business/intelligence/emails/sla-open]]
 
-### Recent Activity (24h)
-- [commit summaries, auto:/gmail-triage:/OAuth churn filtered]
-"All quiet (routine auto-saves only)" if filter leaves nothing
+### Cron (last 24h)
+- [launchd + GH-Actions summary — auto-journal, pickup-auto, vault-lint, improve, clean-temp-git-cache]
 
 ### Research Signal (YYYY-MM-DD)       ← ≤8 days old + Brain-os applicability present
 - [verbatim bullet 1]
@@ -90,8 +88,10 @@ Top breaches: (up to 3)
 - [verbatim bullet 3]
 → Full report: [[knowledge/research/reports/YYYY-MM-DD-ai-engineer-weekly]]
 
-### Email Focus                        ← me-personal + me-business only, capped at 3
-1. [tier/owner] sender — "subject"
+### Email Focus                        ← filtered by user_category, capped at 5
+- ⭐ r-user (tier/owner) — sender — "subject" — state
+- 🟡 team (tier/owner) — sender — "subject" — state
+_+ N awareness item(s) — glance via full ledger._   ← header-only count
 ```
 
 When no SLA items exist, the `### SLA` section renders as `All clear — no open items.` — it is never omitted.
@@ -101,9 +101,10 @@ When no SLA items exist, the `### SLA` section renders as `All clear — no open
 - No daily note creation — this is a briefing, not a ritual.
 - No "morning" or "evening" framing — works at any hour.
 - **Do not rerun GH queries or reparse source files in prose.** The cache is authoritative. If the user asks a follow-up ("what's Ready?", "show me #91"), query GH directly for that specific issue; don't regen the briefing.
-- **Email Focus = only owner buckets that need user action:** `me-personal` + `me-business`. Team-owned breaches (`support`, `partners`, `business`, `legal`, `accounting`, `hr`, `license`) stay visible in the SLA table but do not bubble into Email Focus.
+- **Email Focus = filtered by `user_category` from the dual-perspective taxonomy** (ai-brain#100 Phase 2). Shown: `r-user` (user owes reply, breached or open) and `team-sla-at-risk` (team owes reply; shown when breached, or open+fast/normal). `awareness` counted in a trailing summary line — not listed inline. `noise` never enters the ledger. Legacy rows without `Category` render under an "uncategorized" bucket so nothing is silently dropped.
 - **Cache trust envelope:** the cache is correct for the set of sources watched + the dirty marker. If the user reports a staleness bug, investigate the regen gate (missing mtime-watch target? gh issue event type not matched by the hook?) rather than disabling the cache.
 - **Never invent SLA state** — if `sla-open.md` doesn't exist, the SLA section reports `All clear (no ledger)` and no SLA-driven prioritization happens.
+- **`render-status.sh` runs `set -uo pipefail` by design — never add `-e`.** Sections degrade gracefully: a missing source file or empty awk match should render as "All clear" / skipped section, not abort the whole briefing. Each block has its own guards; don't promote them to a global fail-fast.
 
 ## Troubleshooting
 
