@@ -64,5 +64,11 @@
     "description": "`/pickup auto` eligibility must document owner:bot filter (replacing the 👤 exclusion) so bot-runnable issues are selected",
     "args": "pickup auto",
     "expect": "owner:bot"
+  },
+  {
+    "id": "owner-label-hygiene-seed-pages",
+    "description": "Skill must document that Seed pages (people, companies, meetings) require owner:human, not owner:bot — seeding needs judgment and auto-promoting them creates false 'in progress' signals",
+    "args": "pickup",
+    "expect": "Seed pages"
   }
 ]

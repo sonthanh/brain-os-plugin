@@ -245,6 +245,19 @@ If handover is > 7 days old:
 ### Always re-query at render time
 Labels change across sessions. Never cache the Ready list within a long interactive session — re-query before claiming.
 
+### Owner label hygiene (what belongs on owner:bot vs owner:human)
+
+`owner:bot` means `/pickup auto` will claim it. `owner:human` means a person must grill + design before execution. Getting this wrong creates false "work in progress" signals — `owner:bot` auto-promotes tasks that actually need judgment, they stagnate in In Progress with no work happening.
+
+**Categories that ALWAYS need `owner:human` (👤):**
+- Seed pages (people, companies, meetings) — needs judgment about who counts, role mapping, relationship type
+- Context gap fills (`strategy.md`, `goals.md`, `business.md`) — needs strategic input from user
+- Replicate spec across N skills (outcome log markers, trace patterns) — each skill needs per-skill review of where to insert
+- Airtable / external sync design — needs decisions about schema mapping, conflict handling, sync direction
+- Cron schedule design for new automations — needs safety review + frequency tradeoffs
+
+**Default:** When creating new tasks, default to `owner:human` unless the task is a pure mechanical transform (file rewrite per spec, code refactor with clear before/after, format conversion).
+
 ## Flow
 ```
 Session A:
