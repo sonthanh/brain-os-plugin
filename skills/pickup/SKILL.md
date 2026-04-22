@@ -255,6 +255,7 @@ Labels change across sessions. Never cache the Ready list within a long interact
 - Replicate spec across N skills (outcome log markers, trace patterns) — each skill needs per-skill review of where to insert
 - Airtable / external sync design — needs decisions about schema mapping, conflict handling, sync direction
 - Cron schedule design for new automations — needs safety review + frequency tradeoffs
+- **Skill creation or modification** — skills are design-heavy (behavior, edge cases, integration). Always start with `/grill` to align on requirements before writing any code. Auto-executing a "build skill" task without grilling produces work that doesn't match the user's intent.
 
 **Default:** When creating new tasks, default to `owner:human` unless the task is a pure mechanical transform (file rewrite per spec, code refactor with clear before/after, format conversion).
 
