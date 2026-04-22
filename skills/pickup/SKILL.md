@@ -17,7 +17,7 @@ description: "Use when starting a new session and wanting to resume unfinished w
 
 ## `/pickup <N>` — Direct claim of a specific issue
 
-When the user passes a bare integer (e.g. `/pickup 100`, `cyrc /pickup 100`), treat it as "claim this issue and start." Do NOT run the interactive Ready-list flow.
+When the user passes a bare integer (e.g. `/pickup 100`, `cr /pickup 100`), treat it as "claim this issue and start." Do NOT run the interactive Ready-list flow.
 
 1. **Fetch the issue**:
    ```bash

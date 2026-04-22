@@ -43,7 +43,7 @@
   },
   {
     "id": "direct-claim-by-issue-number",
-    "description": "Skill must support /pickup <N> as a direct-claim mode: skip Ready-list filtering, claim the specific issue, load its body (or handover doc), start. So `cyrc /pickup 100` resolves to issue #100 immediately instead of running the interactive handover-first flow.",
+    "description": "Skill must support /pickup <N> as a direct-claim mode: skip Ready-list filtering, claim the specific issue, load its body (or handover doc), start. So `cr /pickup 100` resolves to issue #100 immediately instead of running the interactive handover-first flow.",
     "args": "pickup 100",
     "expect": "Direct claim"
   },
