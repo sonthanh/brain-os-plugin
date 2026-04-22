@@ -260,5 +260,11 @@
     "description": "Gotchas must require /improve to audit evals.json for coverage gaps after SKILL.md edits, in the same commit, before pre-commit-eval-gap.sh blocks",
     "expected_in_skill": ["Eval coverage audit", "missing evals in the SAME commit", "pre-commit-eval-gap.sh"],
     "type": "skill-content-check"
+  },
+  {
+    "name": "gotcha-learning-loops-observable-state",
+    "description": "Gotchas must require learning-loop input signals to be observable state (Gmail labels, diffs, API responses), never user-edited markdown files — users won't touch the file and the loop never closes",
+    "expected_in_skill": ["Learning loops derive from observable state", "never user-edited markdown", "what does the user already do with their hands"],
+    "type": "skill-content-check"
   }
 ]
