@@ -435,6 +435,7 @@ Commit and push the report to the vault.
 - The eval gate is non-negotiable. If evals drop, revert. No exceptions.
 - A skill with zero outcome log entries has nothing to improve — say so and stop. Don't hallucinate patterns.
 - **Meta self-grilling signal** — if a grill session contains a clarifying question about `/improve`'s own mechanism (cadence, signals, auto-apply, scope, log fields), that's a direct signal the Clarifications section is underspecified. Patch the answer inline in SKILL.md, don't file it to a reference. Every user question answered inline = one future user doesn't need to ask.
+- **Eval coverage audit before commit.** When /improve modifies a SKILL.md (added checks, expanded signatures, new rules), audit the skill's `evals/evals.json` in the same pass for coverage gaps: checks with zero matching evals, newly-expanded checks still covered only by pre-expansion evals, skew across checks. Add the missing evals in the SAME commit as the SKILL.md change — don't split. `pre-commit-eval-gap.sh` enforces this at repo level, but the audit here surfaces gaps before the hook blocks.
 
 ---
 

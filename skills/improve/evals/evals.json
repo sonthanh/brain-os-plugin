@@ -254,5 +254,11 @@
     "description": "Outcome log section must document the scope_overrides optional field",
     "expected_in_skill": ["scope_overrides={N}", "target_path overridden"],
     "type": "skill-content-check"
+  },
+  {
+    "name": "gotcha-eval-coverage-audit",
+    "description": "Gotchas must require /improve to audit evals.json for coverage gaps after SKILL.md edits, in the same commit, before pre-commit-eval-gap.sh blocks",
+    "expected_in_skill": ["Eval coverage audit", "missing evals in the SAME commit", "pre-commit-eval-gap.sh"],
+    "type": "skill-content-check"
   }
 ]
