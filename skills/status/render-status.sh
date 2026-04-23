@@ -127,13 +127,23 @@ format_issues() {
 # handover/grill/task file matching the issue number), 1 otherwise.
 check_stealth_picked() {
   local issue_num="$1"
-  # Git log: recent commits in vault referencing #N (word-boundary, avoid matching #N0)
-  if git -C "$VAULT_PATH" log --grep="#${issue_num}\b" --since="24 hours ago" --oneline 2>/dev/null | grep -q .; then
+  # Git log: recent commits in vault referencing #N. Filter stdout with a
+  # POSIX-ERE grep for `#<num>` with a non-digit boundary, so small numbers
+  # like #1 don't match #10, #11, #123. --grep does substring by default;
+  # its regex mode is BRE which varies across git builds, so we run git's
+  # --grep as a cheap prefilter then verify with ERE grep.
+  if git -C "$VAULT_PATH" log --grep="#${issue_num}" --since="24 hours ago" --oneline 2>/dev/null \
+       | grep -Eq "#${issue_num}([^0-9]|\$)"; then
     return 0
   fi
-  # Vault files: matching handover/grill/task naming conventions, modified within 24h
+  # Vault files: matching handover/grill/task naming conventions, modified within 24h.
+  # Patterns tightened to avoid false positives (issue-1 would have matched
+  # issue-10, issue-11, issue-123 with the looser `*issue-N*` glob):
+  #   - `*-issue-N-*`   → handovers / grills: `YYYY-MM-DD-issue-N-topic.md`
+  #   - `*-issue-N.md`  → tasks: `issue-N.md` suffix file
+  #   - `*issue-N-*`    → business/tasks/issue-N-topic.md (no leading dash)
   if find "$VAULT_PATH/daily/handovers" "$VAULT_PATH/daily/grill-sessions" "$VAULT_PATH/business/tasks" \
-       -type f \( -name "*-issue-${issue_num}-*" -o -name "*issue-${issue_num}*" \) \
+       -type f \( -name "*-issue-${issue_num}-*" -o -name "*-issue-${issue_num}.md" -o -name "issue-${issue_num}-*" -o -name "issue-${issue_num}.md" \) \
        -mtime -1 2>/dev/null | grep -q .; then
     return 0
   fi
