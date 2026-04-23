@@ -10,5 +10,17 @@
     "description": "Skill must NOT reference inbox.md anywhere — tasks are GH issues now. Positive marker verifies the replacement phase heading is in place.",
     "args": "vault-lint",
     "expect": "Stale GH issue detection"
+  },
+  {
+    "id": "pass-includes-needs-review-items",
+    "description": "D2 result logic must define pass to cover runs where phases completed cleanly AND Needs Review has items — the items are informational output for a living vault, not a failure signal. Prevents the prior 100% partial-rate miscalibration.",
+    "args": "vault-lint",
+    "expect": "informational output"
+  },
+  {
+    "id": "auto-improve-on-fail-only",
+    "description": "D3 must auto-invoke /improve only on result == fail (phase errored), not on any result != pass. Otherwise healthy nightly runs (Needs Review has items → partial under old rule) fire /improve wastefully with no actionable signal.",
+    "args": "vault-lint",
+    "expect": "If `result == fail`, auto-invoke"
   }
 ]

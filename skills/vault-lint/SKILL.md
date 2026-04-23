@@ -205,13 +205,13 @@ Follow `{vault}/skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/va
 ```
 
 Result logic:
-- `pass` — zero items in Needs Review, all phases completed
-- `partial` — items in Needs Review but all phases completed
-- `fail` — a phase errored or was skipped
+- `pass` — all phases completed cleanly. "Needs Review" items are informational output (they're what the skill is supposed to surface for a living vault), not a failure signal.
+- `partial` — a phase was skipped by design (missing `gh` auth, missing `update-readmes.sh`, `gh_task_repo` unset) or recovered gracefully from an unexpected error inside a phase.
+- `fail` — a phase errored and the skill aborted before writing its report.
 
 ### D3. Auto-improve on failure [deterministic]
 
-If `result != pass`, auto-invoke `/brain-os:improve vault-lint`. No user confirmation needed — eval gate inside `/improve` prevents regressions.
+If `result == fail`, auto-invoke `/brain-os:improve vault-lint`. Phase errors (not "Needs Review has items") are the real skill-improvement signal. `partial` means a phase was skipped by design — that's expected operational state, not a defect. The eval gate inside `/improve` still prevents regressions if invoked.
 
 ### D4. Commit and push [deterministic]
 
