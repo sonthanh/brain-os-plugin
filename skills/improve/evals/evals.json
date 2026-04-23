@@ -266,5 +266,11 @@
     "description": "Gotchas must require learning-loop input signals to be observable state (Gmail labels, diffs, API responses), never user-edited markdown files — users won't touch the file and the loop never closes",
     "expected_in_skill": ["Learning loops derive from observable state", "never user-edited markdown", "what does the user already do with their hands"],
     "type": "skill-content-check"
+  },
+  {
+    "name": "phase4-semantic-judge-short-circuit",
+    "description": "Phase 4 Gate 2 must define a deterministic short-circuit: skip the Agent semantic judge when the candidate's frontmatter block is byte-identical to pre-edit. Unchanged frontmatter guarantees trigger routing is preserved. Record in Phase 5 report as short-circuit so skip is auditable.",
+    "expected_in_skill": ["Short-circuit", "byte-identical", "PASS (short-circuit — frontmatter unchanged)"],
+    "type": "skill-content-check"
   }
 ]

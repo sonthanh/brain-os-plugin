@@ -22,5 +22,11 @@
     "description": "D3 must auto-invoke /improve only on result == fail (phase errored), not on any result != pass. Otherwise healthy nightly runs (Needs Review has items → partial under old rule) fire /improve wastefully with no actionable signal.",
     "args": "vault-lint",
     "expect": "If `result == fail`, auto-invoke"
+  },
+  {
+    "id": "d3-divergence-note-present",
+    "description": "D3 must carry an inline note flagging the intentional divergence from skill-spec.md § 11 auto-improve convention (default: result != pass). Prevents a future maintainer from reverting the tightening 'back to the convention' without reading the improve report.",
+    "args": "vault-lint",
+    "expect": "Intentional divergence from"
   }
 ]

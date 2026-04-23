@@ -352,7 +352,11 @@ Each candidate must use a meaningfully different strategy — not cosmetic rephr
 
 ### Constraint gates
 
-9. **Gate 2 — Semantic preservation (LLM judge)** — Walk the ranked list top-down. For each candidate, spawn an Agent sub-agent (`subagent_type: general-purpose`, model: sonnet) with this prompt:
+9. **Gate 2 — Semantic preservation (LLM judge)** — Walk the ranked list top-down.
+
+   **Short-circuit (deterministic):** if a candidate's full frontmatter block (everything between the opening `---` and the next `---`) is byte-identical to the pre-edit frontmatter, mark the semantic judge as PASS without spawning the Agent. Trigger routing is defined by `description`, `name`, and any other frontmatter keys Claude Code consumes — an unchanged frontmatter guarantees routing is preserved. Record in the Phase 5 report as `Semantic: PASS (short-circuit — frontmatter unchanged)` so the skip is auditable.
+
+   **Full judge (when frontmatter changed, even whitespace):** spawn an Agent sub-agent (`subagent_type: general-purpose`, model: sonnet) with this prompt:
 
    > You are judging whether a proposed edit to a skill's SKILL.md still matches the skill's **original trigger conditions**. The pre-edit frontmatter `description` field is the canonical trigger spec — Claude Code uses it to route invocations. Answer whether the candidate still matches those triggers, or whether it drifts into different skill territory.
    >

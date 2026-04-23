@@ -213,6 +213,8 @@ Result logic:
 
 If `result == fail`, auto-invoke `/brain-os:improve vault-lint`. Phase errors (not "Needs Review has items") are the real skill-improvement signal. `partial` means a phase was skipped by design — that's expected operational state, not a defect. The eval gate inside `/improve` still prevents regressions if invoked.
 
+> **Intentional divergence from `skill-spec.md § 11` auto-improve convention.** The cross-skill default is `if result != pass`. vault-lint tightens to `== fail` because `partial` here maps to benign skipped phases (missing `gh` auth, missing `update-readmes.sh`), not degraded output. If you're reviewing this and considering a "fix back to the convention," read `daily/improve-reports/2026-04-23-vault-lint.md` first — the tightening was the explicit fix for 100% partial rate + wasted auto-improve cycles across 4 consecutive nightly runs. The eval `auto-improve-on-fail-only` will fail if the tightening is reverted.
+
 ### D4. Commit and push [deterministic]
 
 Skip if `--dry-run`.
