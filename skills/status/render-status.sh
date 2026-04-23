@@ -301,24 +301,33 @@ if [ -f "$SLA_FILE" ]; then
       }
     ' "$SLA_FILE"
   }
-  BREACHED_RAW=$(parse_section "Breached")
-  OPEN_RAW=$(parse_section "Open (within SLA)")
+  BREACHED_RAW_ALL=$(parse_section "Breached")
+  OPEN_RAW_ALL=$(parse_section "Open (within SLA)")
+
+  # Awareness items = info only, nobody must reply (taxonomy A×A / A×N).
+  # They never carry a real SLA obligation, so drop them from breached/open
+  # views. Classifier should emit sla_tier=none for awareness; until it does,
+  # this render-side guard prevents false breach counts. See gmail-triage.md §
+  # "Dual-perspective taxonomy" row A×A.
+  BREACHED_RAW=$(echo "$BREACHED_RAW_ALL" | awk -F'|' 'NF>=5 && $6!="awareness"')
+  OPEN_RAW=$(echo "$OPEN_RAW_ALL" | awk -F'|' 'NF>=5 && $6!="awareness"')
 
   count_rows() { [ -z "$1" ] && echo 0 || echo "$1" | awk 'NF>0{n++} END{print n+0}'; }
   B_TOTAL=$(count_rows "$BREACHED_RAW")
   O_TOTAL=$(count_rows "$OPEN_RAW")
+  B_AWARE_DROPPED=$(echo "$BREACHED_RAW_ALL" | awk -F'|' '$6=="awareness"{n++} END{print n+0}')
 
   if [ "$B_TOTAL" -eq 0 ] && [ "$O_TOTAL" -eq 0 ]; then
     echo "All clear — no open items." >> "$TMP_FILE"
+    [ "$B_AWARE_DROPPED" -gt 0 ] && echo "_($B_AWARE_DROPPED awareness row(s) hidden — no reply required.)_" >> "$TMP_FILE"
   else
     # mine = user_category=r-user (user owes reply)
     # team = user_category=team-sla-at-risk (team owes reply, user awareness)
-    # aware = user_category=awareness (info only, counted separately)
     b_mine=$(echo "$BREACHED_RAW" | awk -F'|' '$6=="r-user"{n++} END{print n+0}')
     b_team=$(echo "$BREACHED_RAW" | awk -F'|' '$6=="team-sla-at-risk"{n++} END{print n+0}')
-    b_aware=$(echo "$BREACHED_RAW" | awk -F'|' '$6=="awareness"{n++} END{print n+0}')
     b_uncat=$(echo "$BREACHED_RAW" | awk -F'|' 'NF>=5 && ($6=="" || $6==$5){n++} END{print n+0}')
-    echo "$B_TOTAL breached ($b_mine mine / $b_team team / $b_aware awareness) + $O_TOTAL open" >> "$TMP_FILE"
+    echo "$B_TOTAL breached ($b_mine mine / $b_team team) + $O_TOTAL open" >> "$TMP_FILE"
+    [ "$B_AWARE_DROPPED" -gt 0 ] && echo "_($B_AWARE_DROPPED awareness row(s) hidden — no reply required.)_" >> "$TMP_FILE"
     [ "$b_uncat" -gt 0 ] && echo "⚠️ $b_uncat breached row(s) missing Category — run migration to refresh." >> "$TMP_FILE"
 
     if [ "$B_TOTAL" -gt 0 ]; then
@@ -521,67 +530,36 @@ if [ -n "$latest_report" ]; then
   fi
 fi
 
-# --- Email Focus (Category filter — Phase 2 ai-brain#100) ----------------
-# Replaces the old me-personal/me-business owner-bucket filter with
-# user_category-based filtering per the dual-perspective taxonomy. Rank:
-#   1. r-user (user must reply) → always shown
-#   2. team-sla-at-risk + breached (team missing SLA, surface for CEO awareness)
-#   3. team-sla-at-risk + open (team responsible but SLA not yet breached)
-# Awareness items are counted in the header but not listed inline — they
-# clutter the focus list. Noise items never enter the ledger.
+# --- Email Focus (strict r-user filter) ----------------------------------
+# Only items the USER personally owes a reply on (user_category=r-user). Team
+# SLA items live in the ### SLA section above — don't duplicate here.
+# Awareness items never surface on Email Focus — they're info-only.
 echo "### Email Focus" >> "$TMP_FILE"
 if [ -f "$SLA_FILE" ] && { [ -n "$BREACHED_RAW" ] || [ -n "$OPEN_RAW" ]; }; then
-  # Combine breached (flag as B) + open (flag as O) so we can prefer breached.
   FOCUS_RANKED=$(
     {
-      printf '%s\n' "$BREACHED_RAW" | awk -F'|' 'NF>=5{print "B|" $0}'
-      printf '%s\n' "$OPEN_RAW"     | awk -F'|' 'NF>=5{print "O|" $0}'
+      printf '%s\n' "$BREACHED_RAW" | awk -F'|' 'NF>=5 && $6=="r-user"{print "B|" $0}'
+      printf '%s\n' "$OPEN_RAW"     | awk -F'|' 'NF>=5 && $6=="r-user"{print "O|" $0}'
     } | awk -F'|' '
-      BEGIN {
-        # Priority: lower wins
-        # r-user  breached → 1   r-user  open → 2
-        # team-SLA breached → 3   team-SLA open → 4 (only if fast/normal)
-        # All others excluded.
-      }
-      {
-        state=$1; tier=$2; owner=$3; from=$4; subj=$5; overdue=$6; cat=$7
-        if (cat == "r-user")            p = (state == "B" ? 1 : 2)
-        else if (cat == "team-sla-at-risk") {
-          if (state == "B")              p = 3
-          else if (tier == "fast" || tier == "normal") p = 4
-          else                            next   # slow team-sla-at-risk + open = too quiet
-        }
-        else next  # awareness + noise + uncategorized excluded from focus list
-        print p "\t" state "\t" tier "\t" owner "\t" from "\t" subj "\t" overdue "\t" cat
+      { state=$1; tier=$2; owner=$3; from=$4; subj=$5; overdue=$6
+        p = (state == "B" ? 1 : 2)
+        print p "\t" state "\t" tier "\t" owner "\t" from "\t" subj "\t" overdue
       }
     ' | sort -k1,1n | head -5
   )
   if [ -n "$FOCUS_RANKED" ]; then
-    echo "$FOCUS_RANKED" | while IFS=$'\t' read -r _ state tier owner from subj overdue cat; do
+    echo "$FOCUS_RANKED" | while IFS=$'\t' read -r _ state tier owner from subj overdue; do
       sender=$(echo "$from" | sed 's/ *<.*//' | cut -c1-35)
       subj_short=$(echo "$subj" | tr -d '"' | cut -c1-55)
       over=$(echo "$overdue" | sed 's/ *⚠️//g; s/^ *//; s/ *$//')
-      case "$cat" in
-        r-user)            prefix="⭐ r-user" ;;
-        team-sla-at-risk)  prefix="🟡 team" ;;
-        *)                 prefix="? $cat" ;;
-      esac
       case "$state" in
         B) state_tag="breached, $over overdue" ;;
         *) state_tag="open, $over" ;;
       esac
-      echo "- $prefix ($tier/$owner) — $sender — \"$subj_short\" — $state_tag" >> "$TMP_FILE"
+      echo "- ⭐ r-user ($tier/$owner) — $sender — \"$subj_short\" — $state_tag" >> "$TMP_FILE"
     done
-    # Awareness summary line (header-only signal)
-    aware_total=$(
-      {
-        printf '%s\n' "$BREACHED_RAW" | awk -F'|' '$6=="awareness"{n++} END{print n+0}'
-        printf '%s\n' "$OPEN_RAW" | awk -F'|' '$6=="awareness"{n++} END{print n+0}'
-      } | awk '{s+=$1} END{print s+0}'
-    )
-    [ "$aware_total" -gt 0 ] && echo "_+ $aware_total awareness item(s) — glance via full ledger._" >> "$TMP_FILE"
   else
-    echo "All clear — no r-user or team-SLA-at-risk items." >> "$TMP_FILE"
+    echo "All clear — no personal replies pending." >> "$TMP_FILE"
   fi
 else
   echo "All clear." >> "$TMP_FILE"
