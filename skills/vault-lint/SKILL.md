@@ -61,6 +61,7 @@ Find `.md` files that are NOT referenced by any wiki-link from another file. Exc
 - `README.md` files (index pages)
 - `CLAUDE.md`, `RESOLVER.md`, `MEMORY.md` (system files)
 - Files in `daily/` (dated artifacts, expected to be unlinked)
+- Files in `business/intelligence/emails/` (auto-generated dated intelligence artifacts, same exclusion rationale as `daily/`)
 - Files in `private/` (gitignored zone)
 - Files in `thinking/aha/`, `thinking/originals/` (standalone artifacts)
 - Root-level files (`working-rules.md`, `skill-spec.md`, etc.)
@@ -137,7 +138,7 @@ Grep vault `.md` files for absolute paths matching `~/work/...` or `/Users/.../w
 Scan `{vault}/daily/handovers/` for files older than 30 days. For each, query `gh issue list -R $GH_TASK_REPO --state open --search "<handover-filename>"` — flag as potentially stale if any open issue still references it.
 
 ### C3. Empty grill sessions [deterministic]
-Scan `{vault}/daily/grill-sessions/` for files with no `## Decisions` section or where that section is empty. Flag as incomplete.
+Scan `{vault}/daily/grill-sessions/` for files with no section heading matching `## Decisions` as a prefix (case-insensitive — matches `## Decisions`, `## Decisions Made`, `## Decisions (locked)`, etc.) or where the matching section is empty. Flag as incomplete.
 
 ### C4. Needs review triage [latent]
 Items where automated detection is uncertain go into `## Needs Review` in the report. Do not auto-fix these — human judgment required.

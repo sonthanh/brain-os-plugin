@@ -28,5 +28,17 @@
     "description": "D3 must carry an inline note flagging the intentional divergence from skill-spec.md § 11 auto-improve convention (default: result != pass). Prevents a future maintainer from reverting the tightening 'back to the convention' without reading the improve report.",
     "args": "vault-lint",
     "expect": "Intentional divergence from"
+  },
+  {
+    "id": "c3-decisions-variant-match",
+    "description": "C3 empty grill detection must use prefix match (case-insensitive) for ## Decisions headings, not exact match. Prevents false positives for ## Decisions Made, ## Decisions (locked), etc.",
+    "args": "vault-lint",
+    "expect": "prefix (case-insensitive"
+  },
+  {
+    "id": "orphan-email-intelligence-excluded",
+    "description": "A2 orphan exclusion list must include business/intelligence/emails/ — auto-generated dated intelligence artifacts with the same rationale as daily/ (dated, unlinked by design).",
+    "args": "vault-lint",
+    "expect": "business/intelligence/emails/"
   }
 ]
