@@ -32,7 +32,7 @@ FORCE=false
 
 ALL_SKILLS=(
   absorb aha audit verify eval gmail gmail-bootstrap handover ingest
-  journal pickup research self-learn status study think triggers
+  journal pickup research self-learn status study tdd think triggers
 )
 
 # --- Parse args ---

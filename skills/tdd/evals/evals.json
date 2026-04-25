@@ -1,0 +1,80 @@
+{
+  "skill_name": "tdd",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "What is the horizontal-slice anti-pattern in /tdd, and what is the correct alternative?",
+      "expected_output": "Horizontal slicing = write all tests first, then all implementation. Correct alternative = vertical tracer-bullet slices, one test → one impl → repeat.",
+      "expectations": [
+        "Mentions writing all tests first then all code is wrong",
+        "Mentions vertical slices or tracer bullets as the correct approach",
+        "Mentions one-test-then-one-implementation cycle"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Should /tdd tests verify implementation details or behavior?",
+      "expected_output": "Behavior through public interfaces — not implementation details. Tests should survive internal refactors.",
+      "expectations": [
+        "Mentions testing behavior over implementation",
+        "Mentions public interfaces",
+        "Mentions tests surviving refactors"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "What test command should /tdd use for a bash hook in brain-os?",
+      "expected_output": "echo a JSON payload piped to the hook script, then check the exit code. Exit code is the contract.",
+      "expectations": [
+        "Mentions piping JSON or input to the hook",
+        "Mentions checking the exit code"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Where does /tdd write its outcome log?",
+      "expected_output": "{vault}/daily/skill-outcomes/tdd.log, following skill-spec.md § 11 format.",
+      "expectations": [
+        "Mentions daily/skill-outcomes/tdd.log path",
+        "References skill-spec.md § 11 or the standard outcome-log convention"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "When should you NOT use /tdd?",
+      "expected_output": "One-line config tweaks, typos, README edits, skill prose where the only test is Claude's interpretation, pure deletion of dead code, or truly exploratory spikes where the target behavior isn't yet known.",
+      "expectations": [
+        "Mentions at least two of: typos / config tweaks / README edits / skill prose / dead-code deletion / exploratory spikes",
+        "Distinguishes /tdd from /improve, /audit, or direct-fix paths"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "What is the rule about mocking in /tdd?",
+      "expected_output": "Mock only at system boundaries (external APIs like Gmail / NotebookLM, HTTP, time, randomness). Never mock your own modules, scripts, hooks, or vault contents.",
+      "expectations": [
+        "Mentions mocking only at system boundaries",
+        "Names at least one boundary example (external API, time, randomness, etc.)",
+        "Says do NOT mock internal modules/collaborators"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "What is the discipline-holds exit criterion for the Phase A pilot of /tdd?",
+      "expected_output": "No reactive `improve: encoded feedback —` commit lands against the same artifact within 48h of /tdd shipping it. If patches keep landing, /tdd's smaller slices aren't forcing the discipline /develop's checklist couldn't.",
+      "expectations": [
+        "Mentions watching for reactive improve commits within 48h",
+        "Connects the criterion to the assumption that smaller slices force discipline"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "Are you allowed to refactor while a test is RED?",
+      "expected_output": "No — never refactor while RED. Get to GREEN first.",
+      "expectations": [
+        "Says no / never refactor while red",
+        "Says get to green first"
+      ]
+    }
+  ]
+}
