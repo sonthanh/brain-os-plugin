@@ -40,5 +40,17 @@
     "description": "A2 orphan exclusion list must include business/intelligence/emails/ — auto-generated dated intelligence artifacts with the same rationale as daily/ (dated, unlinked by design).",
     "args": "vault-lint",
     "expect": "business/intelligence/emails/"
+  },
+  {
+    "id": "c3-autogrill-excluded",
+    "description": "C3 empty grill detection must exclude files whose filename contains 'autogrill' — auto-generated planning/design sessions not required to have a formal ## Decisions section.",
+    "args": "vault-lint",
+    "expect": "autogrill"
+  },
+  {
+    "id": "orphan-clippings-excluded",
+    "description": "A2 orphan exclusion list must include Clippings/ — Obsidian web clipper artifacts are standalone by design and expected to be unlinked.",
+    "args": "vault-lint",
+    "expect": "Clippings/"
   }
 ]

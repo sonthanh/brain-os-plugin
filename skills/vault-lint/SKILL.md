@@ -62,6 +62,7 @@ Find `.md` files that are NOT referenced by any wiki-link from another file. Exc
 - `CLAUDE.md`, `RESOLVER.md`, `MEMORY.md` (system files)
 - Files in `daily/` (dated artifacts, expected to be unlinked)
 - Files in `business/intelligence/emails/` (auto-generated dated intelligence artifacts, same exclusion rationale as `daily/`)
+- Files in `Clippings/` (Obsidian web clipper artifacts, standalone by design)
 - Files in `private/` (gitignored zone)
 - Files in `thinking/aha/`, `thinking/originals/` (standalone artifacts)
 - Root-level files (`working-rules.md`, `skill-spec.md`, etc.)
@@ -139,6 +140,8 @@ Scan `{vault}/daily/handovers/` for files older than 30 days. For each, query `g
 
 ### C3. Empty grill sessions [deterministic]
 Scan `{vault}/daily/grill-sessions/` for files with no section heading matching `## Decisions` as a prefix (case-insensitive — matches `## Decisions`, `## Decisions Made`, `## Decisions (locked)`, etc.) or where the matching section is empty. Flag as incomplete.
+
+Exclude files whose filename contains `autogrill` — these are auto-generated planning/design sessions where a formal `## Decisions` section is not required by design.
 
 ### C4. Needs review triage [latent]
 Items where automated detection is uncertain go into `## Needs Review` in the report. Do not auto-fix these — human judgment required.
