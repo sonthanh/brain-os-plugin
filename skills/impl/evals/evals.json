@@ -1,0 +1,104 @@
+{
+  "skill_name": "impl",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "What is the default mode of /impl?",
+      "expected_output": "once — grab one AFK issue from the tracker, run /tdd on it, commit + push + close, exit.",
+      "expectations": [
+        "Mentions 'once' as the default mode",
+        "Says it processes a single issue, not multiple",
+        "Mentions /tdd is invoked inside"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "How does /impl --parallel N isolate filesystem changes between subagents?",
+      "expected_output": "Each spawned Agent-tool subagent runs with `isolation: \"worktree\"`. This is always-on, auto-cleanup, free, and prevents the two-teammates-editing-the-same-file overwrite class.",
+      "expectations": [
+        "Mentions Agent tool",
+        "Mentions isolation: \"worktree\" (verbatim phrase)",
+        "Says it is always-on / not conditional",
+        "Mentions auto-cleanup"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "What should /impl do if the user passes the --team flag?",
+      "expected_output": "Print a message that team mode is deferred to Phase G (per the 2026-04-25 grill) and exit 1. Do NOT silently fall back to --parallel.",
+      "expectations": [
+        "Says --team is deferred / not implemented",
+        "Says it should error / exit non-zero rather than silently fall back",
+        "References the grill or Phase G as the reason"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "What does /impl emit when the AFK backlog is empty, and why?",
+      "expected_output": "Emits the literal string `NO_MORE_ISSUES` to stdout so an outer /ralph-loop with --completion-promise \"NO_MORE_ISSUES\" can latch and stop.",
+      "expectations": [
+        "Mentions the exact sentinel NO_MORE_ISSUES",
+        "Connects it to /ralph-loop --completion-promise"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Does /impl wire up ralph-loop itself?",
+      "expected_output": "No. Ralph-loop wiring is a separate issue. /impl is invoked BY ralph-loop (not the other way around) and emits NO_MORE_ISSUES so ralph-loop can stop.",
+      "expectations": [
+        "Says /impl does NOT wire ralph-loop",
+        "Says /impl is invoked BY ralph-loop",
+        "Mentions the NO_MORE_ISSUES handshake"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "What command does /impl use to commit, and what is special about the close line?",
+      "expected_output": "Conventional Commits subject + body, ending with `Closes <tracker-repo>#N` (the explicit repo prefix is required because the commit lands in a code repo but the issue lives in the tracker repo) and a Co-Authored-By trailer. Then `gh issue close N --reason completed` as belt-and-braces.",
+      "expectations": [
+        "Mentions cross-repo Closes syntax requires the repo prefix",
+        "Mentions gh issue close as a belt-and-braces step",
+        "Mentions Co-Authored-By trailer"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "Why is `git pull --rebase` mandatory before pushing in /impl?",
+      "expected_output": "Because the CI auto-release pipeline runs on each push and may have bumped plugin.json — skipping rebase guarantees a non-fast-forward push failure.",
+      "expectations": [
+        "Mentions CI auto-release / version bump",
+        "Mentions plugin.json or release pipeline",
+        "Mentions push would otherwise fail"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "Where does /impl write its outcome log, and what action values are valid?",
+      "expected_output": "{vault}/daily/skill-outcomes/impl.log per skill-spec.md § 11. Action values: once, parallel, drain.",
+      "expectations": [
+        "Mentions daily/skill-outcomes/impl.log path",
+        "References skill-spec.md § 11",
+        "Lists at least two of the action values: once, parallel, drain"
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "What does the issue's `Blocked by #M` field do for /impl?",
+      "expected_output": "If issue M is still open, /impl aborts and re-labels the current issue back to `ready` — it isn't actually AFK-ready until the dependency lands.",
+      "expectations": [
+        "Says /impl aborts / skips / does not implement when blocked",
+        "Mentions re-labeling back to ready",
+        "Says the dependency must land first"
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "Should /impl duplicate /tdd's red-green-refactor loop logic?",
+      "expected_output": "No. /tdd owns the test loop; /impl owns the issue plumbing (pick, claim, commit, push, close, log). If /tdd's discipline isn't holding, fix /tdd, not /impl.",
+      "expectations": [
+        "Says /impl does not duplicate /tdd",
+        "Names the separation of concerns: /tdd = test loop, /impl = issue plumbing"
+      ]
+    }
+  ]
+}

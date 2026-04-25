@@ -31,7 +31,7 @@ UNINSTALL=false
 FORCE=false
 
 ALL_SKILLS=(
-  absorb aha audit verify eval gmail gmail-bootstrap handover ingest
+  absorb aha audit verify eval gmail gmail-bootstrap handover impl ingest
   journal pickup research self-learn status study tdd think triggers
 )
 
