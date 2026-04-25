@@ -303,6 +303,11 @@ if [ -f "$SLA_FILE" ]; then
   }
   BREACHED_RAW_ALL=$(parse_section "Breached")
   OPEN_RAW_ALL=$(parse_section "Open (within SLA)")
+  # ai-brain#112 — semantic-intent classifier routes Reply Owed=false rows
+  # to ## Auto-suppressed. They never count as breaches but the user wants
+  # a footnote so they know the system is doing work + can audit.
+  SUPPRESSED_RAW_ALL=$(parse_section "Auto-suppressed")
+  SUPPRESSED_COUNT=$(echo "$SUPPRESSED_RAW_ALL" | awk 'NF>0{n++} END{print n+0}')
 
   # Awareness items = info only, nobody must reply (taxonomy A×A / A×N).
   # They never carry a real SLA obligation, so drop them from breached/open
@@ -320,6 +325,7 @@ if [ -f "$SLA_FILE" ]; then
   if [ "$B_TOTAL" -eq 0 ] && [ "$O_TOTAL" -eq 0 ]; then
     echo "All clear — no open items." >> "$TMP_FILE"
     [ "$B_AWARE_DROPPED" -gt 0 ] && echo "_($B_AWARE_DROPPED awareness row(s) hidden — no reply required.)_" >> "$TMP_FILE"
+    [ "$SUPPRESSED_COUNT" -gt 0 ] && echo "_+ $SUPPRESSED_COUNT auto-suppressed by semantic classifier (full ledger: [[business/intelligence/emails/sla-open]])_" >> "$TMP_FILE"
   else
     # mine = user_category=r-user (user owes reply)
     # team = user_category=team-sla-at-risk (team owes reply, user awareness)
@@ -328,6 +334,7 @@ if [ -f "$SLA_FILE" ]; then
     b_uncat=$(echo "$BREACHED_RAW" | awk -F'|' 'NF>=5 && ($6=="" || $6==$5){n++} END{print n+0}')
     echo "$B_TOTAL breached ($b_mine mine / $b_team team) + $O_TOTAL open" >> "$TMP_FILE"
     [ "$B_AWARE_DROPPED" -gt 0 ] && echo "_($B_AWARE_DROPPED awareness row(s) hidden — no reply required.)_" >> "$TMP_FILE"
+    [ "$SUPPRESSED_COUNT" -gt 0 ] && echo "_+ $SUPPRESSED_COUNT auto-suppressed by semantic classifier (full ledger: [[business/intelligence/emails/sla-open]])_" >> "$TMP_FILE"
     [ "$b_uncat" -gt 0 ] && echo "⚠️ $b_uncat breached row(s) missing Category — run migration to refresh." >> "$TMP_FILE"
 
     if [ "$B_TOTAL" -gt 0 ]; then
