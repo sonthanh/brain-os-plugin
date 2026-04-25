@@ -36,6 +36,12 @@
     "expect": "STATUS_CACHE_MAX_AGE"
   },
   {
+    "id": "session-start-invalidation",
+    "description": "Skill must document the SessionStart invalidation — session-start-tasks.sh touches status.dirty so the first /status per session always reflects between-session GH mutations the dirty-marker hook missed (eventual consistency / stale-regen race).",
+    "args": "status",
+    "expect": "SessionStart invalidation"
+  },
+  {
     "id": "email-focus-category-filter",
     "description": "Email Focus must filter by user_category from the dual-perspective taxonomy (ai-brain#100 Phase 2) — replaces the old me-personal/me-business owner-bucket filter",
     "args": "status",

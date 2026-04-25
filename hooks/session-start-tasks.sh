@@ -9,6 +9,12 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/resolve-vault.sh"
 
+# Invalidate /status cache so the next /status briefing reflects any GH
+# mutations from cron / external sessions that the touch-status-dirty hook
+# couldn't catch (e.g. GH eventual-consistency window where the dirty marker
+# was cleared by a regen running while the close hadn't propagated yet).
+touch "${HOME}/.cache/brain-os/status.dirty" 2>/dev/null || true
+
 # Tasks panel — query GH issues (3 parallel calls). Silent if gh missing/unauthed/offline
 # or if GH_TASK_REPO not configured in brain-os.config.md.
 if [ -n "${GH_TASK_REPO:-}" ] && command -v gh >/dev/null 2>&1; then
