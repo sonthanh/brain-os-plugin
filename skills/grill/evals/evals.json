@@ -64,6 +64,16 @@
         "Mentions anchoring on user problems or needs before analyzing external systems",
         "Problem-first before solution-first framing"
       ]
+    },
+    {
+      "id": 8,
+      "prompt": "When a grill session reaches a bulletproof plan and a task should be created, where does that task live?",
+      "expected_output": "A GitHub issue in the configured gh_task_repo — NOT business/tasks/inbox.md (archived 2026-04-18 during the gh-issues migration).",
+      "expectations": [
+        "Says tasks become GitHub issues in gh_task_repo",
+        "Says NOT to write to business/tasks/inbox.md",
+        "Mentions inbox.md is archived"
+      ]
     }
   ]
 }

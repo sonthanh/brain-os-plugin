@@ -6,9 +6,9 @@ description: "Interview the user relentlessly about a topic until reaching a bul
 ## Vault Location
 **Vault path:** Read from `${CLAUDE_PLUGIN_ROOT}/brain-os.config.md`
 
-Interview me relentlessly about every aspect of this, starting from the user's actual problem before any external solution, until we reach a shared understanding. Walk down each branch of the design tree resolving dependencies between decisions one by one. If a question can be answered by research — vault, web, code — do that instead of asking me. Before fresh vault scans, check the SessionStart index + recent tool results for the topic; if matched, read that file directly. For each question, provide your recommended best practice answer. Options get pros/cons then ONE pick — never per-option. For complex tasks (development, skills), grill speed and token usage too. Grill until bulletproof.
+Interview me relentlessly about every aspect, starting from the user's actual problem before any external solution, until shared understanding. Walk each branch of the design tree resolving dependencies. If research (vault, web, code) can answer, do that instead of asking me. Before fresh vault scans, check SessionStart index + recent tool results; if matched, read that file directly. Provide your recommended best practice answer per question. Options get pros/cons then ONE pick — never per-option. For complex tasks, grill speed and token usage too. Grill until bulletproof.
 
-Save decisions to `{vault}/daily/grill-sessions/YYYY-MM-DD-<topic-slug>.md`
+Save decisions to `{vault}/daily/grill-sessions/YYYY-MM-DD-<topic-slug>.md`. Tasks become GitHub issues in `gh_task_repo`, never `business/tasks/inbox.md` (archived 2026-04-18).
 
 ## Usage
 ```
