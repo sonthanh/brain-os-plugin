@@ -1,0 +1,85 @@
+{
+  "skill_name": "to-issues",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "User points /to-issues at daily/grill-sessions/2026-04-25-skill-process-pocock-adoption.md (status: pass). What is the FIRST thing the skill does, and what would make it stop before producing any output?",
+      "expected_output": "Read the grill-session file as input (deterministic gather-context step). Stop conditions: status frontmatter is `working` / `draft`, RESET sections still active, or you cannot extract user-stories / decisions / out-of-scope / open-questions sections — in which case route the user back to /grill rather than guessing.",
+      "expectations": [
+        "Mentions reading the grill-session file as input",
+        "Mentions checking status frontmatter (pass/settled/shipped vs working/draft)",
+        "Mentions stopping and asking the user to finish /grill rather than inferring missing decisions"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Where does /to-issues persist the synthesized PRD?",
+      "expected_output": "Nowhere — the PRD lives in conversation context only and is thrown away after slicing. Persisting it triggers doc-rot (Pocock cross-cutting principle) — future sessions read stale PRDs as canon. The grill-session is the alignment artifact; the GitHub issues are the work artifact; nothing in between is persisted.",
+      "expectations": [
+        "Says PRD is NOT persisted to disk / a file",
+        "Mentions doc-rot or some equivalent reason (sediment, stale, future sessions read as canon)",
+        "Mentions PRD lives in conversation context only"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "A proposed slice says 'Refactor the URL parser to a deeper module' with no user-visible surface. What does /to-issues' tracer-bullet validator do?",
+      "expected_output": "Hard gate fails. The slice has no Observable: declaration (no slash command output, cron tick, journal line, /status section, hook stdout/exit-code change, or vault file the user can read). It's a horizontal layer slice. The skill must split it differently or merge it with the slice that completes the end-to-end path before showing the breakdown to the user.",
+      "expectations": [
+        "Identifies that the slice fails the tracer-bullet / Observable hard gate",
+        "Mentions that the slice must be split or merged with one that produces an observable surface",
+        "Names at least one type of acceptable observable (slash command, journal line, /status section, hook output, etc.)"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Two slices both touch ~/work/brain-os-plugin/install.sh. What does /to-issues do?",
+      "expected_output": "Disjoint-files validator flags the overlap as a warn-soft warning, not a blocker. Both slices can still ship — `/impl --parallel` uses Agent-tool worktree isolation so the file conflict is resolved at merge time. The warning is surfaced so the user can decide whether merging the slices would be cleaner than parallel work.",
+      "expectations": [
+        "Identifies the disjoint-files validator as warn-soft (not a hard gate)",
+        "Mentions worktree isolation as the reason (or that /impl --parallel handles the conflict)",
+        "Mentions surfacing it so the user can decide to merge slices if appropriate"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "What labels must each AFK issue carry when filed to sonthanh/ai-brain via /to-issues?",
+      "expected_output": "Required: area:<repo> (e.g. area:plugin-brain-os), owner:bot (AFK marker), priority:p1-p4, weight:quick or weight:heavy, status:ready / blocked / backlog. HITL slices carry owner:human instead.",
+      "expectations": [
+        "Mentions area: label (with at least one example)",
+        "Mentions owner:bot for AFK (and owner:human for HITL)",
+        "Mentions priority: label",
+        "Mentions weight: label",
+        "Mentions status: label"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "If slice B is blocked by slice A, what order does /to-issues create the GitHub issues in, and why?",
+      "expected_output": "Topological order — A first, then B. Creating B first would force a placeholder reference (#?) in B's `Blocked by` section because A doesn't have a real issue number yet. Creating A first lets B reference A's actual issue number returned by `gh issue create`.",
+      "expectations": [
+        "Says blockers / dependencies first (topological order)",
+        "Explains the reason (real issue number vs placeholder, captured from gh issue create output)"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "Where does /to-issues write its outcome log, and what does the action field capture?",
+      "expected_output": "{vault}/daily/skill-outcomes/to-issues.log per skill-spec.md § 11. Action = `slice` (normal grill → issues path) or `re-slice` (user requested merge/split of issues already filed today). Result = pass if no reactive split / merge happens within 48h, partial if user merged 1–2 slices mid-quiz before approval, fail if breakdown rejected entirely.",
+      "expectations": [
+        "Mentions daily/skill-outcomes/to-issues.log path",
+        "References skill-spec.md § 11 or the standard outcome-log convention",
+        "Names slice (and ideally re-slice) as the action verb"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "When should you NOT use /to-issues?",
+      "expected_output": "Single bug fix (just `gh issue create` directly), exploratory grill where decisions aren't settled (finish /grill first — the skill should refuse), the plan IS one slice (file it directly without manufacturing sub-issues), cosmetic / typo / config tweak (direct edit + push, no Pocock pipeline overhead).",
+      "expectations": [
+        "Mentions at least two of: single bug, unsettled grill, one-slice plan, cosmetic / typo / config",
+        "Distinguishes /to-issues from direct gh issue create or direct edit + push"
+      ]
+    }
+  ]
+}

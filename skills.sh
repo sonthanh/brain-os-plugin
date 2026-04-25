@@ -18,7 +18,7 @@ CLONE_DIR="$HOME/.brain-os"
 
 ALL_SKILLS=(
   absorb aha audit verify develop eval gmail gmail-bootstrap grill handover impl improve ingest
-  journal pickup research self-learn status study tdd think triggers
+  journal pickup research self-learn status study tdd think to-issues triggers
 )
 
 clone_or_update() {
