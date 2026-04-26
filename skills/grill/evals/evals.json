@@ -43,7 +43,7 @@
       "prompt": "How long is the grill skill instruction body (excluding frontmatter and usage)?",
       "expected_output": "Very short — one paragraph plus one output line",
       "expectations": [
-        "Instruction body is under 120 words",
+        "Instruction body is at most 120 words",
         "No separate Rules or Protocol sections exist"
       ]
     },
@@ -73,6 +73,26 @@
         "Says tasks become GitHub issues in gh_task_repo",
         "Says NOT to write to business/tasks/inbox.md",
         "Mentions inbox.md is archived"
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "When should /grill render an ASCII flowchart?",
+      "expected_output": "When an answer or plan involves 2 or more components with cross-dependencies. Skip for trivial single-component cases — single-node diagram is noise.",
+      "expectations": [
+        "Mentions threshold of 2 or more components",
+        "Mentions cross-dependencies as the trigger condition",
+        "Mentions ASCII flowchart as the diagram format"
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "What must /grill do before applying status:pass to a grill session that meets the visualization threshold?",
+      "expected_output": "Render an ASCII flowchart of the touch points and gate on user OK before applying the status:pass frontmatter. The checkpoint catches design holes at the cheapest fix moment, while grill state is still loaded.",
+      "expectations": [
+        "Mentions gating before status:pass",
+        "Mentions waiting for user OK or confirmation",
+        "Connects the gate to ASCII flowchart rendering"
       ]
     }
   ]
