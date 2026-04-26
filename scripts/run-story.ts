@@ -118,10 +118,15 @@ export interface GhClient {
   viewState(n: number): Promise<State>;
   editBody(n: number, body: string): Promise<void>;
   closeIssue(n: number): Promise<void>;
+  relabelHuman(n: number): Promise<void>;
 }
 
 export interface SpawnClient {
   spawnWorker(name: string, prompt: string, logPath: string): { pid: number };
+}
+
+export interface ProcessChecker {
+  isAlive(pid: number): boolean;
 }
 
 export interface Notifier {
@@ -130,6 +135,16 @@ export interface Notifier {
 
 export interface Logger {
   log(msg: string): void;
+}
+
+// Decide what to do with a watched AFK child after a poll cycle.
+// Pure function — testable without IO.
+export type WorkerAction = "running" | "closed" | "dead";
+
+export function decideWorkerAction(pidAlive: boolean, state: State): WorkerAction {
+  if (state === "CLOSED") return "closed";
+  if (!pidAlive) return "dead"; // process gone but issue still OPEN = failure
+  return "running";
 }
 
 // =========================================================================
@@ -179,26 +194,59 @@ class RealGh implements GhClient {
   async closeIssue(n: number): Promise<void> {
     await this.run(["issue", "close", String(n), "-R", this.repo, "--reason", "completed"]);
   }
+
+  async relabelHuman(n: number): Promise<void> {
+    // Best-effort: remove status:in-progress + owner:bot, add status:ready + owner:human.
+    // Each label op may fail individually if label not present — we tolerate that.
+    const ops: string[][] = [
+      ["issue", "edit", String(n), "-R", this.repo, "--remove-label", "status:in-progress", "--add-label", "status:ready"],
+      ["issue", "edit", String(n), "-R", this.repo, "--remove-label", "owner:bot", "--add-label", "owner:human"],
+    ];
+    for (const args of ops) {
+      try { await this.run(args); } catch { /* tolerate */ }
+    }
+  }
 }
 
 class RealSpawn implements SpawnClient {
   spawnWorker(name: string, prompt: string, logPath: string): { pid: number } {
-    const proc = Bun.spawn(
-      [
-        "claude",
-        "-w",
-        name,
-        "--dangerously-skip-permissions",
-        "-p",
-        prompt,
-      ],
-      {
-        stdout: Bun.file(logPath).writer() as unknown as "pipe",
-        stderr: Bun.file(logPath).writer() as unknown as "pipe",
-        stdio: ["ignore", "ignore", "ignore"],
-      },
-    );
-    return { pid: proc.pid };
+    const fs = require("fs");
+    const fd = fs.openSync(logPath, "a");
+    try {
+      const proc = Bun.spawn(
+        [
+          "claude",
+          "-w",
+          name,
+          "--dangerously-skip-permissions",
+          "-p",
+          prompt,
+        ],
+        {
+          stdin: "ignore",
+          stdout: fd,
+          stderr: fd,
+        },
+      );
+      return { pid: proc.pid };
+    } finally {
+      fs.closeSync(fd);
+    }
+  }
+}
+
+class RealProcessChecker implements ProcessChecker {
+  isAlive(pid: number): boolean {
+    try {
+      // Signal 0 doesn't actually send anything — just checks existence + permission.
+      process.kill(pid, 0);
+      return true;
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === "ESRCH") return false; // no such process
+      if (code === "EPERM") return true; // exists but not ours; treat as alive
+      return false;
+    }
   }
 }
 
@@ -218,11 +266,8 @@ class FileLogger implements Logger {
   constructor(private path: string) {}
   log(msg: string): void {
     const line = `${new Date().toISOString()} | ${msg}\n`;
-    // Append synchronously via Node fs to avoid race
     const fs = require("fs");
     fs.appendFileSync(this.path, line);
-    // Also tee to stderr for live tail
-    process.stderr.write(line);
   }
 }
 
@@ -233,6 +278,7 @@ class FileLogger implements Logger {
 export interface OrchestratorDeps {
   gh: GhClient;
   spawn: SpawnClient;
+  proc: ProcessChecker;
   notify: Notifier;
   logger: Logger;
   pollIntervalMs: number;
@@ -246,7 +292,8 @@ export async function runStory(
 ): Promise<{ closed: number[]; failed: number[] }> {
   const HARD_CAP = 5;
   const cap = clampParallel(parallel, HARD_CAP);
-  const { gh, spawn, notify, logger, pollIntervalMs, workerLogDir } = deps;
+  const { gh, spawn, proc, notify, logger, pollIntervalMs, workerLogDir } = deps;
+  const failed: number[] = [];
 
   logger.log(`=== run-story start | parent=#${parent} parallel=${cap} ===`);
 
@@ -324,8 +371,33 @@ export async function runStory(
         logger.log(`gh viewState(#${n}) errored, retrying next cycle: ${(err as Error).message}`);
         continue;
       }
-      if (state === "CLOSED") {
-        const watchKind = watching.get(n)!;
+
+      const watchKind = watching.get(n)!;
+      const isAfk = watchKind.startsWith("afk:");
+      const pid = isAfk ? Number(watchKind.slice(4)) : null;
+      const pidAlive = pid !== null ? proc.isAlive(pid) : true; // HITL has no PID, treat as "alive" (waiting on human)
+      const action = decideWorkerAction(pidAlive, state);
+
+      if (action === "running") {
+        continue;
+      }
+
+      if (action === "dead") {
+        // Worker process gone but issue still OPEN — failure mode
+        logger.log(`WORKER DEAD: #${n} (pid=${pid}) exited without closing issue — re-labeling owner:human`);
+        try {
+          await gh.relabelHuman(n);
+        } catch (err) {
+          logger.log(`relabelHuman(#${n}) errored: ${(err as Error).message}`);
+        }
+        notify.notify(`Worker died on #${n}. Re-labeled owner:human. Run: cr /pickup ${n}`);
+        watching.delete(n);
+        failed.push(n);
+        // Do NOT promote waiters — failed child blocks them. Surface to user.
+        continue;
+      }
+
+      if (action === "closed") {
         logger.log(`child #${n} closed (${watchKind})`);
         watching.delete(n);
         closed.add(n);
@@ -350,19 +422,23 @@ export async function runStory(
     }
   }
 
-  // Close parent
+  // Close parent only if no failures
   const parentState = await gh.viewState(parent);
-  if (parentState !== "CLOSED") {
-    await gh.closeIssue(parent);
-    logger.log(`closed parent #${parent}`);
+  if (failed.length > 0) {
+    logger.log(`drain finished with ${failed.length} failures: [${failed.join(",")}] — leaving parent #${parent} OPEN`);
+    notify.notify(`Story #${parent} drained with ${failed.length} failed children. Run: cr /pickup <N> to resolve.`);
+  } else {
+    if (parentState !== "CLOSED") {
+      await gh.closeIssue(parent);
+      logger.log(`closed parent #${parent}`);
+    }
+    notify.notify(`Story #${parent} complete. Run: cr /story-debrief ${parent} for review`);
   }
-
-  notify.notify(`Story #${parent} complete. Run: cr /story-debrief ${parent} for review`);
   logger.log(`=== run-story DONE ===`);
 
   return {
     closed: Array.from(closed),
-    failed: [],
+    failed,
   };
 }
 
@@ -412,6 +488,7 @@ async function main() {
   const deps: OrchestratorDeps = {
     gh: new RealGh(repo),
     spawn: new RealSpawn(),
+    proc: new RealProcessChecker(),
     notify: new RealNotifier(parent),
     logger,
     pollIntervalMs: 30_000,

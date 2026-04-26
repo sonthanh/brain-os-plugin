@@ -13,13 +13,14 @@
     },
     {
       "id": 2,
-      "prompt": "How does /impl --parallel N isolate filesystem changes between subagents?",
-      "expected_output": "Each spawned Agent-tool subagent runs with `isolation: \"worktree\"`. This is always-on, auto-cleanup, free, and prevents the two-teammates-editing-the-same-file overwrite class.",
+      "prompt": "How does /impl -p N (alias --parallel N) isolate filesystem changes between subagents?",
+      "expected_output": "Each spawned Agent-tool subagent runs with `isolation: \"worktree\"`. This is always-on, auto-cleanup, free, and prevents the two-teammates-editing-the-same-file overwrite class. The canonical flag is `-p N`; `--parallel N` is retained as an alias for safety.",
       "expectations": [
         "Mentions Agent tool",
         "Mentions isolation: \"worktree\" (verbatim phrase)",
         "Says it is always-on / not conditional",
-        "Mentions auto-cleanup"
+        "Mentions auto-cleanup",
+        "Mentions -p as the canonical flag with --parallel retained as alias"
       ]
     },
     {

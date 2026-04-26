@@ -7,6 +7,7 @@ import {
   clampParallel,
   computeReady,
   promoteWaiters,
+  decideWorkerAction,
   type Issue,
 } from "./run-story.ts";
 
@@ -195,5 +196,20 @@ describe("promoteWaiters", () => {
     ];
     const closed = new Set([147]);
     expect(promoteWaiters(issues, 147, closed, new Set([149, 150])).sort()).toEqual([149, 150]);
+  });
+});
+
+describe("decideWorkerAction", () => {
+  test("CLOSED issue → closed regardless of pid state", () => {
+    expect(decideWorkerAction(true, "CLOSED")).toBe("closed");
+    expect(decideWorkerAction(false, "CLOSED")).toBe("closed");
+  });
+
+  test("OPEN + pid alive → still running", () => {
+    expect(decideWorkerAction(true, "OPEN")).toBe("running");
+  });
+
+  test("OPEN + pid dead → dead worker (failure mode)", () => {
+    expect(decideWorkerAction(false, "OPEN")).toBe("dead");
   });
 });

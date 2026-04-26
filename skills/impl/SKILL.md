@@ -1,6 +1,6 @@
 ---
 name: impl
-description: "Per-issue implementation executor for brain-os artifacts. Default mode grabs the next AFK GitHub issue and runs /tdd on it; --parallel N fans out via Agent-tool subagents with worktree isolation. Use when draining the AFK backlog, when the user says 'implement next issue', 'pick up the queue', or invokes /impl. Pairs with /ralph-loop for autonomous backlog drainage."
+description: "Per-issue implementation executor for brain-os artifacts. Default mode grabs the next AFK GitHub issue and runs /tdd on it; -p N (alias --parallel N) fans out via Agent-tool subagents with worktree isolation; /impl N runs /tdd on a specific issue regardless of owner label; /impl story <N> drains a multi-issue story DAG. Use when draining the AFK backlog, picking up a specific issue, or running an approved story end-to-end. Pairs with /ralph-loop for autonomous backlog drainage."
 ---
 
 # /impl — Per-Issue Implementation Executor
@@ -11,9 +11,10 @@ Wraps "grab next AFK issue → run /tdd → commit + push + close." Designed in 
 
 | Mode | Invocation | Behavior |
 |------|------------|----------|
-| `once` (default) | `/impl` or `/impl --area <label>` | Grab one AFK issue, run /tdd, commit, push, close. Exit. |
-| `parallel` | `/impl --parallel N` | Spawn N Agent-tool subagents with `isolation: "worktree"`, each running /tdd on a different AFK issue. Main session merges + pushes + closes. |
-| `story` | `/impl story <parent-N> [-p N]` | Bash-orchestrated DAG drain of a multi-issue story. Reads parent issue body checklist + each child's `Blocked by` to build the DAG, spawns AFK workers (claude -w + /impl) up to parallel cap, surfaces HITL children via osascript notify, ticks parent body checklist on each close, closes parent + macOS-notifies on completion. Self-detached via `nohup` — main Claude session exits immediately, ~0 token burn during drain. |
+| `once` (default) | `/impl` or `/impl --area <label>` | Grab one AFK issue (`status:ready` AND `owner:bot`), run /tdd, commit, push, close. Exit. |
+| `issue` | `/impl <N>` | Run /tdd on a SPECIFIC issue number — owner-label filter is bypassed (works for `owner:bot` AND `owner:human`). The trunk-block hook still gates AFK trunk-touches via `IMPL_AFK=1`. Use when you (or another skill) already picked the issue and want /impl to handle plumbing. See § Workflow — `issue` mode. |
+| `parallel` | `/impl -p N` (alias `--parallel N`) | Spawn N Agent-tool subagents with `isolation: "worktree"`, each running /tdd on a different AFK issue. Main session merges + pushes + closes. |
+| `story` | `/impl story <parent-N> [-p N]` (alias `/impl --story <parent-N>`) | Bash-orchestrated DAG drain of a multi-issue story. Reads parent issue body checklist + each child's `Blocked by` to build the DAG, spawns AFK workers (claude -w + /impl) up to parallel cap, surfaces HITL children via osascript notify, ticks parent body checklist on each close, closes parent + macOS-notifies on completion. Self-detached via `nohup` — main Claude session exits immediately, ~0 token burn during drain. Both invocation forms dispatch to the same `scripts/run-story.ts` orchestrator. |
 | `team` | DEFERRED — do not implement | Reserved for Phase G when first-party agent teams (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`) prove necessary for cross-session coordination. Today: error and exit if user passes `--team`. |
 
 ## Defaults
@@ -30,8 +31,11 @@ Wraps "grab next AFK issue → run /tdd → commit + push + close." Designed in 
 
 ```
 /impl                        # Pick one AFK issue, /tdd it, commit/push/close, exit
-/impl --area plugin-vault    # Same, filtered to a different area label
-/impl --parallel 3           # Three issues in worktree-isolated subagents
+/impl 147                    # Run /tdd on issue #147 specifically (owner override)
+/impl --area plugin-vault    # Same as bare /impl, filtered to a different area label
+/impl -p 3                   # Three issues in worktree-isolated subagents (alias: --parallel 3)
+/impl story 145              # Drain the story rooted at parent issue #145 (alias: --story 145)
+/impl story 145 -p 5         # Same, raise parallel cap to hard max
 ```
 
 ### Autonomous backlog drain (wrap in `/ralph-loop`)
@@ -47,7 +51,7 @@ How it terminates: each iteration `/impl` picks the next AFK issue, `/tdd`s it, 
 Hybrid (each ralph iteration spawns N subagents):
 
 ```
-/ralph-loop "/impl --parallel 3" --completion-promise "NO_MORE_ISSUES" --max-iterations 10
+/ralph-loop "/impl -p 3" --completion-promise "NO_MORE_ISSUES" --max-iterations 10
 ```
 
 Tuning `--max-iterations` (safety cap, never omit):
@@ -130,6 +134,39 @@ If the trunk-block hook fires (exit 2): the commit is blocked because the staged
 
 Append one line to `{vault}/daily/skill-outcomes/impl.log` (see § Outcome log below).
 
+## Workflow — `issue` mode
+
+`/impl <N>` runs /tdd on a specific issue regardless of its `owner:bot` / `owner:human` label. The owner-label filter that gates `once` mode is intentionally bypassed because the user (or a parent skill like `/impl story`) has already decided this issue is the next one to ship.
+
+### Differences vs `once` mode
+
+| Step | `once` | `issue <N>` |
+|------|--------|-------------|
+| Pick | `gh issue list` filtered by `status:ready,owner:bot` | Skip — issue number is given as arg |
+| Owner check | Required (`owner:bot` only) | Bypassed — accepts any owner |
+| Claim | `status:ready` → `status:in-progress` | Same |
+| Read | Issue body, "Required reading", "Acceptance", `Blocked by` | Same |
+| /tdd | Same | Same |
+| Commit | `IMPL_AFK=1 git commit ...` | `IMPL_AFK=1 git commit ...` (still required) |
+| Push + close | Same | Same |
+
+### Why `IMPL_AFK=1` still applies
+
+Even though `issue` mode accepts `owner:human`, the `IMPL_AFK=1` prefix is mandatory on the commit invocation. Reason: the prefix is what the trunk-block hook (`hooks/pre-commit-trunk-block.sh`) keys on to decide whether to scan staged paths against `references/trunk-paths.txt`. The owner label is *intent* metadata; the prefix is the *gate*. They are independent — owner controls the pick path, prefix controls the commit gate. Drop the prefix only when the user is hand-driving the commit interactively (and even then, the leaf-vs-trunk discipline still applies — the hook just isn't enforcing it).
+
+If the trunk-block hook fires for an `owner:human` issue you picked up via `/impl <N>`: same response as `once` mode — re-label the issue `status:ready` + `owner:human`, leave the worktree as-is, exit. The user can resolve interactively next session.
+
+### When to invoke `issue` mode
+
+- User runs `/impl <N>` directly because they want THIS issue done now
+- `/impl story <P>` orchestrator dispatches `claude -w ... -p "/impl <M>"` per child
+- A handover doc instructs the next session to "pick up #<N>"
+
+### When NOT to invoke `issue` mode
+
+- The issue is mid-flow HITL (incomplete grill, half-written handover, mid-draft writing) — those stay `owner:human` and route through `/pickup`, not `/impl`. See § Mid-flow rule below.
+- The issue is `Blocked by #M` and #M is still open — abort and re-label `status:ready`, same as `once` mode.
+
 ## Workflow — `story` mode
 
 `/impl story <parent-N> [-p N]` drains a multi-issue story in DAG order. The orchestration is a TypeScript script (`scripts/run-story.ts`, `bun` runtime, unit-tested via `scripts/run-story.test.ts`) — main Claude session exits after kicking it off, ~0 token burn for the duration of the drain.
@@ -181,7 +218,7 @@ Status check anytime via `tail -f ~/.local/state/impl-story/<P>.log` from any te
 - All children already CLOSED (parent should be closed manually, story is done).
 - User wants to drain whole queue regardless of story membership (use `/impl auto -p N` instead).
 
-## Workflow — `--parallel N` mode
+## Workflow — `-p N` mode (alias `--parallel N`)
 
 The main session is the orchestrator. It does NOT touch artifact files itself in this mode.
 
@@ -237,7 +274,7 @@ One log line PER issue (not per parallel run). Each line carries `mode=parallel`
 
 ## Required reading inside the spawned subagent
 
-When `--parallel N` spawns a subagent, the prompt MUST embed:
+When `-p N` (alias `--parallel N`) spawns a subagent, the prompt MUST embed:
 
 1. The full issue body verbatim (do not summarize — the subagent has no shared context)
 2. A pointer to `/tdd` SKILL.md (path: `~/work/brain-os-plugin/skills/tdd/SKILL.md`)
@@ -257,6 +294,22 @@ When `--parallel N` spawns a subagent, the prompt MUST embed:
 5. Exit protocol: self-check → commit → push → output the issue number on a line by itself so the orchestrator can latch. If the orchestrator's PreToolUse hook ALSO fires and exits 2 (defense in depth), follow the same re-label-and-exit path.
 6. Worktree note: "you are running with `isolation: 'worktree'`; commit in your worktree branch, do not push, the orchestrator will fast-forward into main"
 
+## Mid-flow rule
+
+Handovers, incomplete grills, mid-draft writing stay `owner:human`. `/impl` (in `once` and `parallel` modes) filters on `owner:bot` — handovers are excluded by construction. Codified to prevent label drift where someone tags a half-finished grill `owner:bot` and an autonomous worker picks it up mid-thought.
+
+The rule, stated mechanically:
+
+| Artifact state | Owner label | Pickup path |
+|----------------|-------------|-------------|
+| Skill / script / hook / plist with closed acceptance criteria | `owner:bot` | `/impl` (any mode) |
+| Handover doc (continuation contract for a future session) | `owner:human` | `/pickup` (HITL) |
+| Grill session not yet settled | `owner:human` | `/pickup` (HITL) |
+| Mid-draft Substack / vault essay | `owner:human` | `/pickup` (HITL) |
+| Anything that needs human judgment to close | `owner:human` | `/pickup` (HITL) |
+
+If `/impl <N>` is invoked on an `owner:human` issue (legal — owner filter bypassed in `issue` mode), the operator is making an explicit override decision. Honor it: run /tdd, commit, push, close. The mid-flow rule still applies as guidance, but the explicit override carries the day. Do NOT prompt the user to confirm; do NOT silently fall back to `/pickup`.
+
 ## When NOT to use /impl
 
 - Issue is HITL (human-in-loop) — needs interactive grilling or approval. Use the issue's normal flow; don't auto-pick.
@@ -271,7 +324,7 @@ When `--parallel N` spawns a subagent, the prompt MUST embed:
 - **`git pull --rebase` is mandatory before push.** CI auto-release pipelines bump `plugin.json` on every push. Skipping the rebase guarantees a non-fast-forward push failure.
 - **`IMPL_AFK=1` on the commit invocation is required.** It signals to the trunk-block hook (`hooks/pre-commit-trunk-block.sh`) that this is autonomous AFK work. The hook reads the trunk-paths list (`references/trunk-paths.txt`) and exits 2 if any staged file matches — blocks the commit. Without the prefix, the hook is a no-op (interactive direct-push-to-main is unchanged). Source: [grill 2026-04-26](https://github.com/sonthanh/ai-brain/blob/main/daily/grill-sessions/2026-04-26-depth-leaf-trunk-design.md). DO NOT bypass with `--no-verify` or strip the prefix to "make it work" — the right response to a block is `gh issue edit <N> -R <tracker-repo> --remove-label status:in-progress --add-label status:ready --remove-label owner:bot --add-label owner:human` and exit; the user resolves interactively.
 - **Empty backlog sentinel must be wrapped in `<promise>` tags** — emit exactly `<promise>NO_MORE_ISSUES</promise>` in the assistant text response. The ralph-loop Stop hook (`stop-hook.sh:130-141`) extracts the inner text via Perl regex and exact-matches against `--completion-promise "NO_MORE_ISSUES"`. Bare `NO_MORE_ISSUES` without tags only matches when the entire response is *literally that string and nothing else* — adding any surrounding prose (which Claude almost always does) breaks the match. Stdout / `Bash(echo)` is also wrong: ralph reads transcript text blocks (`type: text`), not stdout.
-- **`--team` is DEFERRED.** If a user passes `--team`, print "team mode is deferred to Phase G — see grill 2026-04-25" and exit 1. Don't fall back to `--parallel` silently — the user explicitly asked for the unimplemented mode.
+- **`--team` is DEFERRED.** If a user passes `--team`, print "team mode is deferred to Phase G — see grill 2026-04-25" and exit 1. Don't fall back to `-p` silently — the user explicitly asked for the unimplemented mode.
 - **/tdd owns the test loop. /impl owns the issue plumbing.** Do not duplicate /tdd's red-green logic here. If /tdd's discipline isn't holding (reactive `improve: encoded feedback —` patches keep landing), fix /tdd, not /impl.
 
 ## Outcome log
