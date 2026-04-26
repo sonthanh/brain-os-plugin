@@ -11,7 +11,7 @@ description: |
 ```
 /improve <skill-name>        # Improve a specific skill (Phase 1–5, from outcome logs)
 /improve                     # Scan all outcome logs, rank by error rate, suggest which to improve
-/improve feedback            # Scan daily/feedback-pending/, encode each rule into target skill (Phase 0)
+/improve memory              # Triage memory feedback inbox via 5-tier rubric (Phase 0 — Step 0.0/0.5/0.7 only)
 ```
 
 ## Clarifications
@@ -22,8 +22,8 @@ Answers to the five most common questions about `/improve` behavior — answer i
 
 Three modes:
 - **Auto-per-run** — skills auto-invoke `/improve {skill}` immediately after appending an outcome log line with `result != pass`. No user confirmation. See `skill-spec.md § 11 Auto-improve rule`.
-- **Scheduled batch** — daily cron (currently `trig_0183t3F6yec8NsdF6faNVn2m` at 6:07am) runs Phase 0 first (feedback-pending encode), then scans outcome logs, ranks by error rate, picks top candidate, and runs full Phase 1–5.
-- **Manual** — user invokes `/improve <skill>` ad hoc to force a learning pass. `/improve feedback` runs Phase 0 only.
+- **Scheduled batch** — daily cron at 20:00 local (`com.brain.improve` plist) runs Phase 0 first (`/improve memory` triage + index reconcile + expiry), then scans outcome logs, ranks by error rate, picks top candidate, and runs full Phase 1–5 if weekly quota allows.
+- **Manual** — user invokes `/improve <skill>` ad hoc to force a learning pass. `/improve memory` runs Phase 0 (Step 0.0 + 0.5 + 0.7) only.
 
 ### Signals — what counts as evidence?
 
@@ -68,143 +68,112 @@ Procedure to add a new optional field:
 - Grill sessions: `{vault}/daily/grill-sessions/`
 - Aha moments: `{vault}/thinking/aha/`
 - Reports: `{vault}/daily/improve-reports/`
-- **Feedback queue:** `{vault}/daily/feedback-pending/` (input) + `{vault}/daily/feedback-encoded/` (archive)
+- **Memory feedback inbox:** `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects/<vault>/memory/feedback_*.md` and any sibling account directories under `~/.claude*/` — auto-loaded by Claude Code at session start; typically symlinked across accounts to share one physical dir. `/improve memory` triages each entry into the 5-tier rubric below and removes the source on encoding. Source feedback memory files are deleted (not archived) — git history preserves the rationale because each encoding commits the original rule body + Why + How-to-apply (see Step 0.0).
 
 ---
 
-## Phase 0 — Encode pending feedback (deterministic scan + latent encoding)
+## Phase 0 — Memory triage + index reconcile + expiry (`/improve memory`)
 
-Phase 0 runs **before** Phase 1 in the daily cron and when invoked via `/improve feedback`. Skip entirely when `daily/feedback-pending/` contains no files other than `README.md`.
+Phase 0 runs **before** Phase 1 in the daily cron and when invoked via `/improve memory`. The three steps below are deterministic to set up and idempotent — empty memory dir → no-op. Latent judgment is required only when the rubric (Step 0.0) needs to classify a rule into a tier; everything else is mechanical.
 
-Explicit user feedback is higher-signal than log-derived patterns — it's a direct rule the user wants enforced, not an inferred hypothesis. Phase 0 translates each pending file into code in its target skill, validates via the skill's eval suite, and archives the file on success. No LLM judgment about *what* the rule should be; only about *where* and *how* to encode it.
+The 5-tier triage rubric replaces the prior `feedback-pending/` pipeline. Memory is now the single inbox for behavioral feedback the user gives mid-conversation. `/improve memory` triages each entry into the right artifact (hook / skill / `.claude/rules/` / CLAUDE.md / memory-stay), encodes it there, deletes the source file, and rebuilds the MEMORY.md index.
 
-### Step 0.1 — Collect pending files
+### Step 0.0 — Triage (5-tier rubric)
 
-```bash
-find {vault}/daily/feedback-pending -maxdepth 1 -name '*.md' ! -name 'README.md' | sort
-```
+#### Collect feedback files
 
-Zero files → stop. Report "no pending feedback" and exit Phase 0.
-
-### Step 0.2 — Per file, resolve target
-
-Parse frontmatter:
-- `target_skill` (REQUIRED) → locate `<source-repo>/skills/<target_skill>/SKILL.md`. Source-repo resolution follows the installed-plugin convention (e.g., `target_skill: gmail-triage` → `~/work/brain/commands/gmail-triage.md` for vault-level skills OR `~/work/brain-os-plugin/skills/gmail/SKILL.md` for plugin skills; resolver reads `source_repo` hints in the skill itself or walks known roots).
-- `target_path` (OPTIONAL) → exact file the encoding goes into; overrides the default SKILL.md.
-
-Missing / unresolvable `target_skill` → flip `status: stale` in frontmatter with `stale_reason: "unresolved target_skill"`, leave in pending/, notify user, skip to next file.
-
-### Step 0.3 — Latent: propose encoding
-
-**Scope validation first.** Before proposing the encoding, validate that the declared `target_path` matches the rule's actual scope. Mis-routed rules (a universal rule encoded into a single SKILL.md when the plugin has a shared-reference layer) create SSOT violations — sibling skills that should inherit the rule never see it. This check is defense-in-depth for upstream feedback-creation logic; when upstream classifies correctly the check is a no-op.
-
-Skip scope validation when any of the following hold:
-
-- `target_skill` is a list (e.g. `[fb-writer, substack-writer, news-analyst]`) — multi-skill declaration already signals universal intent.
-- `target_path` resolves inside a `references/` directory — already routing to the shared layer.
-- The target skill has no sibling `references/` directory (walk from `<source-repo>/skills/<target_skill>/` up one level and check `<source-repo>/references/`). No shared layer exists to route to.
-
-Otherwise — target resolves to an individual `SKILL.md` AND a sibling `references/` exists — run the hybrid detector below.
-
-**Deterministic scope detection:**
-
-1. Locate the references dir by walking from `<source-repo>/skills/<target_skill>/` up one level to `<source-repo>/references/`.
-2. Extract section titles from every `*.md` in that dir — grep `^##+ ` headers.
-3. Normalize the rule body (Rule / Why / How to apply — **exclude** Suggested encoding, which often cross-references shared sections without making the rule universal) to lowercase.
-4. For each section title, extract distinctive key terms (2+ word phrases, or single words longer than 4 chars that aren't common stopwords). Check whether any key term appears in the normalized rule body.
-5. Distinct-section matches:
-   - ≥2 distinct section titles matched → **likely universal**, flag scope mismatch.
-   - Exactly 1 match → **inconclusive**, fall through to latent fallback.
-   - Zero matches → **likely skill-specific**, no override.
-
-**Latent fallback** (runs only when deterministic is inconclusive OR when references dir has fewer than 3 section titles to grep against):
-
-Spawn an Agent sub-agent (`subagent_type: general-purpose`, model: sonnet) with this prompt:
-
-> You are judging whether a feedback rule is UNIVERSAL (applies to every skill in a category and belongs in a shared reference file) or SKILL-SPECIFIC (only for one skill, belongs in its own SKILL.md).
->
-> Reply strictly on line 1: `UNIVERSAL` or `SKILL-SPECIFIC`. One-sentence rationale on line 2. No other output.
->
-> Rule body (Rule / Why / How to apply):
-> ```
-> {rule_body}
-> ```
->
-> Existing shared reference contents (what already lives in the shared layer for this plugin):
-> ```
-> {shared_reference_contents_truncated_to_4000_chars}
-> ```
->
-> Declared target: {target_path}
-
-**Output handling:** first line must be exactly `UNIVERSAL` or `SKILL-SPECIFIC`. Malformed / non-conforming / empty → treat as `SKILL-SPECIFIC`. Conservative default — respect declared target when uncertain.
-
-**Override policy:**
-
-- `scope_detected: universal` + declared `target_path` = individual SKILL.md → **override**. Set `final_target_path` to the references file whose section titles matched (deterministic path) or to `references/shared-rules.md` if it exists (latent path), falling back to the references file with the most section titles overall.
-- `scope_detected: skill-specific` → respect declared `target_path`, no override.
-- `scope_detected: uncertain` (latent returned malformed or ambiguous) → respect declared `target_path`, no override, but record uncertainty for the Phase 5 report so routing drift is visible.
-
-Record per-file into the Phase 5 report: `scope_declared`, `scope_detected`, `override_applied`, `final_target_path`.
-
----
-
-Once `final_target_path` is resolved, propose the **smallest change** that enforces the rule at that path:
-
-- **Spec-level rule** → bullet added to an existing section of the target file (SKILL.md, shared reference, or markdown spec file like `commands/gmail-triage.md`).
-- **Deterministic pattern** (regex, filter, constant) → script edit (e.g. `scripts/foo.ts`, `lib/bar.ts`).
-- **Acceptance case** → new fixture in the skill's eval suite (`evals/`, `commands/<skill>-evals/`).
-
-If the file provides `Suggested encoding`, treat it as a strong hint — deviate only if it would produce a broken or dead change, OR if scope detection overrode the target (the suggested encoding location then points at the now-wrong file; re-derive for `final_target_path`). Otherwise, choose the location that makes the rule most enforceable at the skill's next invocation.
-
-Keep the change surgical. Do not refactor surrounding code. Do not add comments that restate the rule — the pending-file Why/How-to-apply IS the explanation, and it will live permanently in `feedback-encoded/`.
-
-### Step 0.4 — Deterministic: eval gate
-
-Identify the skill's eval suite. Typical locations:
-- Plugin skills: `{source-repo}/skills/<skill>/evals/evals.json` (run via `/eval <skill>` or `scripts/eval-<skill>.sh`).
-- Vault-level commands: `{vault}/commands/<skill>-evals/` + `{vault}/scripts/eval-<skill>.sh`.
+Glob across all Claude account directories on the machine, then realpath-dedupe so any symlinks between accounts don't double-process the same physical file:
 
 ```bash
-before_pass=$(run_eval | tee /tmp/improve-feedback-before.log | tail -1)
-apply_change
-after_pass=$(run_eval | tee /tmp/improve-feedback-after.log | tail -1)
+shopt -s nullglob
+declare -A SEEN
+for f in ~/.claude*/projects/*/memory/feedback_*.md; do
+  canon=$(/usr/bin/python3 -c "import os,sys;print(os.path.realpath(sys.argv[1]))" "$f")
+  [[ -z "${SEEN[$canon]:-}" ]] && SEEN[$canon]=1 && printf '%s\n' "$canon"
+done | sort
 ```
 
-- `after_pass >= before_pass` → encoding accepted.
-- `after_pass < before_pass` → revert (`git checkout -- <changed files>`), flip `status: stale` with `stale_reason: "eval regression {before} → {after}"`, leave in pending/.
+Zero feedback files → skip Step 0.0; proceed to Step 0.5 (index reconcile is still useful for cleaning stale MEMORY.md entries).
 
-When the target skill has no eval suite, fall back to a spec-only check: apply the change, run the skill on a dry-run fixture if one exists, else accept the encoding but mark `eval_pass_after: n/a` in the archived frontmatter (so future readers know it was not regression-tested).
+#### Walk the rubric per file (top-to-bottom, first match wins)
 
-### Step 0.5 — Commit + archive
+For each canonical feedback file, read its frontmatter (`name`, `description`, `type`) and body (the rule + Why + How-to-apply), then walk the decision tree:
 
-On accept:
-1. Stage + commit the target-file edit with message `improve: encoded feedback — <slug> → <target_skill>`.
-2. Rewrite the pending file's frontmatter:
-   ```yaml
-   status: encoded
-   encoded_at: YYYY-MM-DD HH:MM
-   encoded_in_commit: <short-sha>
-   eval_pass_after: <N>/<M>
-   scope_declared: <target_path as declared in pending frontmatter, or "n/a" if absent>
-   scope_detected: universal | skill-specific | uncertain | skipped
-   override_applied: true | false
-   final_target_path: <path actually written to — equals scope_declared when override_applied=false>
-   ```
-   (`scope_detected: skipped` covers the short-circuits in Step 0.3 — list target, references target, no references dir.)
-3. `mv` the file from `daily/feedback-pending/` to `daily/feedback-encoded/` (preserving filename). Commit the move.
-4. Push both commits in one `git push` at the end of the phase.
+1. **Can the violation be detected by inspecting tool inputs / outputs deterministically?** → **HOOK** (`PreToolUse` or `PostToolUse`). Compliance: hard. *Encoding:* write a new shell script under `~/.claude/hooks/<descriptive-name>.sh` that exits non-zero (PreToolUse) or warns (PostToolUse) when the violation pattern matches. Register it in `~/.claude/settings.json` `hooks.{PreToolUse|PostToolUse}` matching the relevant tool (Write/Edit/Bash/etc.). Test: the hook should fire on a planted violation and pass on a clean call.
 
-### Step 0.6 — Report
+2. **Is the rule a multi-step workflow or behavioral procedure?** → **SKILL** (with evals). Compliance: encoded steps. *Encoding:* invoke `/skill-creator` interactively if a new skill is needed, OR — for an addition to an existing skill — edit the appropriate `~/work/<plugin>/skills/<name>/SKILL.md` plus add a matching case to `evals/evals.json` (coverage-parity additions, mirroring the existing pattern). When auto-running from cron and the rule maps to an existing skill, take the surgical edit path; when it implies a brand-new skill, queue the case as `type:human-review` (skill creation needs an interactive grill — see `~/work/brain/working-rules.md` and the project CLAUDE.md owner-label rule).
 
-Append one line per file to the Phase 5 report "Feedback encoded" table (and to the outcome log):
+3. **Is the rule path-scoped (only relevant in certain dirs / file types)?** → **`.claude/rules/<topic>.md`** with `paths:` frontmatter. Compliance: soft (advisory) — Claude only loads it when reading matching files. *Encoding:* write `~/.claude/rules/<topic>.md` with frontmatter listing the `paths:` glob and the rule body. Conserves global context — the rule lives off the always-on stack.
+
+4. **Is the rule cross-cutting global guidance committed long-term?** → **CLAUDE.md** (project or user). Compliance: soft. *Encoding:* append a section to `~/.claude/CLAUDE.md` (user-global) or `<project>/CLAUDE.md` (project-scoped). Keep it short — CLAUDE.md is loaded into every conversation.
+
+5. **Default — none of the above match?** → **MEMORY-STAY**. Compliance: soft, accepted. *Encoding:* leave the file in place; ensure frontmatter has `last_validated: <today-ISO>` (add if missing). The rule remains as auto-loaded soft guidance.
+
+#### Confidence routing
+
+For each file, output one of:
+- `tier: <hook|skill|rules|claude-md|memory>` + `confidence: high` → encode immediately.
+- `tier: ambiguous` → file a `type:human-review` issue in the configured task repo with a rubric trace + classification proposal. The user triages, closes the issue → next `/improve memory` run encodes per their choice.
+
+Treat as ambiguous when (a) two tiers both fit (e.g., a workflow rule that's also path-scoped), (b) the rule is too vague to act on, or (c) the encoding step would need design judgment beyond the rubric (e.g., new-skill creation, hook design touching multiple tools).
+
+#### Encoding execution
+
+For high-confidence cases, perform the encoding action for the chosen tier (above), then in a single git commit:
+1. Stage the encoding artifact (new hook script, edited skill SKILL.md + evals.json, new `.claude/rules/` file, or CLAUDE.md edit).
+2. **Delete the source memory feedback file** (`rm <canonical_path>`).
+3. Commit with message `improve: encoded memory feedback — <slug> → <tier>` and a body that quotes the original rule's full text + Why + How-to-apply (the rationale survives source deletion).
+
+Memory dirs are NOT git-tracked, so the deletion is a filesystem rm — no git stage needed for it. The commit captures only the encoding artifact + (for any vault-side artifacts) any vault changes.
+
+#### Failure handling
+
+- Encoding step errors (e.g., hook script syntax invalid, skill eval regresses) → leave source memory file in place, file a `type:human-review` issue with the failure detail, continue to next file.
+- The skill-tier path may need to run the target skill's eval suite; if eval regresses (`after_pass < before_pass`), `git checkout --` the encoding change and treat as failure.
+- Push commits at the end of the phase (one `git push`).
+
+### Step 0.5 — Index reconcile (rewrite MEMORY.md from disk)
+
+Idempotent. Rebuilds `MEMORY.md` so the index always matches what's on disk in the canonical memory dir.
+
+```bash
+canonical_dir=$(/usr/bin/python3 -c "import os,sys;print(os.path.realpath(sys.argv[1]))" \
+  "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects/<vault-slug>/memory")
+cd "$canonical_dir"
+```
+
+For each `*.md` file in the dir (excluding `MEMORY.md` itself):
+1. Read the frontmatter `name` (or filename stem if missing) and `description`.
+2. Emit one line: `- [<name>](<filename>) — <description>`.
+3. Sort lines by filename for stable order.
+
+Replace `MEMORY.md` content (preserving any standing footer note about the inbox model — keep the last italic line untouched if it begins with `_Memory feedback is the inbox`). Drop entries for files that no longer exist on disk. Do NOT touch the trailing footer note — it's user-maintained context.
+
+### Step 0.7 — Expiry check (`last_validated:` > N days)
+
+Surface stale memory entries for human-confirm-delete. Default `EXPIRY_DAYS=90`. Files without `last_validated:` are SKIPPED (lazy migration — files only get a `last_validated:` stamp when they are touched by Step 0.0 encoding or manually edited).
+
+For each `*.md` file in the canonical memory dir:
+1. Parse frontmatter `last_validated:` (ISO date `YYYY-MM-DD`).
+2. Skip if missing.
+3. Compute `today - last_validated` in days. If `> EXPIRY_DAYS`:
+   - Add the filename + age to the Step 0.7 report.
+   - File a `type:human-review` issue in `$GH_TASK_REPO` titled `Memory expiry: <filename> ({N} days since last_validated)` with body listing the file path + content + last-validated date. Label `status:ready` `priority:p3` `weight:quick` `owner:human` (memory deletion is a judgment call).
+4. After the user closes the issue with `--reason completed`, the next `/improve memory` run reads the closed issue's title, deletes the matching memory file, and skips re-issuing.
+
+**Telegram alert:** `improve-cron.sh` posts a single Telegram digest at the end of each daily run with: triaged count, encoded count, deleted count, expiry count. Routes via the same `send_telegram()` helper the cron already uses.
+
+### Step 0.9 — Outcome metrics
+
+Phase 0 emits these metrics for the cron log AND the outcome log line (see `## Outcome log` below):
 
 ```
-| <slug> | <target_skill> | encoded | <before>/<total> → <after>/<total> | <commit-sha> | <scope_declared> | <scope_detected> | <override_applied> | <final_target_path> |
-| <slug> | <target_skill> | stale   | <reason> | — | <scope_declared> | <scope_detected> | false | <scope_declared> |
+step=0.0 triaged=<N> encoded=<N> deleted=<N> ambiguous=<N> failed=<N>
+step=0.5 indexed=<N> dropped=<N>
+step=0.7 expired=<N> issued=<N>
 ```
 
-When `override_applied: true` the final_target_path differs from scope_declared — that is the signal upstream feedback-creation routed incorrectly. Track these counts in the outcome log via `scope_overrides={N}` so routing drift surfaces across runs.
+`triaged = encoded + ambiguous + failed`. `deleted` matches `encoded` for the high-confidence path (encoding succeeds → source removed); `ambiguous` and `failed` keep their files in place.
 
 ---
 
@@ -419,13 +388,15 @@ Write report to `{vault}/daily/improve-reports/{date}-{skill}.md`:
 ## Auto-generated evals
 - {N} new eval cases added from user corrections
 
-## Feedback encoded (Phase 0)
-| Slug | Target skill | Status | Eval | Commit | Scope declared | Scope detected | Override | Final target path |
-|------|--------------|--------|------|--------|----------------|----------------|----------|-------------------|
-| {slug} | {skill} | encoded | {before}/{total} → {after}/{total} | {sha} | {declared_path} | universal\|skill-specific\|uncertain\|skipped | true\|false | {final_path} |
+## Memory triage (Phase 0)
+| Slug | Tier | Confidence | Encoding artifact | Source deleted? | Commit |
+|------|------|------------|-------------------|------------------|--------|
+| {slug} | hook\|skill\|rules\|claude-md\|memory\|ambiguous | high\|low | {path written} | yes\|no | {sha or —} |
 
-## Scope overrides
-- {N} feedback files had scope detected as universal but declared an individual SKILL.md target → routing was overridden to the shared reference layer. High counts signal upstream feedback-creation drift; companion issue tracks the upstream fix.
+## Index reconcile + expiry
+- Index reconcile: {N} entries written, {M} stale entries dropped from MEMORY.md.
+- Expiry: {N} files past `last_validated:` threshold; {M} `type:human-review` issues filed.
+- Ambiguous classifications: {N} files queued as `type:human-review` issues for user triage.
 ```
 
 Commit and push the report to the vault.
@@ -452,7 +423,7 @@ Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/improve.lo
 {date} | improve | {action} | ~/work/brain-os-plugin | {output_path} | commit:{hash} | {result}
 ```
 
-- `action`: `improve` (Phase 1–5 single-skill), `feedback` (Phase 0 only), `rank` (no-arg rank-only report)
-- `output_path`: `daily/improve-reports/{date}-{skill}.md` for improve/rank; `daily/feedback-encoded/` (or last archived slug) for feedback
-- `result`: `pass` if evals improved and changes kept (or ≥1 feedback file encoded); `partial` if some changes reverted or some feedback stale; `fail` if all reverted, all stale, or no input data
-- Optional: `args="{skill-name}"`, `score={after_pass}/{after_total}`, `encoded={N}/{M}` (feedback mode: N encoded of M pending), `scope_overrides={N}` (feedback mode: N files had target_path overridden by scope detection — see Phase 0.3)
+- `action`: `improve` (Phase 1–5 single-skill), `memory` (Phase 0 only — triage + index reconcile + expiry), `rank` (no-arg rank-only report)
+- `output_path`: `daily/improve-reports/{date}-{skill}.md` for improve/rank; `N/A` for memory mode (artifacts are spread across hooks/skills/rules/CLAUDE.md/issue queue and tracked per-commit)
+- `result`: `pass` if evals improved and changes kept (improve) OR ≥1 memory file processed cleanly (memory); `partial` if some changes reverted, some memory triages routed to ambiguous, or some encodings failed; `fail` if all reverted, all stale, or no input data
+- Optional: `args="{skill-name}"`, `score={after_pass}/{after_total}`, `triaged={N}` (memory mode: total feedback files seen), `encoded={N}` (memory mode: encoded into a tier), `deleted={N}` (memory mode: source files removed), `ambiguous={N}` (memory mode: queued as human-review), `expired={N}` (memory mode: surfaced for confirm-delete)

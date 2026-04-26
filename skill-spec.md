@@ -34,8 +34,11 @@ Pipe-delimited, 7 required fields + optional trailing key=value pairs:
 - `args="..."` — original input/topic (replayed as eval case by `/improve`)
 - `score=N.N` — rubric score from evaluator (correlate with result for severity)
 - `interrupt="..."` — user-stated reason for stopping (explicit failure reason)
-- `encoded=N/M` — `/improve` feedback action only: N feedback files encoded out of M pending
-- `scope_overrides=N` — `/improve` feedback action only: N files had their declared `target_path` overridden by Phase 0 scope-routing intelligence (see `skills/improve/SKILL.md` Phase 0.3). High counts signal upstream feedback-creation is mis-classifying rule scope.
+- `triaged=N` — `/improve memory` action only: total feedback memory files seen this run
+- `encoded=N` — `/improve memory` action only: N feedback memory files encoded into their target tier (hook / skill / `.claude/rules/` / CLAUDE.md / memory-stay)
+- `deleted=N` — `/improve memory` action only: N source feedback memory files removed after successful encoding (always `==encoded` for the high-confidence path; lower if some files were skipped post-classification)
+- `ambiguous=N` — `/improve memory` action only: N files queued as `type:human-review` GitHub issues for user triage (rubric uncertain, two tiers fit, or design judgment required)
+- `expired=N` — `/improve memory` action only: N files past `last_validated:` threshold (default 90 days) surfaced via `type:human-review` issue + Telegram alert
 
 Unknown keys are ignored (forward-compat). Missing trailing fields are fine (backwards-compat).
 
