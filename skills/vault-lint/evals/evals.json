@@ -52,5 +52,17 @@
     "description": "A2 orphan exclusion list must include Clippings/ — Obsidian web clipper artifacts are standalone by design and expected to be unlinked.",
     "args": "vault-lint",
     "expect": "Clippings/"
+  },
+  {
+    "id": "orphan-entity-dirs-excluded",
+    "description": "A2 orphan exclusion list must include people/, companies/, and meetings/ — auto-generated email entity records are database-style artifacts, orphaned by design (same rationale as business/intelligence/emails/). These directories consistently account for 95%+ of orphan flags. Bidirectional link gaps for entity pages are handled by Phase A3.",
+    "args": "vault-lint",
+    "expect": "people/"
+  },
+  {
+    "id": "c3-decision-singular-match",
+    "description": "C3 empty grill detection must match both singular 'Decision' and plural 'Decisions' as a prefix for H2 headings — captures ## Decision Summary, ## Settled Decisions, and similar variants that encode real decisions but use non-standard heading text.",
+    "args": "vault-lint",
+    "expect": "Decision Summary"
   }
 ]

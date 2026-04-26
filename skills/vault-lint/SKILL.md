@@ -63,6 +63,7 @@ Find `.md` files that are NOT referenced by any wiki-link from another file. Exc
 - Files in `daily/` (dated artifacts, expected to be unlinked)
 - Files in `business/intelligence/emails/` (auto-generated dated intelligence artifacts, same exclusion rationale as `daily/`)
 - Files in `Clippings/` (Obsidian web clipper artifacts, standalone by design)
+- Files in `people/`, `companies/`, `meetings/` (auto-generated email entity records — database-style, orphaned by design; bidirectional link gaps for entity pages are handled by Phase A3, not orphan detection)
 - Files in `private/` (gitignored zone)
 - Files in `thinking/aha/`, `thinking/originals/` (standalone artifacts)
 - Root-level files (`working-rules.md`, `skill-spec.md`, etc.)
@@ -139,7 +140,7 @@ Grep vault `.md` files for absolute paths matching `~/work/...` or `/Users/.../w
 Scan `{vault}/daily/handovers/` for files older than 30 days. For each, query `gh issue list -R $GH_TASK_REPO --state open --search "<handover-filename>"` — flag as potentially stale if any open issue still references it.
 
 ### C3. Empty grill sessions [deterministic]
-Scan `{vault}/daily/grill-sessions/` for files with no section heading matching `## Decisions` as a prefix (case-insensitive — matches `## Decisions`, `## Decisions Made`, `## Decisions (locked)`, etc.) or where the matching section is empty. Flag as incomplete.
+Scan `{vault}/daily/grill-sessions/` for files with no section heading matching `## Decision` as a prefix (case-insensitive — matches `## Decisions`, `## Decisions Made`, `## Decisions (locked)`, `## Decision Summary`, `## Settled Decisions`, etc.) or where the matching section is empty. Flag as incomplete.
 
 Exclude files whose filename contains `autogrill` — these are auto-generated planning/design sessions where a formal `## Decisions` section is not required by design.
 
