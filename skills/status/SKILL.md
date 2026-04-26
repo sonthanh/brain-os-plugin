@@ -82,7 +82,7 @@ Top breaches: (up to 3, ranked by user_category r-user → team-sla-at-risk → 
 → Full ledger: [[business/intelligence/emails/sla-open]]
 
 ### Cron (last 24h)
-- [launchd + GH-Actions summary — auto-journal, pickup-auto, vault-lint, improve, clean-temp-git-cache]
+- [launchd + GH-Actions summary — auto-journal, vault-lint, improve, clean-temp-git-cache]
 
 ### Research Signal (YYYY-MM-DD)       ← ≤8 days old + Brain-os applicability present
 - [verbatim bullet 1]
