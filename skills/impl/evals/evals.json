@@ -188,6 +188,32 @@
         "Says issue mode (/impl <N>) bypasses the filter as an explicit operator override",
         "Says do NOT silently fall back to /pickup when /impl <N> is invoked on owner:human"
       ]
+    },
+    {
+      "id": 18,
+      "prompt": "What does `/impl auto` do, what command does it shell out to, and where does the ralph-loop runtime live?",
+      "expected_output": "`/impl auto` is a one-shot dispatcher to the ralph-loop wrapper. The skill prose owns nothing else (no pick / claim / commit / log) — all of that happens inside the inner `/impl` body each loop iteration. Mechanism: `/impl auto` bash-executes `bash $CLAUDE_PLUGIN_ROOT/scripts/run-ralph.sh \"/impl\" --completion-promise NO_MORE_ISSUES --max-iterations 50`. The wrapper resolves the installed `ralph-loop` plugin path dynamically (no version pin) and execs `setup-ralph-loop.sh`, which writes `.claude/ralph-loop.local.md` and emits the initial `/impl` prompt. Each iteration runs `/impl`, claims one AFK issue, ships it; the ralph Stop hook re-feeds the prompt until `/impl` emits `<promise>NO_MORE_ISSUES</promise>` (empty backlog) or 50 iterations elapse. Critically: `/impl auto` is dispatch-only and exits after shelling the wrapper; the loop body is `/impl` invoked BY ralph-loop's Stop hook each iteration — the original direction of control still holds. Cost is NOT ~0 token burn (distinct from `/impl story`'s detached nohup orchestrator) — every iteration burns inference in the current Claude session. Outcome log: `auto` is NOT a valid action value; inner iterations write `once` or `parallel` rows as normal.",
+      "expectations": [
+        "Mentions /impl auto as a one-shot dispatcher / wrapper invocation",
+        "Names scripts/run-ralph.sh as the wrapper script",
+        "Mentions hardcoded args --completion-promise NO_MORE_ISSUES and --max-iterations 50",
+        "Says the ralph-loop runtime (Stop hook, state file) lives in the ralph-loop plugin",
+        "Says /impl auto is dispatch-only and the loop body is /impl invoked BY ralph-loop each iteration",
+        "Says auto is NOT a valid outcome-log action value (inner iterations log as once/parallel)",
+        "Notes /impl auto is in-session and burns inference per iteration, distinct from /impl story's detached / ~0 main-session token cost"
+      ]
+    },
+    {
+      "id": 19,
+      "prompt": "How does `/impl auto -p 3` compose the parallel cap with the autonomous loop, and what is the worst-case work envelope before the safety cap fires?",
+      "expected_output": "`/impl auto -p 3` forwards `-p 3` into the *inner* `/impl` invocation, not into the ralph-loop wrapper. Each loop iteration runs `/impl -p 3`, which spawns 3 worktree-isolated Agent-tool subagents per iteration (subject to the existing parallel-mode cap, hard max 5). Ralph sees a single composite prompt — `\"/impl -p 3\"` — even though it fans out N subagents internally. Worst-case envelope: 50 outer iterations × 3 subagents = 150 tracer-bullet TDD cycles before `--max-iterations 50` fires, unless `<promise>NO_MORE_ISSUES</promise>` lands earlier and brings the loop home. The empty-backlog sentinel is the fast path to terminate; the iteration cap is the safety net.",
+      "expectations": [
+        "Says -p N is forwarded into the inner /impl, not into ralph-loop",
+        "Says each iteration spawns N worktree-isolated subagents",
+        "Mentions parallel-cap hard max 5",
+        "Names the worst-case envelope as max-iterations × subagents (50 × 3 = 150) before safety cap",
+        "Says <promise>NO_MORE_ISSUES</promise> is the early-exit handshake that terminates before the cap"
+      ]
     }
   ]
 }

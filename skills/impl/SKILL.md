@@ -1,6 +1,6 @@
 ---
 name: impl
-description: "Per-issue implementation executor for brain-os artifacts. Default mode grabs the next AFK GitHub issue and runs /tdd on it; -p N (alias --parallel N) fans out via Agent-tool subagents with worktree isolation; /impl N runs /tdd on a specific issue regardless of owner label; /impl story <N> drains a multi-issue story DAG. Use when draining the AFK backlog, picking up a specific issue, or running an approved story end-to-end. Pairs with /ralph-loop for autonomous backlog drainage."
+description: "Per-issue implementation executor for brain-os artifacts. Default mode grabs the next AFK GitHub issue and runs /tdd on it; -p N (alias --parallel N) fans out via Agent-tool subagents with worktree isolation; /impl N runs /tdd on a specific issue regardless of owner label; /impl story <N> drains a multi-issue story DAG; /impl auto wraps /ralph-loop around /impl to drain the AFK queue end-to-end. Use when draining the AFK backlog, picking up a specific issue, or running an approved story end-to-end."
 ---
 
 # /impl — Per-Issue Implementation Executor
@@ -15,6 +15,7 @@ Wraps "grab next AFK issue → run /tdd → commit + push + close." Designed in 
 | `issue` | `/impl <N>` | Run /tdd on a SPECIFIC issue number — owner-label filter is bypassed (works for `owner:bot` AND `owner:human`). The trunk-block hook still gates AFK trunk-touches via `IMPL_AFK=1`. Use when you (or another skill) already picked the issue and want /impl to handle plumbing. See § Workflow — `issue` mode. |
 | `parallel` | `/impl -p N` (alias `--parallel N`) | Spawn N Agent-tool subagents with `isolation: "worktree"`, each running /tdd on a different AFK issue. Main session merges + pushes + closes. |
 | `story` | `/impl story <parent-N> [-p N]` (alias `/impl --story <parent-N>`) | Bash-orchestrated DAG drain of a multi-issue story. Reads parent issue body checklist + each child's `Blocked by` to build the DAG, spawns AFK workers (claude -w + /impl) up to parallel cap, surfaces HITL children via osascript notify, ticks parent body checklist on each close, closes parent + macOS-notifies on completion. Self-detached via `nohup` — main Claude session exits immediately, ~0 token burn during drain. Both invocation forms dispatch to the same `scripts/run-story.ts` orchestrator. |
+| `auto` | `/impl auto [-p N]` | Autonomous AFK queue drain. One-shot dispatcher that bash-executes `scripts/run-ralph.sh "/impl[ -p N]" --completion-promise NO_MORE_ISSUES --max-iterations 50`, which sets up an in-session `/ralph-loop` whose body is `/impl` (or `/impl -p N`) per iteration. The Stop hook re-feeds the prompt until `/impl` emits `<promise>NO_MORE_ISSUES</promise>` (empty backlog) or 50 iterations elapse. NOT detached — the loop runs in the same Claude session and burns inference per iteration. See § Workflow — `auto` mode. |
 | `team` | DEFERRED — do not implement | Reserved for Phase G when first-party agent teams (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`) prove necessary for cross-session coordination. Today: error and exit if user passes `--team`. |
 
 ## Defaults
@@ -38,30 +39,37 @@ Wraps "grab next AFK issue → run /tdd → commit + push + close." Designed in 
 /impl story 145 -p 5         # Same, raise parallel cap to hard max
 ```
 
-### Autonomous backlog drain (wrap in `/ralph-loop`)
+### Autonomous backlog drain
 
-For unattended, multi-iteration drainage, wrap `/impl` in the ralph-loop Stop hook:
+`/impl auto` is the canonical AFK drain entry point. Hardcoded args, no tuning:
+
+```
+/impl auto                   # Drain queue: in-session /ralph-loop wrapping /impl, max 50 iterations
+/impl auto -p 3              # Same, each iteration spawns 3 worktree-isolated subagents
+```
+
+Mechanism: `/impl auto` bash-executes `scripts/run-ralph.sh "/impl[ -p N]" --completion-promise NO_MORE_ISSUES --max-iterations 50`. The wrapper resolves the installed `ralph-loop` plugin path dynamically and forwards to `setup-ralph-loop.sh`, which writes `.claude/ralph-loop.local.md` and emits the initial `/impl` prompt for Claude to act on. Each loop iteration runs `/impl` (or `/impl -p N`), claims one AFK issue, ships it. When the `gh issue list` query returns zero, `/impl` emits `<promise>NO_MORE_ISSUES</promise>` in its assistant text response; the ralph Stop hook extracts the inner tag via Perl regex, exact-matches against `NO_MORE_ISSUES`, and exits cleanly. Hits `--max-iterations 50` if the sentinel never fires.
+
+`/impl auto` is dispatch-only — it shells the wrapper and exits. The loop body is still `/impl` invoked BY the ralph-loop Stop hook on each iteration; outcome logs come from the inner `/impl` (`once` or `parallel` rows), not from `auto`. Do not add an `action=auto` log row.
+
+### Custom-tuned drain (manual `/ralph-loop` wrap)
+
+Use only when you need different `--max-iterations`, a different completion promise, or a non-`/impl` body. The full form:
 
 ```
 /ralph-loop "/impl" --completion-promise "NO_MORE_ISSUES" --max-iterations 10
+/ralph-loop "/impl -p 3" --completion-promise "NO_MORE_ISSUES" --max-iterations 30
 ```
 
-How it terminates: each iteration `/impl` picks the next AFK issue, `/tdd`s it, commits, pushes, closes. When the `gh issue list` query returns zero, `/impl` outputs `<promise>NO_MORE_ISSUES</promise>` in its assistant text response. The ralph Stop hook extracts the text inside the `<promise>` tags, exact-matches against `--completion-promise`, and exits cleanly.
-
-Hybrid (each ralph iteration spawns N subagents):
-
-```
-/ralph-loop "/impl -p 3" --completion-promise "NO_MORE_ISSUES" --max-iterations 10
-```
-
-Tuning `--max-iterations` (safety cap, never omit):
+Tuning `--max-iterations`:
 - Daytime quick-drain: `1–3 ×` expected backlog depth
-- Overnight drain: `30–50`
+- Overnight drain: `30–50` (the `/impl auto` default is 50)
 
-Caveats:
-- The sentinel must be in the *text response*, not via `Bash(echo)`. Ralph reads transcript text blocks (`type: text`).
+Caveats (apply to both `/impl auto` and the manual wrap):
+- The sentinel MUST be in the *text response*, not via `Bash(echo)`. Ralph reads transcript text blocks (`type: text`), not unix stdout.
 - Do NOT wrap ralph-loop around HITL skills (`/grill`, `/handover`, `/improve`) — they need human input ralph won't supply.
 - `--completion-promise` is exact-string match on the *inner* tag text — no quotes, no extra whitespace, no paraphrasing.
+- The loop is in-session — every iteration burns inference quota in the current Claude session. Distinct from `/impl story`, which detaches via `nohup` and burns ~0 main-session tokens.
 
 ## Workflow — `once` mode
 
@@ -272,6 +280,54 @@ done
 
 One log line PER issue (not per parallel run). Each line carries `mode=parallel` in the optional fields so /improve can attribute outcomes back to mode.
 
+## Workflow — `auto` mode
+
+`/impl auto [-p N]` is a one-shot dispatcher to the ralph-loop wrapper. The skill prose owns nothing else — no pick, no claim, no commit, no log. All of that happens inside the inner `/impl` body each iteration.
+
+### Invocation
+
+When the user types `/impl auto` (no `-p`):
+
+```bash
+bash "$CLAUDE_PLUGIN_ROOT/scripts/run-ralph.sh" "/impl" \
+  --completion-promise NO_MORE_ISSUES \
+  --max-iterations 50
+```
+
+When the user types `/impl auto -p 3` (or any `-p N`, `1 ≤ N ≤ 5`):
+
+```bash
+bash "$CLAUDE_PLUGIN_ROOT/scripts/run-ralph.sh" "/impl -p 3" \
+  --completion-promise NO_MORE_ISSUES \
+  --max-iterations 50
+```
+
+The args are hardcoded by design — `/impl auto` is the no-knobs entry point. Use the manual `/ralph-loop "/impl" --completion-promise ... --max-iterations ...` form when you need different limits or a non-`/impl` body (see § Recommended invocation patterns → Custom-tuned drain).
+
+### What the wrapper does
+
+`scripts/run-ralph.sh` resolves the installed `ralph-loop` plugin path dynamically (no version pin) and execs `setup-ralph-loop.sh` with the forwarded args. `setup-ralph-loop.sh` writes the in-session state file `.claude/ralph-loop.local.md` (with frontmatter: `active: true`, `iteration: 1`, `max_iterations: 50`, `completion_promise: "NO_MORE_ISSUES"`) and echoes the initial `/impl` prompt. Claude reads the prompt and runs `/impl` once. When Claude tries to stop, the ralph Stop hook intercepts:
+
+- If transcript contains `<promise>NO_MORE_ISSUES</promise>` (inner tag exact-match against `--completion-promise`) → let stop succeed, queue drained.
+- Else if `iteration >= max_iterations` → let stop succeed, safety cap reached.
+- Else → re-feed the prompt (`/impl` or `/impl -p N`) → next iteration.
+
+### Composability with `-p N`
+
+`/impl auto -p N` forwards `-p N` into the *inner* `/impl` invocation, NOT into the ralph-loop wrapper. Each iteration runs `/impl -p N`, which spawns N worktree-isolated subagents per iteration (subject to the `1 ≤ N ≤ 5` parallel cap from `parallel` mode). The ralph wrapper sees a single composite prompt — `"/impl -p 3"` is one prompt to ralph, even though it fans out N subagents inside.
+
+### Token cost
+
+Per iteration burns inference in the current Claude session. NOT detached (this is the key contrast with `/impl story`, which `nohup`s a TypeScript orchestrator and burns ~0 main-session tokens). Budget accordingly: a 50-iteration drain with `-p 3` runs up to 50 outer iterations × 3 subagents = 150 tracer-bullet TDD cycles in the worst case before the safety cap triggers. The `<promise>NO_MORE_ISSUES</promise>` sentinel is what brings it home early.
+
+### Outcome log
+
+`auto` is dispatch-only — it does not write its own outcome log row. Each inner `/impl` iteration writes a `once` or `parallel` row as normal. Do NOT add an `action=auto` row to `{vault}/daily/skill-outcomes/impl.log`; that would double-count.
+
+### Empty backlog handshake
+
+The sentinel is `<promise>NO_MORE_ISSUES</promise>` in the assistant text response — see § Defaults → Empty backlog sentinel for the contract. `Bash(echo)` does NOT satisfy it; ralph reads transcript text blocks (`type: text`), not unix stdout. The auto mode inherits this contract from the inner `/impl` it loops.
+
 ## Required reading inside the spawned subagent
 
 When `-p N` (alias `--parallel N`) spawns a subagent, the prompt MUST embed:
@@ -335,7 +391,7 @@ Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/impl.log`:
 {date} | impl | {action} | ~/work/brain-os-plugin | {issue-or-batch-ref} | commit:{hash} | {result}
 ```
 
-- `action`: `once` (single issue), `parallel` (one of N issues from a parallel run), or `drain` (the orchestrator's wrap-up after a parallel batch — output_path = batch label, e.g. `parallel-N3`)
+- `action`: `once` (single issue), `parallel` (one of N issues from a parallel run), or `drain` (the orchestrator's wrap-up after a parallel batch — output_path = batch label, e.g. `parallel-N3`). NOTE: `auto` is NOT a valid action — `/impl auto` is dispatch-only; its inner iterations write `once` or `parallel` rows as normal.
 - `issue-or-batch-ref`: `<tracker-repo>#N` for `once`/`parallel`; the batch label for `drain`
 - `result`: `pass` if the issue closed AND no reactive `improve: encoded feedback —` commit lands against the touched artifacts within 48h; `partial` if user manually corrected before close; `fail` if cycle aborted or reactive patch needed
 - Optional: `mode=parallel`, `n=N` (parallel size), `area=<label>`, `tdd_cycles=K` (red-green count from /tdd)
