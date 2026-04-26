@@ -1,0 +1,108 @@
+{
+  "skill_name": "debug",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Where does /debug file the GH issue?",
+      "expected_output": "sonthanh/ai-brain — the central tracker per skill-process-pocock-adoption decision",
+      "expectations": [
+        "Mentions sonthanh/ai-brain",
+        "Does NOT file in the affected source repo"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Should /debug fix the bug it finds?",
+      "expected_output": "No — /debug only diagnoses and files the issue. The fix happens via /impl + /tdd in a fresh context.",
+      "expectations": [
+        "Mentions does NOT fix in-place",
+        "Mentions /tdd or /impl picks it up later",
+        "Mentions fresh context for the fix"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "What investigation surface must the explore subagent cover?",
+      "expected_output": "Source repo, config, cloud RemoteTrigger, local launchd, vault state, recent commits, and MCP availability — not just code",
+      "expectations": [
+        "Mentions source repo",
+        "Mentions config or settings.json",
+        "Mentions cloud RemoteTrigger",
+        "Mentions launchd",
+        "Mentions vault state or outcome logs",
+        "Mentions MCP availability or ToolSearch"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Why must /debug spawn a subagent rather than investigate in the parent context?",
+      "expected_output": "Investigation reads many files; parent context would blow past the smart zone and degrade the fix-plan synthesis. The Explore subagent returns a tight summary.",
+      "expectations": [
+        "Mentions smart zone or context size",
+        "Mentions Explore subagent",
+        "Mentions tight summary"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Should the issue body include file paths and line numbers?",
+      "expected_output": "No — paths and line numbers rot on refactor. Issue body describes behaviors and contracts, not implementation locations.",
+      "expectations": [
+        "Mentions no file paths",
+        "Mentions no line numbers",
+        "Mentions describe behavior or describe contract"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "What is the structure of the /tdd Fix Plan inside the issue body?",
+      "expected_output": "Numbered list of vertical-slice tracer-bullet RED-GREEN cycles, one test → one impl per cycle, optional final REFACTOR step",
+      "expectations": [
+        "Mentions RED-GREEN cycles",
+        "Mentions one test one impl",
+        "Mentions vertical slice or tracer bullet",
+        "Mentions optional refactor step"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "What does /debug do when the explore comes back ambiguous?",
+      "expected_output": "Do NOT file the issue — re-spawn Explore with a tighter brief, or ask the user one targeted question. Filing vague issues makes /tdd flail.",
+      "expectations": [
+        "Mentions do NOT file",
+        "Mentions re-spawn or re-investigate",
+        "Mentions one targeted question"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "What labels should /debug apply to the GH issue?",
+      "expected_output": "area:<plugin-name> + priority:pN + status:ready + owner:bot|human + weight:quick|heavy + kind:bug",
+      "expectations": [
+        "Mentions area: label",
+        "Mentions priority: label",
+        "Mentions owner:bot or owner:human",
+        "Mentions kind:bug"
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "How many clarifying questions can /debug ask before investigating?",
+      "expected_output": "At most one — start investigating after the first answer. Two questions is one too many.",
+      "expectations": [
+        "Mentions at most one or one question",
+        "Mentions start investigating immediately after"
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "When should /debug NOT be used?",
+      "expected_output": "One-line typos in vault docs, brand-new skills with no baseline, when user already has root cause + plan, regressions to code written in this session",
+      "expectations": [
+        "Mentions typos",
+        "Mentions brand new skill or no baseline",
+        "Mentions user has plan already"
+      ]
+    }
+  ]
+}
