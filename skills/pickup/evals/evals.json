@@ -19,7 +19,7 @@
   },
   {
     "id": "auto-flow-explicit-empty-exit",
-    "description": "The /pickup auto step 1 must explicitly instruct the skill to exit with pass when zero eligible tasks are found",
+    "description": "The /pickup auto Empty-eligibility behavior block must state that when zero eligible tasks remain, the script logs `pass | score=0/0` and exits cleanly with no claim, no spawn, no error. Documents the script-driven flow's empty-path contract so the calling LLM knows to report 'no tasks to drain' rather than treating an empty result as failure.",
     "args": "pickup auto --force (Ready column has only human tasks)",
     "expect": "log `pass | score=0/0` and exit"
   },

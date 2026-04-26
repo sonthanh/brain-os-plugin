@@ -159,6 +159,8 @@ Flags:
 - `--force` — bypass time-aware weight filter (allow `weight:heavy` during work hours).
 - `--dry-run` — query + filter only, no claim/spawn.
 
+**Empty-eligibility behavior:** if zero eligible tasks remain after the time-aware filter (Ready column empty, only `owner:human` issues, or all already in-progress), the script must log `pass | score=0/0` and exit cleanly — no claim, no spawn, no error. After invocation, the LLM should report "no tasks to drain" to the user.
+
 **Why a script, not skill prose:** the previous flow walked the LLM through query → claim → spawn as separate steps. The LLM was skipping the claim step and spawning workers on `status:ready` issues, leaving labels stale and breaking `/status`. The script eliminates skip-step risk by construction. Do NOT re-implement the flow as skill prose.
 
 #### Time-aware weight filtering (handled by the script)
