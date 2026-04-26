@@ -13,6 +13,7 @@ Wraps "grab next AFK issue → run /tdd → commit + push + close." Designed in 
 |------|------------|----------|
 | `once` (default) | `/impl` or `/impl --area <label>` | Grab one AFK issue, run /tdd, commit, push, close. Exit. |
 | `parallel` | `/impl --parallel N` | Spawn N Agent-tool subagents with `isolation: "worktree"`, each running /tdd on a different AFK issue. Main session merges + pushes + closes. |
+| `story` | `/impl story <parent-N> [-p N]` | Bash-orchestrated DAG drain of a multi-issue story. Reads parent issue body checklist + each child's `Blocked by` to build the DAG, spawns AFK workers (claude -w + /impl) up to parallel cap, surfaces HITL children via osascript notify, ticks parent body checklist on each close, closes parent + macOS-notifies on completion. Self-detached via `nohup` — main Claude session exits immediately, ~0 token burn during drain. |
 | `team` | DEFERRED — do not implement | Reserved for Phase G when first-party agent teams (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`) prove necessary for cross-session coordination. Today: error and exit if user passes `--team`. |
 
 ## Defaults
@@ -128,6 +129,54 @@ If the trunk-block hook fires (exit 2): the commit is blocked because the staged
 ### 6. Outcome log
 
 Append one line to `{vault}/daily/skill-outcomes/impl.log` (see § Outcome log below).
+
+## Workflow — `story` mode
+
+`/impl story <parent-N> [-p N]` drains a multi-issue story in DAG order. The orchestration is a bash script (`scripts/run-story.sh`) — main Claude session exits after kicking it off, ~0 token burn for the duration of the drain.
+
+### Invocation
+
+When the user types `/impl story <parent-N>` (optionally `-p <N>`), execute:
+
+```bash
+bash "$CLAUDE_PLUGIN_ROOT/scripts/run-story.sh" <parent-N> -p <N>
+```
+
+The script self-detaches via `nohup` and returns immediately with the orchestrator PID + log path. After the bash invocation returns, your work is done — exit cleanly.
+
+### What the script does
+
+1. Reads parent issue body, parses `- [ ] #M` / `- [x] #M` checklist → child issue numbers.
+2. For each child: fetches body + labels, parses `## Blocked by\n- ai-brain#X` → adjacency map. Detects `owner:bot` vs `owner:human`.
+3. Initial ready queue: children with all dependency issues already CLOSED.
+4. **Greedy DAG drainer loop** (sleep 30s between polls):
+   - Top up parallel pool: HITL children spawn anytime (notify-only, no worker), AFK children spawn within `-p` cap (default 3, hard max 5).
+   - AFK spawn = `claude -w "story-<P>-issue-<M>" --dangerously-skip-permissions -p "/impl <M>"` in background.
+   - HITL spawn = osascript notify `"HITL: #M needs human. Run: cr /pickup M"` — user resolves manually.
+   - Poll each watched child via `gh issue view <M> --json state` — on CLOSED: tick parent body checklist (`sed - [ ] #M → - [x] #M`, `gh issue edit --body`), promote any newly-unblocked waiters to ready queue.
+5. When ready queue + watching set both empty: close parent (`gh issue close <P> --reason completed`).
+6. Final macOS notification: `"Story #<P> complete. Run: cr /story-debrief <P> for review"`.
+7. All steps logged to `~/.local/state/impl-story/<parent-N>.log`.
+
+### Parallel cap rationale
+
+Default `-p 3`, hard-capped at 5 inside the script. Each AFK worker is its own `claude -w` session consuming subscription quota; concurrent sessions add up. HITL children do NOT count toward the cap (they're notify-only). User can raise to 5 with `-p 5`; values above 5 are silently clamped.
+
+### Token cost
+
+| Phase | Main Claude tokens |
+|-------|---------------------|
+| `/impl story <P>` invocation | ~1K (skill prose + bash command) |
+| Detached drain (could be hours) | 0 |
+| Per-worker session | Independent quota, isolated context |
+
+Status check anytime via `tail -f ~/.local/state/impl-story/<P>.log` from any terminal — no Claude session needed.
+
+### When NOT to use story mode
+
+- Parent issue body has no `- [ ] #M` checklist (script aborts with notify).
+- All children already CLOSED (parent should be closed manually, story is done).
+- User wants to drain whole queue regardless of story membership (use `/impl auto -p N` instead).
 
 ## Workflow — `--parallel N` mode
 

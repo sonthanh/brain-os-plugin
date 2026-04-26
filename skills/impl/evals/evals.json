@@ -133,6 +133,33 @@
         "Mentions --no-verify and prefix-stripping as forbidden (or any equivalent bypass)",
         "Mentions the staged diff persists for the user to resolve interactively"
       ]
+    },
+    {
+      "id": 14,
+      "prompt": "What does /impl story <parent-N> do, and where does the orchestration logic live?",
+      "expected_output": "/impl story <parent-N> drains a multi-issue story in DAG order. The skill prose dispatches to `bash $CLAUDE_PLUGIN_ROOT/scripts/run-story.sh <parent-N> -p <N>` which self-detaches via nohup and returns immediately. The bash script (not the Claude session) reads the parent issue body checklist, builds the dependency DAG from each child's `Blocked by` section, spawns AFK workers (`claude -w + /impl <M>`) within the parallel cap (default 3, hard max 5), greedy-promotes newly-unblocked children, ticks the parent body checklist on each close, and closes the parent + fires an osascript macOS notification when all children resolve. Main Claude session exits after invocation — token cost during drain is ~0 because all polling and orchestration is in bash, not in Claude inference.",
+      "expectations": [
+        "Mentions scripts/run-story.sh as the orchestration script",
+        "Says the script self-detaches (nohup) and main Claude exits immediately",
+        "Mentions parent body checklist as the source of children",
+        "Mentions DAG / Blocked by parsing for dependency order",
+        "Mentions parallel cap default 3 / hard max 5",
+        "Says main Claude session token cost ≈ 0 during drain",
+        "Mentions osascript notification on parent close"
+      ]
+    },
+    {
+      "id": 15,
+      "prompt": "How does /impl story handle owner:human (HITL) children mid-drain?",
+      "expected_output": "HITL children are detected by their `owner:human` label and surfaced via an osascript macOS notification (`HITL: #M needs human. Run: cr /pickup M`) instead of being spawned as workers. They are added to the watching set but consume zero parallel-cap slots — AFK siblings keep draining at full concurrency. The bash poll loop checks the HITL child's gh state every 30s like any other watched child; when the user closes it manually via `cr /pickup M`, the orchestrator sees the CLOSED state, ticks the checklist, and promotes any waiters whose deps are now satisfied. No special-casing needed in the loop.",
+      "expectations": [
+        "Mentions owner:human label as the HITL detection signal",
+        "Says HITL surfaces via osascript notification, not auto-spawn",
+        "Says HITL children do not count toward the parallel cap",
+        "Says AFK siblings continue draining while HITL is pending",
+        "Mentions cr /pickup as the user-facing resolution command",
+        "Says the loop polls HITL state via gh issue view like any other child"
+      ]
     }
   ]
 }
