@@ -8,7 +8,12 @@ import {
   computeReady,
   promoteWaiters,
   decideWorkerAction,
+  inferRepoFromIssueArea,
+  defaultAreaMap,
+  cleanupWorker,
   type Issue,
+  type SpawnClient,
+  type Logger,
 } from "./run-story.ts";
 
 describe("parseChecklist", () => {
@@ -134,23 +139,23 @@ describe("clampParallel", () => {
 describe("computeReady", () => {
   test("includes children with no deps and OPEN state", () => {
     const issues: Issue[] = [
-      { number: 146, deps: [], owner: "bot", state: "OPEN", title: "first" },
-      { number: 147, deps: [], owner: "bot", state: "OPEN", title: "second" },
+      { number: 146, deps: [], owner: "bot", state: "OPEN", title: "first", cwd: "/repo" },
+      { number: 147, deps: [], owner: "bot", state: "OPEN", title: "second", cwd: "/repo" },
     ];
     expect(computeReady(issues, new Set())).toEqual([146, 147]);
   });
 
   test("excludes children whose deps are still open", () => {
     const issues: Issue[] = [
-      { number: 146, deps: [], owner: "bot", state: "OPEN", title: "first" },
-      { number: 149, deps: [147], owner: "bot", state: "OPEN", title: "blocked" },
+      { number: 146, deps: [], owner: "bot", state: "OPEN", title: "first", cwd: "/repo" },
+      { number: 149, deps: [147], owner: "bot", state: "OPEN", title: "blocked", cwd: "/repo" },
     ];
     expect(computeReady(issues, new Set())).toEqual([146]);
   });
 
   test("includes children whose deps are all closed", () => {
     const issues: Issue[] = [
-      { number: 149, deps: [147, 148], owner: "bot", state: "OPEN", title: "needs deps" },
+      { number: 149, deps: [147, 148], owner: "bot", state: "OPEN", title: "needs deps", cwd: "/repo" },
     ];
     const closed = new Set([147, 148]);
     expect(computeReady(issues, closed)).toEqual([149]);
@@ -158,7 +163,7 @@ describe("computeReady", () => {
 
   test("excludes children that are themselves CLOSED", () => {
     const issues: Issue[] = [
-      { number: 146, deps: [], owner: "bot", state: "CLOSED", title: "done" },
+      { number: 146, deps: [], owner: "bot", state: "CLOSED", title: "done", cwd: "/repo" },
     ];
     expect(computeReady(issues, new Set([146]))).toEqual([]);
   });
@@ -167,7 +172,7 @@ describe("computeReady", () => {
 describe("promoteWaiters", () => {
   test("promotes when all deps just became closed", () => {
     const issues: Issue[] = [
-      { number: 149, deps: [147, 148], owner: "bot", state: "OPEN", title: "x" },
+      { number: 149, deps: [147, 148], owner: "bot", state: "OPEN", title: "x", cwd: "/repo" },
     ];
     const closed = new Set([147, 148]);
     expect(promoteWaiters(issues, 148, closed, new Set([149]))).toEqual([149]);
@@ -175,7 +180,7 @@ describe("promoteWaiters", () => {
 
   test("does not promote if other deps still open", () => {
     const issues: Issue[] = [
-      { number: 149, deps: [147, 148], owner: "bot", state: "OPEN", title: "x" },
+      { number: 149, deps: [147, 148], owner: "bot", state: "OPEN", title: "x", cwd: "/repo" },
     ];
     const closed = new Set([147]);
     expect(promoteWaiters(issues, 147, closed, new Set([149]))).toEqual([]);
@@ -183,7 +188,7 @@ describe("promoteWaiters", () => {
 
   test("does not promote children not in pending set (already running/done)", () => {
     const issues: Issue[] = [
-      { number: 149, deps: [147], owner: "bot", state: "OPEN", title: "x" },
+      { number: 149, deps: [147], owner: "bot", state: "OPEN", title: "x", cwd: "/repo" },
     ];
     const closed = new Set([147]);
     expect(promoteWaiters(issues, 147, closed, new Set())).toEqual([]);
@@ -191,8 +196,8 @@ describe("promoteWaiters", () => {
 
   test("promotes multiple waiters when shared dep closes", () => {
     const issues: Issue[] = [
-      { number: 149, deps: [147], owner: "bot", state: "OPEN", title: "x" },
-      { number: 150, deps: [147], owner: "bot", state: "OPEN", title: "y" },
+      { number: 149, deps: [147], owner: "bot", state: "OPEN", title: "x", cwd: "/repo" },
+      { number: 150, deps: [147], owner: "bot", state: "OPEN", title: "y", cwd: "/repo" },
     ];
     const closed = new Set([147]);
     expect(promoteWaiters(issues, 147, closed, new Set([149, 150])).sort()).toEqual([149, 150]);
@@ -211,5 +216,102 @@ describe("decideWorkerAction", () => {
 
   test("OPEN + pid dead → dead worker (failure mode)", () => {
     expect(decideWorkerAction(false, "OPEN")).toBe("dead");
+  });
+});
+
+describe("inferRepoFromIssueArea", () => {
+  const home = "/Users/test";
+  const map = defaultAreaMap(home);
+
+  test("area:plugin-brain-os → ~/work/brain-os-plugin", () => {
+    expect(inferRepoFromIssueArea(["area:plugin-brain-os"], map)).toBe(
+      `${home}/work/brain-os-plugin`,
+    );
+  });
+
+  test("area:plugin-ai-leaders-vietnam → ~/work/ai-leaders-vietnam", () => {
+    expect(inferRepoFromIssueArea(["area:plugin-ai-leaders-vietnam"], map)).toBe(
+      `${home}/work/ai-leaders-vietnam`,
+    );
+  });
+
+  test("area:vault → ~/work/brain", () => {
+    expect(inferRepoFromIssueArea(["area:vault"], map)).toBe(`${home}/work/brain`);
+  });
+
+  test("area:claude-config → ~/.claude", () => {
+    expect(inferRepoFromIssueArea(["area:claude-config"], map)).toBe(`${home}/.claude`);
+  });
+
+  test("first matching area wins when multiple labels present", () => {
+    expect(
+      inferRepoFromIssueArea(["status:ready", "owner:bot", "area:plugin-brain-os"], map),
+    ).toBe(`${home}/work/brain-os-plugin`);
+  });
+
+  test("user-supplied map extends defaults — private deployments register areas via config", () => {
+    const extended = { ...map, "plugin-private-x": "/private/x", "plugin-private-y": "/private/y" };
+    expect(inferRepoFromIssueArea(["area:plugin-private-x"], extended)).toBe("/private/x");
+    expect(inferRepoFromIssueArea(["area:plugin-private-y"], extended)).toBe("/private/y");
+  });
+
+  test("user-supplied map can override defaults", () => {
+    const overridden = { ...map, vault: "/elsewhere/brain" };
+    expect(inferRepoFromIssueArea(["area:vault"], overridden)).toBe("/elsewhere/brain");
+  });
+
+  test("throws on unknown area:* label", () => {
+    expect(() => inferRepoFromIssueArea(["area:zzz-unknown"], map)).toThrow(/no known area/);
+  });
+
+  test("throws when no area:* label present", () => {
+    expect(() => inferRepoFromIssueArea(["owner:bot", "status:ready"], map)).toThrow(
+      /no known area/,
+    );
+  });
+});
+
+describe("cleanupWorker", () => {
+  test("calls spawn.cleanupWorktree with name + cwd and logs success", async () => {
+    const calls: Array<{ name: string; cwd: string }> = [];
+    const logs: string[] = [];
+    const spawn: SpawnClient = {
+      spawnWorker: () => ({ pid: 0 }),
+      cleanupWorktree: (name, cwd) => calls.push({ name, cwd }),
+    };
+    const logger: Logger = { log: (m) => logs.push(m) };
+
+    await cleanupWorker(spawn, "story-145-issue-146", "/Users/test/work/brain-os-plugin", logger);
+
+    expect(calls).toEqual([
+      { name: "story-145-issue-146", cwd: "/Users/test/work/brain-os-plugin" },
+    ]);
+    expect(
+      logs.some((l) => l.includes("cleaned worktree") && l.includes("story-145-issue-146")),
+    ).toBe(true);
+  });
+
+  test("error in cleanupWorktree is logged and does not throw", async () => {
+    const logs: string[] = [];
+    const spawn: SpawnClient = {
+      spawnWorker: () => ({ pid: 0 }),
+      cleanupWorktree: () => {
+        throw new Error("worktree locked by another process");
+      },
+    };
+    const logger: Logger = { log: (m) => logs.push(m) };
+
+    await expect(
+      cleanupWorker(spawn, "story-1-issue-2", "/repo", logger),
+    ).resolves.toBeUndefined();
+
+    expect(
+      logs.some(
+        (l) =>
+          l.includes("cleanup failed") &&
+          l.includes("story-1-issue-2") &&
+          l.includes("worktree locked"),
+      ),
+    ).toBe(true);
   });
 });

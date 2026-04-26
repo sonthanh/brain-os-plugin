@@ -25,6 +25,7 @@ export interface Issue {
   owner: Owner;
   state: State;
   title: string;
+  cwd: string;
 }
 
 // =========================================================================
@@ -68,6 +69,30 @@ export function parseOwner(labels: string[]): Owner {
     if (l === "owner:bot") return "bot";
   }
   return "bot";
+}
+
+// Public default area → repo path mapping. Extended at runtime from
+// ${home}/.brain-os/areas.json so private deployments register their own
+// areas without committing identifiers into this public source file.
+export function defaultAreaMap(home: string): Record<string, string> {
+  return {
+    "plugin-brain-os": `${home}/work/brain-os-plugin`,
+    "plugin-ai-leaders-vietnam": `${home}/work/ai-leaders-vietnam`,
+    "vault": `${home}/work/brain`,
+    "claude-config": `${home}/.claude`,
+  };
+}
+
+export function inferRepoFromIssueArea(
+  labels: string[],
+  areaMap: Record<string, string>,
+): string {
+  for (const l of labels) {
+    if (!l.startsWith("area:")) continue;
+    const area = l.slice("area:".length);
+    if (area in areaMap) return areaMap[area];
+  }
+  throw new Error(`no known area:* label in [${labels.join(", ")}]`);
 }
 
 export function tickChecklist(body: string, child: number): string {
@@ -122,7 +147,8 @@ export interface GhClient {
 }
 
 export interface SpawnClient {
-  spawnWorker(name: string, prompt: string, logPath: string): { pid: number };
+  spawnWorker(name: string, prompt: string, logPath: string, cwd: string): { pid: number };
+  cleanupWorktree(name: string, cwd: string): void;
 }
 
 export interface ProcessChecker {
@@ -145,6 +171,23 @@ export function decideWorkerAction(pidAlive: boolean, state: State): WorkerActio
   if (state === "CLOSED") return "closed";
   if (!pidAlive) return "dead"; // process gone but issue still OPEN = failure
   return "running";
+}
+
+// Remove worktree + branch left behind by a closed worker. Failures (locked
+// dirs, missing branches, no-upstream protection) are logged and swallowed —
+// a stuck cleanup must not block sibling drains.
+export async function cleanupWorker(
+  spawn: SpawnClient,
+  name: string,
+  cwd: string,
+  logger: Logger,
+): Promise<void> {
+  try {
+    spawn.cleanupWorktree(name, cwd);
+    logger.log(`cleaned worktree: ${name} in ${cwd}`);
+  } catch (err) {
+    logger.log(`cleanup failed for ${name} in ${cwd}: ${(err as Error).message}`);
+  }
 }
 
 // =========================================================================
@@ -209,7 +252,7 @@ class RealGh implements GhClient {
 }
 
 class RealSpawn implements SpawnClient {
-  spawnWorker(name: string, prompt: string, logPath: string): { pid: number } {
+  spawnWorker(name: string, prompt: string, logPath: string, cwd: string): { pid: number } {
     const fs = require("fs");
     const fd = fs.openSync(logPath, "a");
     try {
@@ -226,12 +269,33 @@ class RealSpawn implements SpawnClient {
           stdin: "ignore",
           stdout: fd,
           stderr: fd,
+          cwd,
         },
       );
       return { pid: proc.pid };
     } finally {
       fs.closeSync(fd);
     }
+  }
+
+  cleanupWorktree(name: string, cwd: string): void {
+    const { execSync } = require("child_process");
+    // Run both commands; collect first error so a missing worktree does not
+    // skip the branch delete (and vice versa). Throw at end if anything failed
+    // — caller (cleanupWorker) catches and logs.
+    let firstErr: Error | null = null;
+    const cmds = [
+      ["git", "-C", cwd, "worktree", "remove", `.claude/worktrees/${name}`, "--force"],
+      ["git", "-C", cwd, "branch", "-D", `worktree-${name}`],
+    ];
+    for (const cmd of cmds) {
+      try {
+        execSync(cmd.map((p) => `'${p.replace(/'/g, `'\\''`)}'`).join(" "), { stdio: "pipe" });
+      } catch (err) {
+        if (!firstErr) firstErr = err as Error;
+      }
+    }
+    if (firstErr) throw firstErr;
   }
 }
 
@@ -283,6 +347,7 @@ export interface OrchestratorDeps {
   logger: Logger;
   pollIntervalMs: number;
   workerLogDir: string;
+  areaMap: Record<string, string>;
 }
 
 export async function runStory(
@@ -292,7 +357,7 @@ export async function runStory(
 ): Promise<{ closed: number[]; failed: number[] }> {
   const HARD_CAP = 5;
   const cap = clampParallel(parallel, HARD_CAP);
-  const { gh, spawn, proc, notify, logger, pollIntervalMs, workerLogDir } = deps;
+  const { gh, spawn, proc, notify, logger, pollIntervalMs, workerLogDir, areaMap } = deps;
   const failed: number[] = [];
 
   logger.log(`=== run-story start | parent=#${parent} parallel=${cap} ===`);
@@ -312,8 +377,16 @@ export async function runStory(
     const full = await gh.viewFull(n);
     const blockers = parseBlockers(full.body).filter((b) => b !== parent);
     const owner = parseOwner(full.labels);
-    issues.push({ number: n, deps: blockers, owner, state: full.state, title: full.title });
-    logger.log(`  #${n} owner=${owner} state=${full.state} deps=[${blockers.join(",")}] "${full.title}"`);
+    let cwd: string;
+    try {
+      cwd = inferRepoFromIssueArea(full.labels, areaMap);
+    } catch (err) {
+      logger.log(`ERROR: cannot resolve cwd for #${n}: ${(err as Error).message}`);
+      notify.notify(`Story #${parent} — #${n} has no recognized area:* label, aborting`);
+      throw err;
+    }
+    issues.push({ number: n, deps: blockers, owner, state: full.state, title: full.title, cwd });
+    logger.log(`  #${n} owner=${owner} state=${full.state} cwd=${cwd} deps=[${blockers.join(",")}] "${full.title}"`);
   }
 
   // Initial closed set (children that came in already CLOSED)
@@ -350,8 +423,13 @@ export async function runStory(
         pending.delete(n);
       } else if (afkRunning() < cap) {
         const workerLog = `${workerLogDir}/${parent}-worker-${n}.log`;
-        const { pid } = spawn.spawnWorker(`story-${parent}-issue-${n}`, `/impl ${n}`, workerLog);
-        logger.log(`spawned AFK worker for #${n} (pid=${pid}, log=${workerLog})`);
+        const { pid } = spawn.spawnWorker(
+          `story-${parent}-issue-${n}`,
+          `/impl ${n}`,
+          workerLog,
+          issue.cwd,
+        );
+        logger.log(`spawned AFK worker for #${n} (pid=${pid}, cwd=${issue.cwd}, log=${workerLog})`);
         watching.set(n, `afk:${pid}`);
         pending.delete(n);
       } else {
@@ -401,6 +479,13 @@ export async function runStory(
         logger.log(`child #${n} closed (${watchKind})`);
         watching.delete(n);
         closed.add(n);
+
+        // Cleanup worktree + branch left by closed AFK worker. HITL children
+        // never spawned a worktree (notify-only) so skip cleanup for them.
+        if (isAfk) {
+          const issue = issueByNum.get(n)!;
+          await cleanupWorker(spawn, `story-${parent}-issue-${n}`, issue.cwd, logger);
+        }
 
         // Tick parent checklist
         const currBody = await gh.viewBody(parent);
@@ -479,6 +564,21 @@ async function main() {
     // fall through to default
   }
 
+  // Build areaMap: defaults + optional augmentation from ${home}/.brain-os/areas.json.
+  // Private deployments register their own area:* labels there without touching
+  // this public source file.
+  const areaMap = defaultAreaMap(home);
+  try {
+    const fs = await import("fs");
+    const raw = fs.readFileSync(`${home}/.brain-os/areas.json`, "utf-8");
+    const parsed = JSON.parse(raw);
+    for (const [k, v] of Object.entries(parsed)) {
+      if (typeof v === "string") areaMap[k] = v;
+    }
+  } catch {
+    // optional file
+  }
+
   const logDir = `${home}/.local/state/impl-story`;
   const fs = await import("fs");
   fs.mkdirSync(logDir, { recursive: true });
@@ -493,6 +593,7 @@ async function main() {
     logger,
     pollIntervalMs: 30_000,
     workerLogDir: logDir,
+    areaMap,
   };
 
   try {
