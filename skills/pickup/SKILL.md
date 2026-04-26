@@ -11,13 +11,24 @@ description: "Use when starting a new session and wanting to resume unfinished w
 
 ## Invocation modes
 
-- **`/pickup`** — no args: interactive flow over Ready list (handovers first, then top task)
-- **`/pickup <N>`** — direct claim of issue #N, skipping Ready-list filtering entirely
-- **`/pickup auto [--all] [--force]`** — background spawner (see dedicated section)
+- **`/pickup`** — no args: interactive HITL flow over `owner:human` Ready list (handovers first, then top task)
+- **`/pickup <N>`** — direct claim of issue #N, any owner; skips Ready-list filtering entirely (explicit override)
+
+`/pickup` is HITL-only. The previous `/pickup auto` background spawner has been removed; AFK queue drainage now lives in `/impl auto` (see `/impl` skill). See § Mid-flow rule below for which work belongs on `/pickup` vs `/impl`.
+
+## Mid-flow rule
+
+Some work is fundamentally human-in-the-loop and MUST stay on `/pickup`, never `/impl`. These are tasks where automation produces work the user will throw away:
+
+- **Handovers** (`type:handover`) — resuming requires reading the doc, verifying state, possibly resuming an incomplete grill. AFK workers cannot resume an interrupted grill.
+- **Incomplete grills** — a grill session marked `INCOMPLETE` / `NOT completed` needs the human's judgment on the open questions, not a bot guessing.
+- **Mid-draft writing** — anything in a writing pipeline (brainstorm → fb-writer → substack-writer → checker → visual). Each stage takes human steering. Never AFK.
+
+Rule: any of the above MUST carry `owner:human`. `/impl auto` skips them by label filter. `/pickup` no-args picks them up (it filters `owner:human`). `/pickup <N>` accepts any owner — use the bare-integer form when you (the human) explicitly want to resume a non-`owner:human` issue interactively.
 
 ## `/pickup <N>` — Direct claim of a specific issue
 
-When the user passes a bare integer (e.g. `/pickup 100`, `cr /pickup 100`), treat it as "claim this issue and start." Do NOT run the interactive Ready-list flow.
+When the user passes a bare integer (e.g. `/pickup 100`, `cr /pickup 100`), treat it as "claim this issue and start." Do NOT run the interactive Ready-list flow. Owner label is not checked — this is the explicit override for any-owner direct claim.
 
 1. **Claim atomically** via the canonical helper (single source of truth):
    ```bash
@@ -42,11 +53,11 @@ When the user passes a bare integer (e.g. `/pickup 100`, `cr /pickup 100`), trea
 
 ## `/pickup` — Interactive flow (no args)
 
-1. **Query open Ready tasks** from GitHub:
+1. **Query open Ready HITL tasks** from GitHub. `/pickup` is human-in-loop only: filter to `owner:human` so AFK-eligible work stays in `/impl`'s lane and doesn't show up here:
    ```bash
-   gh issue list -R $GH_TASK_REPO --state open --label status:ready --json number,title,labels,body
+   gh issue list -R $GH_TASK_REPO --state open --label status:ready --label owner:human --json number,title,labels,body
    ```
-   Labels carry all metadata (priority, weight, owner, type) — do not parse title for markers.
+   Labels carry all metadata (priority, weight, owner, type) — do not parse title for markers. To pick up a non-`owner:human` issue interactively, use the explicit `/pickup <N>` form.
 
 2. **Handovers first:** filter the Ready list to issues carrying `type:handover`. Do NOT infer handovers from title prefixes or body wiki-links — the label IS the signal.
    - Found → claim → load linked handover doc → start
@@ -67,7 +78,7 @@ When the user passes a bare integer (e.g. `/pickup 100`, `cr /pickup 100`), trea
 
 ## Claim protocol
 
-Single source of truth: **`${CLAUDE_PLUGIN_ROOT}/scripts/pickup-claim.sh <N>`**. All four entry points (`/pickup`, `/pickup <N>`, `/pickup auto`, plus the interactive Ready-list flow) call this helper for the atomic flip. Do NOT re-implement the flip in skill prose — the recurring bug is LLMs skipping the flip when described step-by-step (worker spawned, label still `status:ready`, /status mis-classifies). The script is deterministic and untouched by judgment.
+Single source of truth: **`${CLAUDE_PLUGIN_ROOT}/scripts/pickup-claim.sh <N>`**. All `/pickup` entry points (`/pickup`, `/pickup <N>`, plus the interactive Ready-list flow) call this helper for the atomic flip. `/impl` and `/impl auto` also call it for AFK claims. Do NOT re-implement the flip in skill prose — the recurring bug is LLMs skipping the flip when described step-by-step (worker spawned, label still `status:ready`, /status mis-classifies). The script is deterministic and untouched by judgment.
 
 What the script does:
 1. Resolves `$GH_TASK_REPO` from `hooks/resolve-vault.sh`.
@@ -145,51 +156,24 @@ When the user grills on the remaining questions:
 2. **Re-run autogrill** on the task — should now auto-close with full answers
 3. The vault gets smarter every cycle
 
-## `/pickup auto` — Launch tasks in background
+## `/pickup auto` — Launch tasks in background (DEPRECATED — see `/impl auto`)
 
-Run the canonical bash impl:
+`/pickup auto` has been removed. AFK queue drainage now lives in `/impl auto` (which wraps `/ralph-loop` around `/impl`). The `pickup-auto.sh` script and its launchd cron have been deleted.
 
-```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/pickup-auto.sh" [--force] [--dry-run]
+If a user types `/pickup auto`, do NOT spawn anything. Print verbatim and exit:
+
+```
+/pickup auto is deprecated. Use /impl auto for AFK backlog drainage.
+
+Migration:
+  - /pickup auto         → /impl auto              (wraps /ralph-loop around /impl)
+  - /pickup auto --force → /impl auto              (no time-aware weight filter; /impl ignores weight:heavy distinction)
+  - /pickup auto --dry-run → gh issue list -R $GH_TASK_REPO --state open --label "status:ready,owner:bot"
+
+/pickup is now HITL-only — see § Mid-flow rule in this skill.
 ```
 
-The script handles the full flow end-to-end as a single deterministic process — query Ready+bot eligible issues → time-aware weight filter → atomic claim per issue (via `pickup-claim.sh`) → spawn `claude -w "auto-issue-N"` background workers with the issue body as prompt → log to `~/.local/state/pickup-auto/cron.log`.
-
-Flags:
-- `--force` — bypass time-aware weight filter (allow `weight:heavy` during work hours).
-- `--dry-run` — query + filter only, no claim/spawn.
-
-**Empty-eligibility behavior:** if zero eligible tasks remain after the time-aware filter (Ready column empty, only `owner:human` issues, or all already in-progress), the script must log `pass | score=0/0` and exit cleanly — no claim, no spawn, no error. After invocation, the LLM should report "no tasks to drain" to the user.
-
-**Why a script, not skill prose:** the previous flow walked the LLM through query → claim → spawn as separate steps. The LLM was skipping the claim step and spawning workers on `status:ready` issues, leaving labels stale and breaking `/status`. The script eliminates skip-step risk by construction. Do NOT re-implement the flow as skill prose.
-
-#### Time-aware weight filtering (handled by the script)
-- **Work hours (09:00–22:00)** → only `weight:quick` (skip `weight:heavy`).
-- **Off-hours (22:00–09:00)** → any weight.
-- **`--force`** → bypass entirely.
-
-#### Weight labels
-- `weight:quick` (⚡) — quick task (< 30 min), safe to run anytime.
-- `weight:heavy` (🏋️) — heavy task (1h+), only run off-hours unless `--force`.
-
-#### Spawn protocol (already encoded in `pickup-auto.sh`)
-Each spawned worker runs `claude -w "auto-issue-N" --model opus --dangerously-skip-permissions -p "<prompt>"` in the background. Prompt includes full issue body + Ralph Loop guidance. Exit protocol (non-negotiable): `commit → push → gh issue close N --reason completed → exit`. The prompt explicitly forbids invoking `/pickup`, `/status`, or any other skill after finishing — exit cleanly.
-
-#### Dependency DAG (manual orchestration, rare)
-The script does **not** build a dependency DAG — it spawns all eligible issues in parallel. For multi-issue launches with explicit dependencies (`depends on #N` in body, sequential `Phase X.Y` references in plan docs), the user must orchestrate manually:
-1. Run `pickup-auto.sh --dry-run` to see eligible issues.
-2. Build DAG by reading bodies + plan docs.
-3. For each root-node issue: `bash pickup-claim.sh N` then spawn worker manually.
-4. After root completes (closed on origin/main), repeat for next layer.
-
-This is a latent step — keep it out of the auto path. Most launches don't need it.
-
-#### Auto mode rules
-- **Fire-and-forget** — script reports immediately, user continues working.
-- **Worktree isolation** — each task runs via `claude -w` to avoid conflicts.
-- **Self-completing** — worker executes → commits → pushes → closes issue.
-- **Respect skill flows** — if a task maps to a skill, the worker invokes that skill.
-- **No budget cap** — tasks run until complete. Ralph Loop ensures completion.
+Background: see `daily/grill-sessions/2026-04-25-skill-process-pocock-adoption.md` and parent story `ai-brain#145`. Rationale — `/pickup` and `/pickup auto` overlapped on the Ready-claim+spawn surface, creating confusion about whether AFK work and HITL handovers could coexist on the same skill. The split: `/pickup` owns HITL (`owner:human` only), `/impl` owns AFK (`owner:bot`, /tdd-driven, trunk-gated).
 
 ## Handover Task Behavior
 
@@ -244,7 +228,7 @@ Labels change across sessions. Never cache the Ready list within a long interact
 
 ### Owner label hygiene (what belongs on owner:bot vs owner:human)
 
-`owner:bot` means `/pickup auto` will claim it. `owner:human` means a person must grill + design before execution. Getting this wrong creates false "work in progress" signals — `owner:bot` auto-promotes tasks that actually need judgment, they stagnate in In Progress with no work happening.
+`owner:bot` means `/impl auto` will claim it (AFK queue drainage via /tdd, trunk-gated). `owner:human` means a person must grill + design before execution; `/pickup` no-args picks these up. Getting this wrong creates false "work in progress" signals — `owner:bot` auto-promotes tasks that actually need judgment, they stagnate in In Progress with no work happening.
 
 **Categories that ALWAYS need `owner:human` (👤):**
 - Seed pages (people, companies, meetings) — needs judgment about who counts, role mapping, relationship type
@@ -259,21 +243,20 @@ Labels change across sessions. Never cache the Ready list within a long interact
 ## Flow
 ```
 Session A:
-  /handover → creates handover doc + opens GH issue (status:ready, type:handover)
+  /handover → creates handover doc + opens GH issue (status:ready, type:handover, owner:human)
 
 Session B (new Claude):
-  /pickup → queries GH → filters type:handover → claims (status:ready → status:in-progress)
-        → loads handover doc → starts working
+  /pickup → queries GH for status:ready + owner:human → filters type:handover first
+        → claims (status:ready → status:in-progress) → loads handover doc → starts working
   ... work done ...
   gh issue close N --reason completed
 
-Session B with explicit issue:
+Session B with explicit issue (any owner):
   /pickup 100 → skip list, directly claim #100 → load body/handover → start
 
-Background:
-  /pickup auto → queries GH for status:ready + owner:bot
-              → launches eligible in background (worktrees)
-              → each self-closes its issue on success
+Background AFK drainage (was /pickup auto, now /impl auto):
+  /impl auto → wraps /ralph-loop around /impl → queries GH for status:ready + owner:bot
+            → /impl runs /tdd on each → commits + pushes + closes issue
 ```
 
 ## Outcome log
@@ -284,7 +267,7 @@ Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/pickup.log
 {date} | pickup | {action} | ~/work/brain-os-plugin | N/A | commit:N/A | {result}
 ```
 
-- `action`: `pickup` (interactive), `pickup:N` (direct claim of issue N), or `auto` (background launch)
+- `action`: `pickup` (interactive), `pickup:N` (direct claim of issue N), or `auto:deprecated` (user invoked `/pickup auto` — log the deprecation event, do not spawn)
 - `result`: `pass` if issues started/completed, `partial` if some escalated to user, `fail` if unrecoverable error (e.g. `gh` auth failure or network)
-- **No eligible tasks** (empty Ready column, only `owner:human` issues, or all already in-progress) → log `pass | score=0/0`, not `fail`
-- Optional: `args="{issue-number}"`, `score={completed}/{launched}` (for auto mode)
+- **No eligible tasks** (empty Ready column, no `owner:human` issues, or all already in-progress) → log `pass | score=0/0`, not `fail`
+- Optional: `args="{issue-number}"`

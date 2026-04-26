@@ -1,14 +1,8 @@
 [
   {
-    "id": "no-eligible-tasks-returns-pass",
-    "description": "When no eligible tasks found (empty Ready, only human tasks), outcome log must use pass | score=0/0, not fail",
-    "args": "pickup auto --force",
-    "expect": "score=0/0"
-  },
-  {
     "id": "correct-source-repo",
     "description": "Outcome log template must reference ~/work/brain-os-plugin as the source repo, not ~/work/brain",
-    "args": "pickup auto",
+    "args": "pickup",
     "expect": "~/work/brain-os-plugin"
   },
   {
@@ -16,18 +10,6 @@
     "description": "Outcome log must document the action field (not mode field from stash version)",
     "args": "pickup",
     "expect": "`action`"
-  },
-  {
-    "id": "auto-flow-explicit-empty-exit",
-    "description": "The /pickup auto Empty-eligibility behavior block must state that when zero eligible tasks remain, the script logs `pass | score=0/0` and exits cleanly with no claim, no spawn, no error. Documents the script-driven flow's empty-path contract so the calling LLM knows to report 'no tasks to drain' rather than treating an empty result as failure.",
-    "args": "pickup auto --force (Ready column has only human tasks)",
-    "expect": "log `pass | score=0/0` and exit"
-  },
-  {
-    "id": "bot-eligibility-documented",
-    "description": "Auto mode step 1 must explicitly document that only bot-eligible tasks (owner:bot label) qualify and human-required tasks (owner:human) are always skipped",
-    "args": "pickup auto (Ready has only owner:human tasks)",
-    "expect": "owner:human"
   },
   {
     "id": "gh-status-ready-query",
@@ -60,12 +42,6 @@
     "expect": "## Config"
   },
   {
-    "id": "owner-bot-filter-in-auto",
-    "description": "`/pickup auto` eligibility must document owner:bot filter (replacing the 👤 exclusion) so bot-runnable issues are selected",
-    "args": "pickup auto",
-    "expect": "owner:bot"
-  },
-  {
     "id": "owner-label-hygiene-seed-pages",
     "description": "Skill must document that Seed pages (people, companies, meetings) require owner:human, not owner:bot — seeding needs judgment and auto-promoting them creates false 'in progress' signals",
     "args": "pickup",
@@ -82,5 +58,35 @@
     "description": "Owner-label-hygiene § skill creation/modification bullet must route post-/grill creation and behavioral-eval work through /skill-creator (gold standard for variance analysis, triggering accuracy, behavioral evals), distinguishing it from /improve's auto-tuning loop and from coverage-parity hand-edits that mirror new SKILL.md content",
     "args": "pickup",
     "expect": "/skill-creator"
+  },
+  {
+    "id": "pickup-no-args-filters-owner-human",
+    "description": "/pickup no-args interactive flow must filter the Ready list to owner:human only — /pickup is HITL-only after the #145/#146 split. AFK-eligible (owner:bot) work belongs to /impl auto. Without the filter, the interactive Ready list re-includes bot work and re-creates the surface overlap between /pickup and /impl that the split was meant to eliminate.",
+    "args": "pickup",
+    "expect": "--label owner:human"
+  },
+  {
+    "id": "mid-flow-rule-section",
+    "description": "Skill must contain a Mid-flow rule section codifying handover/incomplete-grill/mid-draft-writing as owner:human-only. These categories cannot be safely AFK-drained — bots can't resume an interrupted grill or steer a partial draft. The section is the explicit boundary that keeps mid-flow work from being mis-labeled owner:bot and silently auto-promoted by /impl auto.",
+    "args": "pickup",
+    "expect": "Mid-flow rule"
+  },
+  {
+    "id": "mid-flow-rule-categories-documented",
+    "description": "Mid-flow rule section must enumerate all three categories that stay owner:human only: handovers, incomplete grills, and mid-draft writing. Listing only handovers (the obvious case) leaves the implicit ones — incomplete grills and writing pipelines — unsignposted, which is where the mis-label drift happens in practice.",
+    "args": "pickup",
+    "expect": "Incomplete grills"
+  },
+  {
+    "id": "pickup-auto-deprecated-not-spawn",
+    "description": "Skill must document that /pickup auto is deprecated and must NOT spawn workers — instead print a migration message pointing to /impl auto. The flow ID `auto:deprecated` (not `auto`) is the outcome-log marker so /improve can distinguish migration logs from historical auto-mode runs.",
+    "args": "pickup auto",
+    "expect": "/pickup auto is deprecated"
+  },
+  {
+    "id": "no-pickup-auto-script-reference",
+    "description": "Skill must NOT reference scripts/pickup-auto.sh as an active runnable — the script was deleted alongside this refactor (issue #148). Any prose that still tells the LLM to `bash scripts/pickup-auto.sh` would break at runtime with file-not-found and re-create the auto-spawn surface this refactor removed. A historical mention inside the deprecation block is acceptable as long as no active `bash` invocation remains.",
+    "args": "pickup auto",
+    "expect-not-command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/pickup-auto.sh\""
   }
 ]
