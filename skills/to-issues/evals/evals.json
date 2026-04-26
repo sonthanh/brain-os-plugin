@@ -80,6 +80,27 @@
         "Mentions at least two of: single bug, unsettled grill, one-slice plan, cosmetic / typo / config",
         "Distinguishes /to-issues from direct gh issue create or direct edit + push"
       ]
+    },
+    {
+      "id": 9,
+      "prompt": "User runs /to-issues on a settled grill-session whose title is `2026-04-26-skill-creator-gold-standard` (a single-skill modification). What slice budget should the skill propose, what HITL/AFK default applies, and how does it open the user-quiz?",
+      "expected_output": "Maintenance budget — 2-4 slices, not the greenfield default of 5-10. Detection heuristic: grill title contains modify/config/cleanup/refactor/audit/etc → maintenance. HITL/AFK: default to AFK (owner:bot) because the grill is at status:pass and replaces pickup's owner:human gate; mark HITL only if the issue carries an unresolved design question. Quiz opens with: `I detected this as maintenance; proposing N slices. Push back on the budget first if wrong, then on individual slice details.`",
+      "expectations": [
+        "Identifies the slice budget as 2-4 (maintenance), not 5-10 (greenfield default)",
+        "Mentions the heuristic (grill title keywords like fix/modify/config/cleanup/etc)",
+        "Mentions defaulting to AFK / owner:bot when the grill is at status:pass and the work is skill modification",
+        "Mentions opening the quiz with the detected-budget intro line"
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "A grill closes with all decisions locked and full details in conversation context. Is it acceptable for Claude to skip /to-issues and file the implementation issues directly with `gh issue create`?",
+      "expected_output": "No — direct invocation via `gh issue create` after a grill closes, even when all details are crystallized in conversation context, counts as bypass per the § Anti-Patterns rule. The user-quiz step (numbered breakdown → user iterates → approved) calibrates slice granularity to user intuition, not LLM intuition. Skipping it produces issues sized to LLM intuition that the user then has to clean up. The correct action is to invoke /to-issues.",
+      "expectations": [
+        "Identifies direct gh issue create after a grill close as a bypass / anti-pattern",
+        "Mentions the user-quiz step as the reason (slice granularity calibration to user intuition rather than LLM intuition)",
+        "Names invoking /to-issues as the correct action"
+      ]
     }
   ]
 }

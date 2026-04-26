@@ -76,5 +76,11 @@
     "description": "Skill must document that skill creation / modification tasks require owner:human and must start with /grill — skills are design-heavy and auto-executing produces work misaligned with user intent",
     "args": "pickup",
     "expect": "Skill creation or modification"
+  },
+  {
+    "id": "skill-creator-route-after-grill",
+    "description": "Owner-label-hygiene § skill creation/modification bullet must route post-/grill creation and behavioral-eval work through /skill-creator (gold standard for variance analysis, triggering accuracy, behavioral evals), distinguishing it from /improve's auto-tuning loop and from coverage-parity hand-edits that mirror new SKILL.md content",
+    "args": "pickup",
+    "expect": "/skill-creator"
   }
 ]

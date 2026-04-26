@@ -21,7 +21,7 @@ Adapted from [@mattpocockuk/skills/to-issues](https://github.com/mattpocock/skil
 
 **DO NOT persist the PRD as a separate file.** The PRD is a synthesis tool, not a deliverable. Persisting it triggers doc-rot — future sessions treat the stale PRD as canon when the issues themselves should be the source of truth. /grill output is the alignment artifact; the issues are the work artifact; nothing in between needs a file.
 
-**DO NOT skip the user-quiz step.** Going straight from grill-session → `gh issue create` produces issues sized to the LLM's intuition, not the user's. The quiz step (numbered breakdown → user iterates → approved → file) is where slice granularity gets calibrated.
+**DO NOT skip the user-quiz step.** Going straight from grill-session → `gh issue create` produces issues sized to the LLM's intuition, not the user's. The quiz step (numbered breakdown → user iterates → approved → file) is where slice granularity gets calibrated. Direct invocation via `gh issue create` after a grill closes — even when all details are crystallized in conversation context — counts as bypass; the user-quiz step is not optional.
 
 **DO NOT create issues out of dependency order.** If issue B is blocked by A, create A first so B can reference A's real issue number in `Blocked by #N`. Otherwise the dependency graph encodes placeholders that nobody updates.
 
@@ -52,6 +52,11 @@ If you cannot extract these four sections, the source is not settled enough → 
 
 ### 3. Draft vertical slices [latent]
 
+**Slice budget — adjust for input type.** Tracer-bullet default (5-10 slices) assumes greenfield development with unknowns. For grilled config / maintenance / skill-modification work where unknowns are resolved by the grill, use **2-4 slices**. Group by area-label + dependency-cluster, not by single-layer concern.
+
+- **Heuristic:** grill title contains `fix` / `modify` / `config` / `expand` / `refactor` / `cleanup` / `hygiene` / `audit` → maintenance budget. Contains `build` / `create` / `new` / `introduce` / `design` / `port` → greenfield budget. Ambiguous → ask user once, default to maintenance (coarser is safer; merging issues is harder than splitting them).
+- **HITL/AFK default flip:** when grill is `status: pass` AND work is skill modification → default to **AFK** (the grill replaces pickup's `owner:human` "needs grill before exec" gate). Mark HITL only when the issue body carries an unresolved design question.
+
 Break the PRD into tracer-bullet issues. For each slice, decide:
 
 | Field | What it captures |
@@ -75,6 +80,8 @@ Before showing the breakdown to the user, run two validators on each slice:
 **Disjoint-files (WARN-SOFT):** if two slices declare overlapping `Files:`, flag it. They can still ship — `/impl --parallel` uses Agent-tool worktree isolation so file conflicts resolve at merge time. But surfacing the overlap helps the user decide if a merge would be cleaner than parallel work.
 
 ### 5. Quiz the user [latent]
+
+Open with the detected budget: `I detected this as <maintenance|greenfield>; proposing N slices. Push back on the budget first if wrong, then on individual slice details.`
 
 Present the proposed breakdown as a numbered list. For each slice show: Title / Type / Area / Priority / Weight / Files / Observable / Blocked by.
 

@@ -1,21 +1,23 @@
 #!/bin/bash
-# pickup-auto-cron.sh — every 2h via launchd, polls GH for ready+bot issues,
-# atomically claims them, and spawns a `claude -w` worker per issue.
+# pickup-auto.sh — canonical bash impl of /pickup auto.
 #
-# Config: sources ~/work/brain-os-plugin/hooks/resolve-vault.sh (or installed
-# plugin cache) → $VAULT_PATH + $GH_TASK_REPO from brain-os.config.md.
+# Polls GH for status:ready + owner:bot issues, atomically claims via
+# pickup-claim.sh, and spawns a `claude -w` background worker per issue.
+# Called from inside a Claude session by skills/pickup/SKILL.md, replacing
+# the step-by-step LLM prose that was skipping the claim step and leaving
+# labels stale on actively-worked issues.
+#
+# Originally ran as a launchd cron every 2h; cron unloaded 2026-04-26 in
+# favor of session-driven invocation. Plist preserved as .disabled in
+# ~/Library/LaunchAgents/ for revival if ever needed.
+#
+# Config: sources hooks/resolve-vault.sh → $VAULT_PATH + $GH_TASK_REPO.
 #
 # Gates:
 #   • Weekly usage ≥80% (ccstatusline cache) → skip
 #   • Work hours 09:00–22:00 local → only weight:quick (unless --force)
 #   • --force → skip time filter
 #   • --dry-run → query + filter, no claim/spawn
-#
-# Claim protocol matches skills/pickup/SKILL.md "Claim protocol": a single
-# atomic `--remove-label status:ready --add-label status:in-progress` flip
-# is the claim. No ephemeral `claim:session-*` labels — they were removed
-# from the SSOT in the /pickup refactor (single-user repo, race is benign:
-# duplicate work at worst, handover converges outputs).
 
 set -uo pipefail
 
@@ -167,23 +169,29 @@ while IFS= read -r issue; do
     continue
   fi
 
-  # Re-check status to shrink the TOCTOU window between query and flip:
-  # if another session beat us to status:in-progress, skip cleanly.
-  CURRENT_STATUS=$(gh issue view "$N" -R "$GH_TASK_REPO" --json labels \
-    --jq '[.labels[].name | select(startswith("status:"))][0] // empty' 2>/dev/null || echo "")
-
-  if [[ "$CURRENT_STATUS" != "status:ready" ]]; then
-    log "skip: #$N is now '$CURRENT_STATUS' (claimed elsewhere or grooming changed it)"
-    continue
-  fi
-
-  # Atomic claim per skills/pickup/SKILL.md "Claim protocol": one gh call,
-  # both labels flipped in a single request. Race-tolerant by SSOT design.
-  if ! gh issue edit "$N" -R "$GH_TASK_REPO" \
-      --remove-label status:ready --add-label status:in-progress >/dev/null 2>&1; then
-    log "WARN: claim flip failed on #$N — skipping"
-    continue
-  fi
+  # Atomic claim via the SSOT helper. Exit 0 = we flipped, spawn worker.
+  # Exit 3 = already in-progress (claimed elsewhere mid-tick) → skip spawn.
+  # Exit 1/2 = unclaimable / API error → skip with warn.
+  CLAIM_SCRIPT="$(dirname "$0")/pickup-claim.sh"
+  CLAIM_OUT=$("$CLAIM_SCRIPT" "$N" 2>&1)
+  CLAIM_RC=$?
+  case "$CLAIM_RC" in
+    0)
+      log "claim: $CLAIM_OUT"
+      ;;
+    3)
+      log "skip: $CLAIM_OUT"
+      continue
+      ;;
+    1)
+      log "skip: $CLAIM_OUT"
+      continue
+      ;;
+    *)
+      log "WARN: $CLAIM_OUT"
+      continue
+      ;;
+  esac
 
   log "claimed: #$N — spawning worker"
 

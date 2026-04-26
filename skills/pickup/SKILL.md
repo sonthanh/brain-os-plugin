@@ -19,18 +19,26 @@ description: "Use when starting a new session and wanting to resume unfinished w
 
 When the user passes a bare integer (e.g. `/pickup 100`, `cr /pickup 100`), treat it as "claim this issue and start." Do NOT run the interactive Ready-list flow.
 
-1. **Fetch the issue**:
+1. **Claim atomically** via the canonical helper (single source of truth):
    ```bash
-   gh issue view N -R $GH_TASK_REPO --json number,title,state,labels,body
+   bash "${CLAUDE_PLUGIN_ROOT}/scripts/pickup-claim.sh" N
    ```
-2. **Validate**:
-   - Closed → abort with "Issue #N is already closed." Do not reopen.
-   - No `status:*` label → treat as unclaimed; proceed.
-3. **Claim** via the single protocol below (no-op if already `status:in-progress` — user explicitly requested this issue, so continue either way).
-4. **Load context**:
+   Exit-code semantics:
+   - `0` → flip happened (status:ready → status:in-progress); proceed.
+   - `3` → already status:in-progress (no-op); for `/pickup <N>` continue anyway since user explicitly chose this issue.
+   - `1` → not claimable (closed, blocked, backlog); abort with the helper's stderr message.
+   - `2` → gh API / config error; surface and abort.
+
+2. **Fetch full body** for context (the helper only inspects labels):
+   ```bash
+   gh issue view N -R $GH_TASK_REPO --json title,body,labels
+   ```
+
+3. **Load context**:
    - Labels include `type:handover` → extract the relative `[handover](daily/handovers/…)` link from the body, read that file, follow the "Handover Task Behavior" section.
    - Otherwise → treat the issue body as the spec; read any linked grill / plan docs referenced in the body.
-5. **Start executing immediately.** Never re-grill locked decisions.
+
+4. **Start executing immediately.** Never re-grill locked decisions.
 
 ## `/pickup` — Interactive flow (no args)
 
@@ -51,31 +59,32 @@ When the user passes a bare integer (e.g. `/pickup 100`, `cr /pickup 100`), trea
 
 4. **Autogrill Ready tasks** (see Autogrill section below) — skip `type:handover` issues (they already have a spec doc)
 
-5. **Start top remaining task** — claim first Ready task → begin
+5. **Claim and start top remaining task** — for the chosen issue N:
+   ```bash
+   bash "${CLAUDE_PLUGIN_ROOT}/scripts/pickup-claim.sh" N
+   ```
+   On exit `0` → begin work. On exit `3` (already in-progress) → skip to next candidate. On exit `1` or `2` → surface error to user.
 
 ## Claim protocol
 
-The claim IS the `status:in-progress` label. No ephemeral `claim:session-*` labels — they were overengineering for a single-user repo and caused "label not found" errors because `gh issue edit --add-label` won't auto-create.
+Single source of truth: **`${CLAUDE_PLUGIN_ROOT}/scripts/pickup-claim.sh <N>`**. All four entry points (`/pickup`, `/pickup <N>`, `/pickup auto`, plus the interactive Ready-list flow) call this helper for the atomic flip. Do NOT re-implement the flip in skill prose — the recurring bug is LLMs skipping the flip when described step-by-step (worker spawned, label still `status:ready`, /status mis-classifies). The script is deterministic and untouched by judgment.
 
-1. **Check current status** (skip if already in-progress and we've been asked explicitly for this issue):
-   ```bash
-   current=$(gh issue view N -R $GH_TASK_REPO --json labels --jq '[.labels[].name | select(startswith("status:"))] | .[0]')
-   ```
-   - `status:ready` → proceed to transition
-   - `status:in-progress` → already claimed; in `/pickup <N>` continue anyway (user chose), in interactive `/pickup` skip to the next candidate
-   - `status:blocked` or closed → abort, surface to user
+What the script does:
+1. Resolves `$GH_TASK_REPO` from `hooks/resolve-vault.sh`.
+2. Fetches issue state + status label (one `gh issue view` call).
+3. If `status:in-progress` → no-op (exit 3).
+4. If `status:ready` (or no status:* label) → atomic flip to `status:in-progress` via one `gh issue edit --remove-label status:ready --add-label status:in-progress` call (exit 0).
+5. If `status:blocked` / `status:backlog` / unknown → abort (exit 1).
+6. On gh / config error → exit 2.
 
-2. **Atomic transition** (one `gh` call, both labels flipped in a single request):
-   ```bash
-   gh issue edit N -R $GH_TASK_REPO --remove-label status:ready --add-label status:in-progress
-   ```
+The flip is atomic by GH semantics — no ephemeral `claim:session-*` labels. They were overengineering for a single-user repo and caused "label not found" errors because `gh issue edit --add-label` won't auto-create.
 
-3. **On completion** — close the issue:
-   ```bash
-   gh issue close N -R $GH_TASK_REPO --reason completed
-   ```
+Race note: two sessions reading `status:ready` simultaneously and transitioning in the same second will both succeed (GitHub has no label CAS). In practice — solo user, a handful of sessions — this is rare and benign: duplicate work at worst, and the handover / issue body converges the outputs. The TOCTOU window is the helper itself (1-3 ms between view + edit) — much smaller than orchestrator-prose timing.
 
-Race note: two sessions reading `status:ready` simultaneously and transitioning in the same second will both succeed (GitHub has no label CAS). In practice — solo user, a handful of sessions — this is rare and benign: duplicate work at worst, and the handover / issue body converges the outputs. Do not bring back `claim:session-*` labels as "safety"; they don't solve the race (still TOCTOU between create-label and add-label) and they pollute the label namespace.
+**On completion** — close the issue:
+```bash
+gh issue close N -R $GH_TASK_REPO --reason completed
+```
 
 ## Step 2: Autogrill Ready Tasks
 
@@ -138,60 +147,46 @@ When the user grills on the remaining questions:
 
 ## `/pickup auto` — Launch tasks in background
 
-1. **Find eligible tasks** — query GH for Ready + bot-eligible issues:
-   ```bash
-   gh issue list -R $GH_TASK_REPO --state open \
-     --label status:ready --label owner:bot \
-     --json number,title,labels,body
-   ```
-   The `owner:bot` filter replaces the `👤` exclusion — `owner:human` tasks (which need a human grill) are not returned. Any issue already at `status:in-progress` is automatically excluded by the `status:ready` filter.
+Run the canonical bash impl:
 
-   Then apply time-aware weight filtering on the remaining list:
-   - **Work hours (09:00–22:00)**: only pick issues with `weight:quick`. Skip `weight:heavy`.
-   - **Off-hours (22:00–09:00) or weekends**: pick any task including `weight:heavy`.
-   - **`--force` flag**: skip time-aware filtering entirely — pick any eligible Ready issue regardless of weight or hour. Used by the pickup-auto cron.
-   - **Zero eligible tasks found** → log `pass | score=0/0` and exit. Do NOT continue to steps 2–5.
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/pickup-auto.sh" [--force] [--dry-run]
+```
 
-2. **Claim each eligible task** via the Claim protocol (atomic `status:ready → status:in-progress` flip). If the flip fails because the issue was already `status:in-progress` when re-checked, drop it from the batch and continue.
+The script handles the full flow end-to-end as a single deterministic process — query Ready+bot eligible issues → time-aware weight filter → atomic claim per issue (via `pickup-claim.sh`) → spawn `claude -w "auto-issue-N"` background workers with the issue body as prompt → log to `~/.local/state/pickup-auto/cron.log`.
 
-3. **Build dependency DAG** before launching anything:
-   - **Step 1 — Scan issue bodies:** for each claimed issue, parse body for `depends on #N` (GH auto-links this) and free-text `depends on X`/`Depends on P1 Y` patterns
-   - **Step 2 — Read plan docs:** for issues referencing plan docs (e.g., `vault-redesign-plan`), read the plan and extract Phase numbering (`Phase 1.1`, `1.2`, etc.) — sequential phases within the same plan = sequential tasks
-   - **Step 3 — Build DAG:** nodes = issues, edges = dependency relationships from Steps 1-2
-   - **Step 4 — Launch root nodes:** only issues with no incoming edges launch in parallel
-   - **Step 5 — Queue dependents:** a dependent issue launches only after its prereq issue is closed on `origin/main`
-   - **Default:** if dependency parsing is ambiguous, serialize (cheap insurance vs 90 min cleanup)
+Flags:
+- `--force` — bypass time-aware weight filter (allow `weight:heavy` during work hours).
+- `--dry-run` — query + filter only, no claim/spawn.
 
-4. **Launch as background Claude process in worktree**:
-   ```bash
-   claude -w "auto-{slug}" \
-     --model opus \
-     --dangerously-skip-permissions \
-     -p "<prompt>" \
-     > /tmp/auto-task-{slug}.log 2>&1 &
-   ```
-   The prompt MUST include the full issue body + autogrill Q&A log instructions + Ralph Loop + issue number for close-on-done.
-   The prompt MUST end with: "DO NOT invoke /pickup, /status, or any other skill after finishing — exit cleanly."
-   Exit protocol (non-negotiable): `commit → push → gh issue close N --reason completed → exit`. Watcher treats missing remote ref or still-open issue as failure.
+**Why a script, not skill prose:** the previous flow walked the LLM through query → claim → spawn as separate steps. The LLM was skipping the claim step and spawning workers on `status:ready` issues, leaving labels stale and breaking `/status`. The script eliminates skip-step risk by construction. Do NOT re-implement the flow as skill prose.
 
-5. **Report immediately** (don't wait for completion)
-
-#### `/pickup auto --all` — Launch ALL eligible tasks respecting the dependency DAG
-
-Same as above but for every eligible issue. Each gets its own worktree. DAG constraints still apply — only independent issues launch in parallel; dependents queue behind their prereqs.
+#### Time-aware weight filtering (handled by the script)
+- **Work hours (09:00–22:00)** → only `weight:quick` (skip `weight:heavy`).
+- **Off-hours (22:00–09:00)** → any weight.
+- **`--force`** → bypass entirely.
 
 #### Weight labels
-- `weight:quick` (⚡) — quick task (< 30 min), safe to run anytime
-- `weight:heavy` (🏋️) — heavy task (1h+), only run off-hours
+- `weight:quick` (⚡) — quick task (< 30 min), safe to run anytime.
+- `weight:heavy` (🏋️) — heavy task (1h+), only run off-hours unless `--force`.
+
+#### Spawn protocol (already encoded in `pickup-auto.sh`)
+Each spawned worker runs `claude -w "auto-issue-N" --model opus --dangerously-skip-permissions -p "<prompt>"` in the background. Prompt includes full issue body + Ralph Loop guidance. Exit protocol (non-negotiable): `commit → push → gh issue close N --reason completed → exit`. The prompt explicitly forbids invoking `/pickup`, `/status`, or any other skill after finishing — exit cleanly.
+
+#### Dependency DAG (manual orchestration, rare)
+The script does **not** build a dependency DAG — it spawns all eligible issues in parallel. For multi-issue launches with explicit dependencies (`depends on #N` in body, sequential `Phase X.Y` references in plan docs), the user must orchestrate manually:
+1. Run `pickup-auto.sh --dry-run` to see eligible issues.
+2. Build DAG by reading bodies + plan docs.
+3. For each root-node issue: `bash pickup-claim.sh N` then spawn worker manually.
+4. After root completes (closed on origin/main), repeat for next layer.
+
+This is a latent step — keep it out of the auto path. Most launches don't need it.
 
 #### Auto mode rules
-- **Fire-and-forget** — launch in background, report immediately, user continues working.
+- **Fire-and-forget** — script reports immediately, user continues working.
 - **Worktree isolation** — each task runs via `claude -w` to avoid conflicts.
-- **Self-completing** — execute → log autogrill Q&A → `gh issue close N` → commit + push.
-- **Respect skill flows** — if a task maps to a skill, invoke that skill.
-- **Dependency-aware** — build DAG before parallelizing; serialize sequential phases of same plan.
-- **Time-aware** — never run `weight:heavy` tasks during work hours unless `--force` is passed.
-- **`--force` override** — `/pickup auto --force` bypasses time-aware filtering entirely. Used by the pickup-auto cron (see `~/.local/bin/pickup-auto-cron.sh`) so scheduled runs can pick `weight:heavy` during daytime.
+- **Self-completing** — worker executes → commits → pushes → closes issue.
+- **Respect skill flows** — if a task maps to a skill, the worker invokes that skill.
 - **No budget cap** — tasks run until complete. Ralph Loop ensures completion.
 
 ## Handover Task Behavior
@@ -255,7 +250,7 @@ Labels change across sessions. Never cache the Ready list within a long interact
 - Replicate spec across N skills (outcome log markers, trace patterns) — each skill needs per-skill review of where to insert
 - Airtable / external sync design — needs decisions about schema mapping, conflict handling, sync direction
 - Cron schedule design for new automations — needs safety review + frequency tradeoffs
-- **Skill creation or modification** — skills are design-heavy (behavior, edge cases, integration). Always start with `/grill` to align on requirements before writing any code. Auto-executing a "build skill" task without grilling produces work that doesn't match the user's intent.
+- **Skill creation or modification** — skills are design-heavy (behavior, edge cases, integration). Always start with `/grill` to align on requirements before writing any code. After /grill aligns on requirements, route the actual creation/eval work through `/skill-creator` — the gold standard for skill creation AND behavioral-eval generation (variance analysis, triggering accuracy, with-skill-vs-baseline subagent runs). Don't hand-edit `evals.json` as a shortcut for behavioral-eval upgrade; coverage-parity additions matching the existing pattern (1-2 cases mirroring new SKILL.md content, e.g. when `/improve` auto-edits a skill) are fine. `/skill-creator` and `/improve` are complementary: `/improve` is the auto-tuning loop on outcome-log signal; `/skill-creator` is the manual, interactive flow for creation and behavioral-eval generation. Auto-executing a "build skill" task without grilling produces work that doesn't match the user's intent.
 
 **Default:** When creating new tasks, default to `owner:human` unless the task is a pure mechanical transform (file rewrite per spec, code refactor with clear before/after, format conversion).
 
