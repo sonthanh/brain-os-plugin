@@ -19,7 +19,7 @@ Wraps "grab next AFK issue → run /tdd → commit + push + close." Designed in 
 
 - **Repo for issues:** the project tracker named in `working-rules.md` (single tracker for all areas)
 - **Area filter:** `area:plugin-brain-os` (override with `--area <label>`)
-- **Required labels for AFK pick:** `ready` AND `afk` (or `owner:bot` for legacy issues)
+- **Required labels for AFK pick:** `status:ready` AND `owner:bot`
 - **Empty backlog sentinel:** emit literally `<promise>NO_MORE_ISSUES</promise>` in your assistant text response so an outer `/ralph-loop --completion-promise "NO_MORE_ISSUES"` can latch and stop. Ralph reads transcript text blocks (`type: text`), not unix stdout — a `Bash(echo)` call will not satisfy the contract.
 - **Test runner inside /tdd:** `bun test` for new code; per-artifact-type table in `/tdd` for hooks, plists, scripts, vault docs
 
@@ -65,7 +65,7 @@ Caveats:
 ```bash
 gh issue list \
   -R <tracker-repo> \
-  --label "area:plugin-brain-os,ready,afk" \
+  --label "area:plugin-brain-os,status:ready,owner:bot" \
   --json number,title,body,labels \
   --limit 1
 ```
@@ -78,8 +78,8 @@ If one issue returned → continue with that issue's number, title, body.
 
 ```bash
 gh issue edit <N> -R <tracker-repo> \
-  --add-label "status:in-progress" \
-  --remove-label "ready"
+  --remove-label "status:ready" \
+  --add-label "status:in-progress"
 ```
 
 ### 3. Read
@@ -88,7 +88,7 @@ Read the issue body in full. In particular:
 - "Required reading" / "Pattern reference" sections — load every file mentioned BEFORE writing anything
 - "Acceptance" checklist — this is the contract
 - `Files:` declared list (if present from `/to-issues`) — confirm scope
-- `Blocked by #M` — if M is still open, abort and re-label `ready`; the issue isn't actually AFK-ready
+- `Blocked by #M` — if M is still open, abort and re-label `status:ready`; the issue isn't actually AFK-ready
 
 ### 4. Implement via /tdd
 
@@ -162,7 +162,7 @@ When subagents return:
   git fetch <branch-or-worktree-ref>
   git merge --ff-only <branch>  # or rebase if conflicts emerge
   ```
-- If a subagent reports failure (test still red, or aborted): leave its issue back in `ready` (re-label), drop its worktree commits, and continue with the rest. Do not block successful siblings.
+- If a subagent reports failure (test still red, or aborted): leave its issue back in `status:ready` (re-label), drop its worktree commits, and continue with the rest. Do not block successful siblings.
 
 ### 4. Push + close
 
@@ -192,7 +192,7 @@ When `--parallel N` spawns a subagent, the prompt MUST embed:
 ## When NOT to use /impl
 
 - Issue is HITL (human-in-loop) — needs interactive grilling or approval. Use the issue's normal flow; don't auto-pick.
-- Issue is `Blocked by #M` and M is open — re-label `ready` and skip; the dependency must land first.
+- Issue is `Blocked by #M` and M is open — re-label `status:ready` and skip; the dependency must land first.
 - One-off tweaks the user is making interactively — just edit the file, don't fabricate an issue to satisfy /impl.
 - The issue isn't on the configured tracker repo — /impl only knows that tracker. Other repos use whatever flow is documented locally.
 - The user has explicitly taken control of an issue (`status:in-progress` already set, owner is a human) — do not steal it.

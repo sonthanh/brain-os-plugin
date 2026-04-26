@@ -85,10 +85,10 @@
     {
       "id": 9,
       "prompt": "What does the issue's `Blocked by #M` field do for /impl?",
-      "expected_output": "If issue M is still open, /impl aborts and re-labels the current issue back to `ready` — it isn't actually AFK-ready until the dependency lands.",
+      "expected_output": "If issue M is still open, /impl aborts and re-labels the current issue back to `status:ready` — it isn't actually AFK-ready until the dependency lands.",
       "expectations": [
         "Says /impl aborts / skips / does not implement when blocked",
-        "Mentions re-labeling back to ready",
+        "Mentions re-labeling back to status:ready",
         "Says the dependency must land first"
       ]
     },
@@ -99,6 +99,17 @@
       "expectations": [
         "Says /impl does not duplicate /tdd",
         "Names the separation of concerns: /tdd = test loop, /impl = issue plumbing"
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "What labels does /impl's `gh issue list` query filter on to find an AFK-eligible issue, and how does it transition the claim?",
+      "expected_output": "Filters on `area:plugin-brain-os,status:ready,owner:bot` (the area is overridable via --area). Claim transitions atomically by removing `status:ready` and adding `status:in-progress` in a single `gh issue edit` call.",
+      "expectations": [
+        "Names status:ready and owner:bot as the required labels",
+        "Mentions area:plugin-brain-os as the area filter (overridable)",
+        "Does NOT mention bare `ready` or bare `afk` as label names",
+        "Says the claim removes status:ready and adds status:in-progress"
       ]
     }
   ]
