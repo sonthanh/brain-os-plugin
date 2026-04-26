@@ -11,7 +11,11 @@
 #   • --force → skip time filter
 #   • --dry-run → query + filter, no claim/spawn
 #
-# Recovery: at start of run, releases claim:session-* labels older than 6h.
+# Claim protocol matches skills/pickup/SKILL.md "Claim protocol": a single
+# atomic `--remove-label status:ready --add-label status:in-progress` flip
+# is the claim. No ephemeral `claim:session-*` labels — they were removed
+# from the SSOT in the /pickup refactor (single-user repo, race is benign:
+# duplicate work at worst, handover converges outputs).
 
 set -uo pipefail
 
@@ -21,7 +25,6 @@ STATE_DIR="$HOME/.local/state/pickup-auto"
 LOG_FILE="$STATE_DIR/cron.log"
 USAGE_FILE="${PICKUP_AUTO_USAGE_FILE:-$HOME/.cache/ccstatusline/usage.json}"
 WEEKLY_THRESHOLD="${PICKUP_AUTO_THRESHOLD:-80}"
-STALE_CLAIM_SEC=21600  # 6h
 
 FORCE=0
 DRY_RUN="${DRY_RUN:-0}"
@@ -112,52 +115,12 @@ if [[ ! -d "$WORK_DIR" ]]; then
 fi
 cd "$WORK_DIR" || { log "ERROR: cd $WORK_DIR failed"; exit 1; }
 
-# ---- Stale claim cleanup (release claim:session-*-<ts> labels older than 6h)
-log "stale-sweep: scanning open issues for stale claim labels"
-NOW_EPOCH=$(date +%s)
-STALE_JSON=$(gh issue list -R "$GH_TASK_REPO" --state open \
-  --json number,labels --limit 200 2>>"$LOG_FILE" || echo "[]")
-
-STALE_PAIRS=$(echo "$STALE_JSON" | jq -r '
-  .[] | .number as $n |
-  .labels[].name | select(startswith("claim:session-")) |
-  "\($n)\t\(.)"
-')
-
-RELEASED=0
-if [[ -n "$STALE_PAIRS" ]]; then
-  while IFS=$'\t' read -r N CLAIM; do
-    [[ -z "$N" || -z "$CLAIM" ]] && continue
-    # claim format: claim:session-<pid>-<ts>[-<i>]
-    TS=$(echo "$CLAIM" | awk -F- '{print $3}')
-    if [[ "$TS" =~ ^[0-9]+$ ]]; then
-      AGE=$((NOW_EPOCH - TS))
-      if (( AGE > STALE_CLAIM_SEC )); then
-        log "stale-claim: releasing $CLAIM on #$N (age=${AGE}s)"
-        if (( DRY_RUN == 0 )); then
-          gh issue edit "$N" -R "$GH_TASK_REPO" --remove-label "$CLAIM" >/dev/null 2>&1 \
-            && RELEASED=$((RELEASED + 1)) \
-            || log "WARN: failed to remove $CLAIM on #$N"
-        else
-          RELEASED=$((RELEASED + 1))
-        fi
-      fi
-    fi
-  done <<< "$STALE_PAIRS"
-fi
-log "stale-sweep: released=$RELEASED"
-
 # ---- Query eligible issues
 log "eligibility: querying status:ready + owner:bot"
 ELIGIBLE_JSON=$(gh issue list -R "$GH_TASK_REPO" --state open \
   --label status:ready --label owner:bot \
   --json number,title,labels,body \
   --limit 50 2>>"$LOG_FILE" || echo "[]")
-
-# Drop already-claimed issues
-UNCLAIMED_JSON=$(echo "$ELIGIBLE_JSON" | jq -c '[.[]
-  | select(all(.labels[]; .name | startswith("claim:session-") | not))
-]')
 
 # Time-aware weight filter
 HOUR=$(date +%H)
@@ -166,17 +129,17 @@ IS_WORK_HOURS=0
 (( HOUR >= 9 && HOUR < 22 )) && IS_WORK_HOURS=1
 
 if (( FORCE == 1 )); then
-  FILTERED_JSON="$UNCLAIMED_JSON"
+  FILTERED_JSON="$ELIGIBLE_JSON"
   log "filter: --force — no time filter"
 elif (( IS_WORK_HOURS == 1 )); then
   # Work hours: pick only issues that have weight:quick (and not heavy).
-  FILTERED_JSON=$(echo "$UNCLAIMED_JSON" | jq -c '[.[]
+  FILTERED_JSON=$(echo "$ELIGIBLE_JSON" | jq -c '[.[]
     | select(any(.labels[]; .name == "weight:quick"))
     | select(all(.labels[]; .name != "weight:heavy"))
   ]')
   log "filter: work-hours (hour=$HOUR) — weight:quick only"
 else
-  FILTERED_JSON="$UNCLAIMED_JSON"
+  FILTERED_JSON="$ELIGIBLE_JSON"
   log "filter: off-hours (hour=$HOUR) — any weight"
 fi
 
@@ -191,42 +154,35 @@ fi
 
 # ---- Per-issue claim + spawn (use process substitution so $SPAWNED persists)
 SPAWNED=0
-ITER=0
 while IFS= read -r issue; do
-  ITER=$((ITER + 1))
   N=$(echo "$issue" | jq -r '.number')
   TITLE=$(echo "$issue" | jq -r '.title')
   BODY=$(echo "$issue" | jq -r '.body')
-  CLAIM_LABEL="claim:session-$$-$(date +%s)-$ITER"
 
   log "candidate: #$N ($TITLE)"
 
   if (( DRY_RUN == 1 )); then
-    log "DRY_RUN: would claim #$N with $CLAIM_LABEL, then spawn claude -w auto-issue-$N"
+    log "DRY_RUN: would claim #$N (status:ready → status:in-progress), then spawn claude -w auto-issue-$N"
     SPAWNED=$((SPAWNED + 1))
     continue
   fi
 
-  # Atomic claim
-  if ! gh issue edit "$N" -R "$GH_TASK_REPO" --add-label "$CLAIM_LABEL" >/dev/null 2>&1; then
-    log "WARN: failed to add $CLAIM_LABEL on #$N — skipping"
+  # Re-check status to shrink the TOCTOU window between query and flip:
+  # if another session beat us to status:in-progress, skip cleanly.
+  CURRENT_STATUS=$(gh issue view "$N" -R "$GH_TASK_REPO" --json labels \
+    --jq '[.labels[].name | select(startswith("status:"))][0] // empty' 2>/dev/null || echo "")
+
+  if [[ "$CURRENT_STATUS" != "status:ready" ]]; then
+    log "skip: #$N is now '$CURRENT_STATUS' (claimed elsewhere or grooming changed it)"
     continue
   fi
 
-  # Race check: re-fetch, count claim:session-* labels
-  CLAIM_COUNT=$(gh issue view "$N" -R "$GH_TASK_REPO" --json labels \
-    --jq '[.labels[].name | select(startswith("claim:session-"))] | length' 2>/dev/null || echo "0")
-
-  if [[ "$CLAIM_COUNT" != "1" ]]; then
-    log "race-lost: #$N has $CLAIM_COUNT claims — releasing $CLAIM_LABEL"
-    gh issue edit "$N" -R "$GH_TASK_REPO" --remove-label "$CLAIM_LABEL" >/dev/null 2>&1 || true
-    continue
-  fi
-
-  # Promote to in-progress
+  # Atomic claim per skills/pickup/SKILL.md "Claim protocol": one gh call,
+  # both labels flipped in a single request. Race-tolerant by SSOT design.
   if ! gh issue edit "$N" -R "$GH_TASK_REPO" \
       --remove-label status:ready --add-label status:in-progress >/dev/null 2>&1; then
-    log "WARN: status transition failed on #$N — continuing anyway"
+    log "WARN: claim flip failed on #$N — skipping"
+    continue
   fi
 
   log "claimed: #$N — spawning worker"

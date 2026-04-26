@@ -132,8 +132,14 @@ check_stealth_picked() {
   # like #1 don't match #10, #11, #123. --grep does substring by default;
   # its regex mode is BRE which varies across git builds, so we run git's
   # --grep as a cheap prefilter then verify with ERE grep.
+  # Exclude followup-creation references (e.g. "pickup: ship X (#113 → #114)"
+  # — that commit shipped #113 and *filed* #114 as the followup, it didn't
+  # work on #114). The "→ #N" / "-> #N" arrow is our convention for filed-
+  # as-followup; drop those before deciding the commit is stealth-work.
   if git -C "$VAULT_PATH" log --grep="#${issue_num}" --since="24 hours ago" --oneline 2>/dev/null \
-       | grep -Eq "#${issue_num}([^0-9]|\$)"; then
+       | grep -E "#${issue_num}([^0-9]|\$)" \
+       | grep -vE "(→|->) *#${issue_num}([^0-9]|\$)" \
+       | grep -q .; then
     return 0
   fi
   # Vault files: matching handover/grill/task naming conventions, modified within 24h.
@@ -404,13 +410,20 @@ if [ -f "$PICKUP_LOG" ] && [ -n "$CRON_CUTOFF" ]; then
   PU_TICKS=$(printf '%s\n' "$PU_RECENT" | grep -c "=== pickup-auto tick" || true)
   PU_SKIPS=$(printf '%s\n' "$PU_RECENT" | grep -c "SKIP — weekly usage" || true)
   PU_PROCEEDS=$(printf '%s\n' "$PU_RECENT" | grep -c "PROCEED — weekly usage" || true)
+  PU_CANDIDATES=$(printf '%s\n' "$PU_RECENT" | grep -c "\] candidate:" || true)
   PU_CLAIMS=$(printf '%s\n' "$PU_RECENT" | grep -c "\] claimed:" || true)
   PU_SPAWNS=$(printf '%s\n' "$PU_RECENT" | grep -c "\] spawned:" || true)
   # Force-numeric (grep -c can print empty in some edge cases under set -u)
-  : "${PU_TICKS:=0}"; : "${PU_SKIPS:=0}"; : "${PU_PROCEEDS:=0}"; : "${PU_CLAIMS:=0}"; : "${PU_SPAWNS:=0}"
+  : "${PU_TICKS:=0}"; : "${PU_SKIPS:=0}"; : "${PU_PROCEEDS:=0}"; : "${PU_CANDIDATES:=0}"; : "${PU_CLAIMS:=0}"; : "${PU_SPAWNS:=0}"
   if [ "$PU_TICKS" -gt 0 ]; then
     PU_ICON="✅"
     [ "$PU_PROCEEDS" -eq 0 ] && PU_ICON="⏭️"
+    # Candidates were seen but nothing was spawned → silent failure (claim
+    # broken, gh API errored, etc.). Surface loudly — better than ✅ on dead
+    # cron. (Bug history: 2026-04-12 → 2026-04-26 the cron logged ✅ while
+    # 0 of ~150 ticks successfully spawned, because the SKILL.md refactor
+    # removed claim:session-* labels and the cron wasn't synced.)
+    [ "$PU_CANDIDATES" -gt 0 ] && [ "$PU_SPAWNS" -eq 0 ] && PU_ICON="⚠️"
     PU_DETAIL="${PU_TICKS} ticks · ${PU_PROCEEDS} proceed / ${PU_SKIPS} skip · ${PU_CLAIMS} claimed, ${PU_SPAWNS} spawned"
     if [ "$PU_SPAWNS" -gt 0 ]; then
       PU_ISSUES=$(printf '%s\n' "$PU_RECENT" | grep "\] spawned:" | grep -oE "auto-issue-[0-9]+" | sort -u | sed 's/auto-issue-/#/' | tr '\n' ' ' | sed 's/ $//')
