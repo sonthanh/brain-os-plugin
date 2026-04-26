@@ -36,7 +36,7 @@ See [Getting Started](GETTING-STARTED.md) for the full setup walkthrough and fir
 
 ## GitHub tasks setup
 
-Tasks (`/pickup`, `/handover`, `/status`, and the auto-pickup cron) live as GitHub issues in a repo you own — not in Markdown files. This solves multi-session concurrency (atomic state, stable IDs, no merge conflicts).
+Tasks (`/pickup`, `/handover`, `/status`, `/impl`, `/slice`) live as GitHub issues in a repo you own — not in Markdown files. This solves multi-session concurrency (atomic state, stable IDs, no merge conflicts).
 
 **One-time setup:**
 
@@ -105,7 +105,11 @@ Karpathy is building something similar with "LLM Knowledge Bases." Same directio
 | `/aha` | When something clicks mid-session — captures the moment with full context |
 | `/journal` | End of day — aggregates your journey into content material, surfaces what's missing |
 | `/handover` | When you're stopping a session — creates a summary for next time |
-| `/pickup` | When you're starting a new session — resumes where you left off |
+| `/pickup` | When you're starting a new session — resumes where you left off (HITL: handover, owner:human, autogrill) |
+| `/slice` | After a settled `/grill`, breaks the plan into a parent story issue (PRD body) + tracer-bullet child issues |
+| `/impl` | AFK executor — picks one `owner:bot` issue, runs `/tdd`, commits, pushes, closes |
+| `/impl auto` | Drains the `owner:bot` Ready queue serial (or with `-p N` for N worktrees in parallel) |
+| `/impl story <N>` | DAG drains all children of a parent story issue. Bash-detached TS orchestrator (`scripts/run-story.ts`) — main session burns ~0 tokens during drain, macOS notification when parent closes |
 
 <details>
 <summary><strong>All skills</strong> — full reference</summary>
@@ -117,6 +121,11 @@ Karpathy is building something similar with "LLM Knowledge Bases." Same directio
 | `/absorb` | Connect book insights to your vault zones (business, personal, thinking) |
 | `/gmail` | Automated inbox triage — cleanup, draft replies, process reports |
 | `/gmail-bootstrap` | One-time setup: scan 3 months of inbox to build email rules |
+| `/tdd` | Red-green-refactor for skills, scripts, hooks, vault docs |
+| `/debug` | Investigate a reported bug + file a /tdd RED-GREEN fix plan as a GH issue |
+| `/improve` | Analyze skill outcomes + propose self-improvements (eval-gated) |
+| `/reorg` | Weekly system-level architecture audit across plugin + vault |
+| `/vault-lint` | Nightly mechanical hygiene — broken links, orphan pages, stale tasks |
 | `/triggers` | Manage and debug scheduled remote agents |
 | `/eval` | Run eval checks on skills to catch regressions |
 | `/sync` | Git commit and push all vault changes |
