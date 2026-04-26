@@ -1,0 +1,62 @@
+[
+  {
+    "name": "detectors-enumerated",
+    "description": "SKILL.md must define five detectors D1-D5",
+    "expected_in_skill": ["D1 — Shallow modules", "D2 — Cross-skill duplication", "D3 — Unused code", "D4 — Conflicting patterns", "D5 — Vault organization drift"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "modes-cron-vs-interactive",
+    "description": "Cron mode must NOT auto-chain to /to-issues; interactive mode MUST",
+    "expected_in_skill": ["mode: cron", "mode: interactive", "Skip `/to-issues` chain", "Skip this phase if `mode: cron` or `mode: dry-run`"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "judge-must-be-opus",
+    "description": "Phase C judge MUST use opus, not sonnet (user mandate 2026-04-26)",
+    "expected_in_skill": ["model: opus", "Use opus, not sonnet", "Opus, not sonnet"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "vault-lint-differentiation",
+    "description": "Skill must NOT duplicate /vault-lint's mechanical hygiene job",
+    "expected_in_skill": ["Don't re-run `/vault-lint`'s job", "broken wiki-link", "structural"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "improve-differentiation",
+    "description": "Skill must NOT duplicate per-skill /improve's job",
+    "expected_in_skill": ["Don't re-run `/improve`'s job", "single skill", "span ≥ 2 files"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "quota-cap-on-judge-calls",
+    "description": "Phase C must cap total Agent calls per run (125 = 5 detectors × 25 candidates)",
+    "expected_in_skill": ["cap total Agent calls per run at 125", "quota_capped", "5 detectors × 25 candidates"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "checkpointing-for-resumability",
+    "description": "Skill must write a per-phase checkpoint so interrupted runs can resume",
+    "expected_in_skill": [".checkpoint-", "Resumes from the last completed phase", "Deletes the checkpoint after Phase F"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "to-issues-integration-via-report",
+    "description": "Phase E must invoke /to-issues with the report path, not bypass it",
+    "expected_in_skill": ["Invoke `/to-issues daily/reorg-reports/{date}.md`", "Proposed Issues", "treats the `## Proposed Issues` table as its slice breakdown"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "report-only-by-design",
+    "description": "Skill must never auto-apply refactors; report is the deliverable",
+    "expected_in_skill": ["Report-only by design", "Never auto-apply", "this skill stops at the report"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "exempt-frontmatter-honored",
+    "description": "Files marked `architecture-exempt: true` must be skipped in Phase A",
+    "expected_in_skill": ["architecture-exempt: true", "skip ALL detectors", "Record the exemption in the report"],
+    "type": "skill-content-check"
+  }
+]
