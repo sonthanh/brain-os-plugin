@@ -7,8 +7,8 @@
   },
   {
     "name": "modes-cron-vs-interactive",
-    "description": "Cron mode must NOT auto-chain to /to-issues; interactive mode MUST",
-    "expected_in_skill": ["mode: cron", "mode: interactive", "Skip `/to-issues` chain", "Skip this phase if `mode: cron` or `mode: dry-run`"],
+    "description": "Cron mode must NOT auto-chain to /slice; interactive mode MUST",
+    "expected_in_skill": ["mode: cron", "mode: interactive", "Skip `/slice` chain", "Skip this phase if `mode: cron` or `mode: dry-run`"],
     "type": "skill-content-check"
   },
   {
@@ -42,9 +42,9 @@
     "type": "skill-content-check"
   },
   {
-    "name": "to-issues-integration-via-report",
-    "description": "Phase E must invoke /to-issues with the report path, not bypass it",
-    "expected_in_skill": ["Invoke `/to-issues daily/reorg-reports/{date}.md`", "Proposed Issues", "treats the `## Proposed Issues` table as its slice breakdown"],
+    "name": "slice-integration-via-report",
+    "description": "Phase E must invoke /slice with the report path, not bypass it",
+    "expected_in_skill": ["Invoke `/slice daily/reorg-reports/{date}.md`", "Proposed Issues", "treats the `## Proposed Issues` table as its slice breakdown"],
     "type": "skill-content-check"
   },
   {

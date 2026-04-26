@@ -88,7 +88,7 @@ gh issue edit <N> -R <tracker-repo> \
 Read the issue body in full. In particular:
 - "Required reading" / "Pattern reference" sections — load every file mentioned BEFORE writing anything
 - "Acceptance" checklist — this is the contract
-- `Files:` declared list (if present from `/to-issues`) — confirm scope
+- `Files:` declared list (if present from `/slice`) — confirm scope
 - `Blocked by #M` — if M is still open, abort and re-label `status:ready`; the issue isn't actually AFK-ready
 
 ### 4. Implement via /tdd
@@ -206,7 +206,7 @@ Send all N tool calls in a single assistant message so they run concurrently.
 
 The `isolation: "worktree"` parameter is always-on for parallel mode — never conditional, never optional. It gives each subagent a temporary git worktree, auto-cleaned when the agent makes no changes, and prevents the "two teammates editing the same file" overwrite class identified in the grill.
 
-Because each subagent has its own working tree, you do NOT need to pre-validate disjoint file ownership across the N issues. /to-issues warns on file overlap as a soft signal; worktree isolation is the hard guarantee.
+Because each subagent has its own working tree, you do NOT need to pre-validate disjoint file ownership across the N issues. /slice warns on file overlap as a soft signal; worktree isolation is the hard guarantee.
 
 ### 3. Merge
 

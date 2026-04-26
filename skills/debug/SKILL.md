@@ -85,7 +85,7 @@ N. RED: Write a test that <describes broken behavior in observable terms>
    GREEN: <Minimal change to make the test pass — described as behavior, not code>
 ```
 
-Rules from Pocock + brain-os to-issues:
+Rules from Pocock + brain-os /slice:
 
 - **One test, one impl, one cycle.** Never bundle multiple behaviors into one cycle.
 - **Tests verify behavior through public interfaces.** A skill's "interface" is the user-visible surface it produces (a vault file, a log line, a slash-command output, an email arrival).
@@ -169,7 +169,7 @@ Append per skill-spec.md § 11:
 ## When NOT to use /debug
 
 - **One-line typos in vault docs** → just edit them directly. /debug is for behavior gaps, not typos.
-- **Brand new skill with no prior version** → if there's no "expected" baseline, the work is `/grill` + `/to-issues`, not `/debug`.
+- **Brand new skill with no prior version** → if there's no "expected" baseline, the work is `/grill` + `/slice`, not `/debug`.
 - **The user already has a complete root-cause + fix plan** in their head → file the issue manually with `gh issue create` and skip /debug; the explore step would be wasted.
 - **Regression in code you wrote in this session** → just re-read what you changed; /debug's cross-layer Explore is overkill for a 5-minute-old bug.
 

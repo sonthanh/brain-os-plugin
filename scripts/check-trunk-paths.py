@@ -15,7 +15,7 @@ Honors git's `:(glob)` pathspec semantics:
 
 Single source of truth used by:
 - hooks/pre-commit-trunk-block.sh (PreToolUse Bash gate on AFK commits)
-- skills/to-issues/SKILL.md       (slice Files: validator step)
+- skills/slice/SKILL.md           (slice Files: validator step)
 """
 
 import re

@@ -34,12 +34,12 @@ If the finding can be auto-fixed by `/improve` (single-skill SKILL.md edit) or `
 
 | Mode | Trigger | Behavior |
 |------|---------|----------|
-| `interactive` (default) | User invokes `/reorg` manually | Run scan → write report → log outcome → if findings present, **chain to `/to-issues`** with the report as input. |
-| `--cron` | Invoked from `reorg-cron.sh` (Sunday 02:00 ICT) — passes `/reorg --cron` | Run scan → write report → log outcome → push. **Skip `/to-issues` chain** (no user present to quiz). |
+| `interactive` (default) | User invokes `/reorg` manually | Run scan → write report → log outcome → if findings present, **chain to `/slice`** with the report as input. |
+| `--cron` | Invoked from `reorg-cron.sh` (Sunday 02:00 ICT) — passes `/reorg --cron` | Run scan → write report → log outcome → push. **Skip `/slice` chain** (no user present to quiz). |
 | `--dry-run` | `/reorg --dry-run` | Run all detectors, print summary to stdout. Skip report write, skip outcome log, skip pipeline. |
 | `--scope <target>` | `/reorg --scope brain-os-plugin` | Limit to one target (debug / focused review). Otherwise scan all targets per § Scan scope. Combinable with `--cron` / `--dry-run`. |
 
-The cron-vs-interactive split exists because `/to-issues` Step 5 quizzes the user on slice granularity. Chaining at cron time would deadlock waiting for input. Cron writes the artifact; the user runs `/to-issues` against the report when they have time. `/status` surfaces unprocessed reports.
+The cron-vs-interactive split exists because `/slice` Step 5 quizzes the user on slice granularity. Chaining at cron time would deadlock waiting for input. Cron writes the artifact; the user runs `/slice` against the report when they have time. `/status` surfaces unprocessed reports.
 
 **Mode detection logic**: parse the invocation `args` string. Presence of `--cron` → cron mode. Presence of `--dry-run` → dry-run mode. `--scope <target>` extracts the target. Otherwise → interactive mode (default). The cron orchestrator (`reorg-cron.sh`) always passes `--cron`; never assume cron context from environment.
 
@@ -257,9 +257,9 @@ quota_capped: true | false
 
 - `<path>` — `architecture-exempt: true`
 
-## Proposed Issues (for /to-issues)
+## Proposed Issues (for /slice)
 
-The following are pre-formed slice candidates ready for `/to-issues` to file as AFK GitHub issues. Each kept finding becomes one slice unless related findings can collapse into a single refactor.
+The following are pre-formed slice candidates ready for `/slice` to file as AFK GitHub issues. Each kept finding becomes one slice unless related findings can collapse into a single refactor.
 
 | # | Title | Type | Area | Priority | Weight | Files | Observable |
 |---|-------|------|------|----------|--------|-------|------------|
@@ -268,7 +268,7 @@ The following are pre-formed slice candidates ready for `/to-issues` to file as 
 ## Next steps
 
 - Review findings above.
-- Run `/to-issues daily/reorg-reports/{date}.md` to file proposed slices.
+- Run `/slice daily/reorg-reports/{date}.md` to file proposed slices.
 - Set `architecture-exempt: true` on any flagged file you want suppressed in future runs.
 ```
 
@@ -280,12 +280,12 @@ Skip this phase if `mode: cron` or `mode: dry-run`.
 
 When `mode: interactive` AND the report has ≥ 1 kept finding:
 
-1. Print to user: `Generated report at daily/reorg-reports/{date}.md with N kept findings. Chaining to /to-issues to file proposed slices…`
-2. Invoke `/to-issues daily/reorg-reports/{date}.md` via the Skill tool.
-3. `/to-issues` reads the report, treats the `## Proposed Issues` table as its slice breakdown, quizzes the user (Step 5 of /to-issues), and files issues to `$GH_TASK_REPO`.
-4. After `/to-issues` returns, append `## Issues filed (YYYY-MM-DD)` to this report listing the issue numbers (mirrors /to-issues Step 7 behavior on grill-sessions).
+1. Print to user: `Generated report at daily/reorg-reports/{date}.md with N kept findings. Chaining to /slice to file proposed slices…`
+2. Invoke `/slice daily/reorg-reports/{date}.md` via the Skill tool.
+3. `/slice` reads the report, treats the `## Proposed Issues` table as its slice breakdown, quizzes the user (Step 5 of /slice), and files issues to `$GH_TASK_REPO`.
+4. After `/slice` returns, append `## Issues filed (YYYY-MM-DD)` to this report listing the issue numbers (mirrors /slice Step 7 behavior on grill-sessions).
 
-If `/to-issues` skill is unavailable (plugin not installed, error), fall back to printing: "Run `/to-issues daily/reorg-reports/{date}.md` manually to file slices." Do NOT silently swallow the error.
+If `/slice` skill is unavailable (plugin not installed, error), fall back to printing: "Run `/slice daily/reorg-reports/{date}.md` manually to file slices." Do NOT silently swallow the error.
 
 ## Phase F — Outcome log + commit [deterministic]
 
@@ -334,7 +334,7 @@ Phase C is the expensive phase. If quota is tight, run `--dry-run` first to see 
 
 ## Gotchas
 
-- **Report-only by design.** Never auto-apply a refactor proposal. Architectural changes need user judgment + downstream /tdd cycle. The report → /to-issues → /impl pipeline is the auto-application path; this skill stops at the report.
+- **Report-only by design.** Never auto-apply a refactor proposal. Architectural changes need user judgment + downstream /tdd cycle. The report → /slice → /impl pipeline is the auto-application path; this skill stops at the report.
 - **Don't re-run `/vault-lint`'s job.** If a vault finding is "broken wiki-link" or "orphan page" or "README out of sync (mechanical)", that's `/vault-lint`. This skill's vault detector (D5) is structural — does the layout itself need rethinking?
 - **Don't re-run `/improve`'s job.** A single skill needing a SKILL.md tweak is `/improve`'s loop. This skill's findings should always span ≥ 2 files OR propose a structural decision (split, merge, delete, deepen).
 - **Opus, not sonnet.** Judge calls in Phase C MUST use `model: opus` per user feedback 2026-04-26. Sonnet has been observed to under-weight architectural nuance — false positives slip through, real issues get dropped. Cost is one weekly run; do not "optimize" by switching to sonnet.

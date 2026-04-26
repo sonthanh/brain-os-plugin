@@ -1,0 +1,158 @@
+{
+  "skill_name": "slice",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "User points /slice at daily/grill-sessions/2026-04-25-skill-process-pocock-adoption.md (status: pass). What is the FIRST thing the skill does, and what would make it stop before producing any output?",
+      "expected_output": "Read the grill-session file as input (deterministic gather-context step). Stop conditions: status frontmatter is `working` / `draft`, RESET sections still active, or you cannot extract user-stories / decisions / out-of-scope / open-questions sections — in which case route the user back to /grill rather than guessing.",
+      "expectations": [
+        "Mentions reading the grill-session file as input",
+        "Mentions checking status frontmatter (pass/settled/shipped vs working/draft)",
+        "Mentions stopping and asking the user to finish /grill rather than inferring missing decisions"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Where does /slice persist the synthesized PRD?",
+      "expected_output": "Into the parent story issue body on `sonthanh/ai-brain` — never as a separate vault file. The parent issue body holds User Story / Settled Decisions / Sub-issues checklist / Acceptance / Out of Scope sections and IS the PRD container; the children link back via `## Parent` and `## Blocked by`. A vault doc would trigger doc-rot (Pocock cross-cutting principle); a GitHub issue body is mutable, indexed, and closes with the story so it cannot drift in isolation.",
+      "expectations": [
+        "Says PRD lives in the parent story issue body (not a separate vault / disk file)",
+        "Mentions doc-rot or some equivalent reason a separate vault file is rejected",
+        "Names the parent-body sections (User Story / Settled Decisions / Sub-issues checklist / Acceptance / Out of Scope) or notes the parent issue is the PRD container"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "A proposed slice says 'Refactor the URL parser to a deeper module' with no user-visible surface. What does /slice's tracer-bullet validator do?",
+      "expected_output": "Hard gate fails. The slice has no Observable: declaration (no slash command output, cron tick, journal line, /status section, hook stdout/exit-code change, or vault file the user can read). It's a horizontal layer slice. The skill must split it differently or merge it with the slice that completes the end-to-end path before showing the breakdown to the user.",
+      "expectations": [
+        "Identifies that the slice fails the tracer-bullet / Observable hard gate",
+        "Mentions that the slice must be split or merged with one that produces an observable surface",
+        "Names at least one type of acceptable observable (slash command, journal line, /status section, hook output, etc.)"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Two slices both touch ~/work/brain-os-plugin/install.sh. What does /slice do?",
+      "expected_output": "Disjoint-files validator flags the overlap as a warn-soft warning, not a blocker. Both slices can still ship — `/impl -p N` (alias `--parallel N`) uses Agent-tool worktree isolation so the file conflict is resolved at merge time. The warning is surfaced so the user can decide whether merging the slices would be cleaner than parallel work.",
+      "expectations": [
+        "Identifies the disjoint-files validator as warn-soft (not a hard gate)",
+        "Mentions worktree isolation as the reason (or that /impl parallel handles the conflict)",
+        "Mentions surfacing it so the user can decide to merge slices if appropriate"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "What labels must each AFK issue carry when filed to sonthanh/ai-brain via /slice?",
+      "expected_output": "Required: area:<repo> (e.g. area:plugin-brain-os), owner:bot (AFK marker), priority:p1-p4, weight:quick or weight:heavy, status:ready / blocked / backlog. HITL slices carry owner:human instead.",
+      "expectations": [
+        "Mentions area: label (with at least one example)",
+        "Mentions owner:bot for AFK (and owner:human for HITL)",
+        "Mentions priority: label",
+        "Mentions weight: label",
+        "Mentions status: label"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "If slice B is blocked by slice A, what order does /slice create the GitHub issues in, and why?",
+      "expected_output": "Topological order — A first, then B. Creating B first would force a placeholder reference (#?) in B's `Blocked by` section because A doesn't have a real issue number yet. Creating A first lets B reference A's actual issue number returned by `gh issue create`.",
+      "expectations": [
+        "Says blockers / dependencies first (topological order)",
+        "Explains the reason (real issue number vs placeholder, captured from gh issue create output)"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "Where does /slice write its outcome log, and what does the action field capture?",
+      "expected_output": "{vault}/daily/skill-outcomes/slice.log per skill-spec.md § 11. Action = `slice` (normal grill → parent + child issues path) or `re-slice` (user requested merge/split of issues already filed today). Result = pass if no reactive split / merge happens within 48h, partial if user merged 1–2 slices mid-quiz before approval, fail if breakdown rejected entirely.",
+      "expectations": [
+        "Mentions daily/skill-outcomes/slice.log path",
+        "References skill-spec.md § 11 or the standard outcome-log convention",
+        "Names slice (and ideally re-slice) as the action verb"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "When should you NOT use /slice?",
+      "expected_output": "Single bug fix (just `gh issue create` directly), exploratory grill where decisions aren't settled (finish /grill first — the skill should refuse), the plan IS one slice (file it directly without manufacturing sub-issues), cosmetic / typo / config tweak (direct edit + push, no Pocock pipeline overhead).",
+      "expectations": [
+        "Mentions at least two of: single bug, unsettled grill, one-slice plan, cosmetic / typo / config",
+        "Distinguishes /slice from direct gh issue create or direct edit + push"
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "User runs /slice on a settled grill-session whose title is `2026-04-26-skill-creator-gold-standard` (a single-skill modification). What slice budget should the skill propose, what HITL/AFK default applies, and how does it open the user-quiz?",
+      "expected_output": "Maintenance budget — 2-4 slices, not the greenfield default of 5-10. Detection heuristic: grill title contains modify/config/cleanup/refactor/audit/etc → maintenance. HITL/AFK: default to AFK (owner:bot) because the grill is at status:pass and replaces pickup's owner:human gate; mark HITL only if the issue carries an unresolved design question. Quiz opens with: `I detected this as maintenance; proposing N slices. Push back on the budget first if wrong, then on individual slice details.`",
+      "expectations": [
+        "Identifies the slice budget as 2-4 (maintenance), not 5-10 (greenfield default)",
+        "Mentions the heuristic (grill title keywords like fix/modify/config/cleanup/etc)",
+        "Mentions defaulting to AFK / owner:bot when the grill is at status:pass and the work is skill modification",
+        "Mentions opening the quiz with the detected-budget intro line"
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "A grill closes with all decisions locked and full details in conversation context. Is it acceptable for Claude to skip /slice and file the implementation issues directly with `gh issue create`?",
+      "expected_output": "No — direct invocation via `gh issue create` after a grill closes, even when all details are crystallized in conversation context, counts as bypass per the § Anti-Patterns rule. The user-quiz step (numbered breakdown → user iterates → approved) calibrates slice granularity to user intuition, not LLM intuition. Skipping it produces issues sized to LLM intuition that the user then has to clean up. The correct action is to invoke /slice.",
+      "expectations": [
+        "Identifies direct gh issue create after a grill close as a bypass / anti-pattern",
+        "Mentions the user-quiz step as the reason (slice granularity calibration to user intuition rather than LLM intuition)",
+        "Names invoking /slice as the correct action"
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "A slice tentatively marked owner:bot declares `Files: [hooks/foo.sh, skills/bar/SKILL.md]`. What does the §4 trunk-paths validator do, and what is the user-visible result?",
+      "expected_output": "Runs the slice's declared Files: through `scripts/check-trunk-paths.sh` against `references/trunk-paths.txt` globs. `hooks/foo.sh` matches the `hooks/**` glob → exit code 1. Validator BLOCKS owner:bot for the slice (HARD GATE) and forces owner:human; surfaces the matched path during the quiz step so the user sees why. The override path is removing the trunk-path file from `Files:` — itself a trunk-class decision that gets surfaced for confirmation rather than silently bypassed.",
+      "expectations": [
+        "Mentions running check-trunk-paths.sh / matching against references/trunk-paths.txt",
+        "Says owner:bot is BLOCKED and replaced by owner:human (HARD GATE)",
+        "Mentions surfacing the matched path to the user during quiz",
+        "Mentions the override is removing the trunk-path file from Files: (not a silent bypass)"
+      ]
+    },
+    {
+      "id": 12,
+      "prompt": "Why is the §4 trunk-paths validator described as 'mechanical not advisory', and what failure mode does that distinction prevent?",
+      "expected_output": "Because asking the LLM 'does this slice touch trunk?' during quick slicing papers over the check — the rubric (CLAUDE.md, hooks, MEMORY, RESOLVER, cross-skill primitives, plugin.json, marketplace.json) requires a deterministic file match against references/trunk-paths.txt, not LLM judgment. The validator invokes a script (check-trunk-paths.sh / .py) whose exit code drives the gate; the LLM cannot soften or skip the result. Failure mode prevented: misclassification of a trunk-touching slice as owner:bot, which would let /impl AFK-merge it without human review at merge time. P1-audited per [grill 2026-04-26](daily/grill-sessions/2026-04-26-depth-leaf-trunk-design.md).",
+      "expectations": [
+        "Mentions the deterministic / script-based check (vs LLM judgment)",
+        "Names misclassification of trunk as owner:bot as the failure mode being prevented",
+        "References the trunk-paths.txt rubric (CLAUDE.md, hooks, references, cross-skill primitives, etc.)"
+      ]
+    },
+    {
+      "id": 13,
+      "prompt": "A user runs /slice on a settled grill-session. After the PRD is synthesized in conversation context, what is the very next deterministic step BEFORE drafting any child slices, and what does the user see?",
+      "expected_output": "The skill files a parent story issue on sonthanh/ai-brain with the synthesized PRD as the body — labels `type:plan`, `owner:human`, `status:in-progress`, area label inherited from the grill scope. The body MUST contain the sections: User Story, Settled Decisions, Sub-issues (placeholder checklist `- [ ] TBD — children filed in step 7`), Acceptance, Out of Scope. After creation the skill surfaces the parent issue URL + number to the user and waits for `approve` (proceed to slicing) or `edit <section>` (revise PRD before children are filed). Nothing downstream runs until approval — that is the new PRD-review gate added in Workflow Step 2.5 / 2.7.",
+      "expectations": [
+        "Names filing the parent story issue with the PRD as body BEFORE child slices",
+        "Lists the parent-body sections (User Story / Settled Decisions / Sub-issues / Acceptance / Out of Scope)",
+        "Mentions the labels type:plan + owner:human + status:in-progress on the parent",
+        "Mentions surfacing the parent URL + N and awaiting `approve` / `edit` before children are filed"
+      ]
+    },
+    {
+      "id": 14,
+      "prompt": "What MUST the body of a child issue contain that /slice files under a parent story issue, and how does this differ from a standalone /slice issue body?",
+      "expected_output": "Each child body adds a `## Parent` section pointing to the parent (e.g. `- ai-brain#145`) and a `## Blocked by` section listing prerequisite sibling issue numbers (e.g. `- ai-brain#148`) — or `None — can start immediately` when no siblings block it. Standard sections (What to build / Acceptance / Files / Observable) are unchanged. The Parent reference makes the child reachable from the parent's checklist (which /impl story reads to drive DAG drainage); Blocked by encodes the topological order so /impl story knows which children are AFK-ready right now.",
+      "expectations": [
+        "Mentions a `## Parent` section pointing to the parent issue (e.g. ai-brain#<N>)",
+        "Mentions a `## Blocked by` section listing prerequisite sibling issues (or None)",
+        "Mentions /impl story (or DAG drain) reading the parent checklist + Blocked by to order execution"
+      ]
+    },
+    {
+      "id": 15,
+      "prompt": "After all child issues are created, what does /slice do to the parent story issue body, and why is this load-bearing for downstream skills?",
+      "expected_output": "It edits the parent issue body to replace the placeholder Sub-issues checklist with one line per child: `- [ ] ai-brain#<N> — <child title>`. The `gh issue edit <parent> --body` call rewrites the section in topological order. This is load-bearing because /impl story <parent-N> parses exactly that checklist to discover children, builds the DAG from each child's `## Blocked by`, drains the story, and ticks each line `- [ ]` → `- [x]` on close — closing the loop with a single source of truth. Without the auto-fill, /impl story has nothing to walk and the story can't drain autonomously.",
+      "expectations": [
+        "Says the parent body checklist is auto-filled with child issue numbers + titles",
+        "Names the format `- [ ] ai-brain#<N> — <title>`",
+        "Mentions /impl story consuming the parent checklist to drive DAG drainage / progress tracking"
+      ]
+    }
+  ]
+}
