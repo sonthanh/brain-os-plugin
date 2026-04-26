@@ -132,17 +132,20 @@ Append one line to `{vault}/daily/skill-outcomes/impl.log` (see § Outcome log b
 
 ## Workflow — `story` mode
 
-`/impl story <parent-N> [-p N]` drains a multi-issue story in DAG order. The orchestration is a bash script (`scripts/run-story.sh`) — main Claude session exits after kicking it off, ~0 token burn for the duration of the drain.
+`/impl story <parent-N> [-p N]` drains a multi-issue story in DAG order. The orchestration is a TypeScript script (`scripts/run-story.ts`, `bun` runtime, unit-tested via `scripts/run-story.test.ts`) — main Claude session exits after kicking it off, ~0 token burn for the duration of the drain.
 
 ### Invocation
 
 When the user types `/impl story <parent-N>` (optionally `-p <N>`), execute:
 
 ```bash
-bash "$CLAUDE_PLUGIN_ROOT/scripts/run-story.sh" <parent-N> -p <N>
+mkdir -p ~/.local/state/impl-story && \
+  nohup /opt/homebrew/bin/bun run "$CLAUDE_PLUGIN_ROOT/scripts/run-story.ts" <parent-N> -p <N> \
+  >> ~/.local/state/impl-story/<parent-N>.log 2>&1 &
+echo "Started orchestrator (PID $!). Log: ~/.local/state/impl-story/<parent-N>.log"
 ```
 
-The script self-detaches via `nohup` and returns immediately with the orchestrator PID + log path. After the bash invocation returns, your work is done — exit cleanly.
+`nohup ... &` self-detaches the process — the bash command returns immediately. After the bash invocation returns, your work is done — exit cleanly.
 
 ### What the script does
 

@@ -137,15 +137,16 @@
     {
       "id": 14,
       "prompt": "What does /impl story <parent-N> do, and where does the orchestration logic live?",
-      "expected_output": "/impl story <parent-N> drains a multi-issue story in DAG order. The skill prose dispatches to `bash $CLAUDE_PLUGIN_ROOT/scripts/run-story.sh <parent-N> -p <N>` which self-detaches via nohup and returns immediately. The bash script (not the Claude session) reads the parent issue body checklist, builds the dependency DAG from each child's `Blocked by` section, spawns AFK workers (`claude -w + /impl <M>`) within the parallel cap (default 3, hard max 5), greedy-promotes newly-unblocked children, ticks the parent body checklist on each close, and closes the parent + fires an osascript macOS notification when all children resolve. Main Claude session exits after invocation — token cost during drain is ~0 because all polling and orchestration is in bash, not in Claude inference.",
+      "expected_output": "/impl story <parent-N> drains a multi-issue story in DAG order. The skill prose dispatches to `nohup bun run $CLAUDE_PLUGIN_ROOT/scripts/run-story.ts <parent-N> -p <N> >> ~/.local/state/impl-story/<parent-N>.log 2>&1 &` which self-detaches and returns immediately. The TypeScript script (not the Claude session) reads the parent issue body checklist, builds the dependency DAG from each child's `Blocked by` section, spawns AFK workers (`claude -w + /impl <M>`) within the parallel cap (default 3, hard max 5), greedy-promotes newly-unblocked children, ticks the parent body checklist on each close, and closes the parent + fires an osascript macOS notification when all children resolve. Pure functions covered by unit tests in scripts/run-story.test.ts (bun test). Main Claude session exits after invocation — token cost during drain is ~0 because all polling and orchestration is in bun, not in Claude inference.",
       "expectations": [
-        "Mentions scripts/run-story.sh as the orchestration script",
-        "Says the script self-detaches (nohup) and main Claude exits immediately",
+        "Mentions scripts/run-story.ts (TypeScript) as the orchestration script",
+        "Mentions bun runtime / nohup for self-detach",
+        "Says main Claude session token cost ≈ 0 during drain",
         "Mentions parent body checklist as the source of children",
         "Mentions DAG / Blocked by parsing for dependency order",
         "Mentions parallel cap default 3 / hard max 5",
-        "Says main Claude session token cost ≈ 0 during drain",
-        "Mentions osascript notification on parent close"
+        "Mentions osascript notification on parent close",
+        "Mentions unit tests (bun test / run-story.test.ts) cover pure functions"
       ]
     },
     {
