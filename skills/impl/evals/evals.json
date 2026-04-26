@@ -162,6 +162,32 @@
         "Mentions cr /pickup as the user-facing resolution command",
         "Says the loop polls HITL state via gh issue view like any other child"
       ]
+    },
+    {
+      "id": 16,
+      "prompt": "What does `/impl <N>` (issue mode) do differently from `/impl` (once mode), and why is the IMPL_AFK=1 prefix still mandatory?",
+      "expected_output": "`/impl <N>` runs /tdd on the specific issue number passed as an argument, bypassing the `owner:bot`-only filter that gates `once` mode — it accepts both `owner:bot` and `owner:human` issues. The pick step is skipped (the issue is given), but claim / read / /tdd / commit / push / close all match `once`. The `IMPL_AFK=1` prefix is still required on the `git commit` invocation because owner-label and prefix are independent: owner controls the pick path, the prefix is what the trunk-block hook (`hooks/pre-commit-trunk-block.sh`) keys on to scan staged files against `references/trunk-paths.txt`. Dropping the prefix would silence the trunk gate even on legitimate AFK work. If the trunk-block hook fires for an `owner:human` issue picked up via `/impl <N>`, the response is the same as `once` mode: re-label `status:ready` + `owner:human` and exit, leaving the worktree state for interactive resolution. Use cases: user runs `/impl <N>` directly; `/impl story <P>` orchestrator dispatches `claude -w ... -p \"/impl <M>\"` per child; a handover instructs the next session to pick up #<N>.",
+      "expectations": [
+        "Says /impl <N> bypasses the owner:bot filter (accepts owner:human too)",
+        "Says the pick step is skipped because the issue number is given as arg",
+        "Says claim / read / /tdd / commit / push / close still match once mode",
+        "Says IMPL_AFK=1 is still required on commit",
+        "Explains owner label and IMPL_AFK prefix are independent — owner gates pick, prefix gates commit",
+        "Mentions /impl story dispatching /impl <M> per child as a use case"
+      ]
+    },
+    {
+      "id": 17,
+      "prompt": "Explain the mid-flow rule and why /impl filters on `owner:bot` in once and parallel modes.",
+      "expected_output": "Handovers, incomplete grills, and mid-draft writing stay `owner:human` and route through `/pickup` (HITL), never `/impl`. /impl in `once` and `parallel` modes filters on `owner:bot` so handovers are excluded by construction — codified to prevent label drift where someone tags a half-finished grill `owner:bot` and an autonomous worker picks it up mid-thought. The mechanical mapping: skills/scripts/hooks/plists with closed acceptance criteria → `owner:bot` → `/impl`; handover docs / unsettled grills / mid-draft Substack or vault essays / anything needing human judgment to close → `owner:human` → `/pickup`. Issue mode (`/impl <N>`) bypasses the filter intentionally — if the operator explicitly invokes /impl on an `owner:human` issue, the override carries the day; do not prompt to confirm and do not silently fall back to /pickup.",
+      "expectations": [
+        "Says handovers / incomplete grills / mid-draft writing stay owner:human",
+        "Says /impl filters owner:bot in once and parallel modes",
+        "Names /pickup as the HITL pickup path",
+        "Explains the rule prevents label drift / autonomous worker grabbing mid-thought work",
+        "Says issue mode (/impl <N>) bypasses the filter as an explicit operator override",
+        "Says do NOT silently fall back to /pickup when /impl <N> is invoked on owner:human"
+      ]
     }
   ]
 }
