@@ -11,6 +11,17 @@
         ]
       }
     ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "H=$(ls -d ~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/hooks 2>/dev/null | grep -E '/[0-9]+\\.[0-9]+\\.[0-9]+/hooks$' | sort -Vr | head -1) && bash \"$H/pre-commit-trunk-block.sh\""
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Edit|Write",

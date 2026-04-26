@@ -102,9 +102,11 @@ Invoke the `/tdd` skill on the issue. /tdd handles:
 
 ### 5. Commit + push + close
 
+The commit invocation MUST be prefixed with `IMPL_AFK=1` so the trunk-block hook (PreToolUse Bash, registered in `hooks/hooks.json`) can recognize it as AFK and gate trunk-path changes (see Gotchas):
+
 ```bash
 git add <touched files>
-git commit -m "$(cat <<'EOF'
+IMPL_AFK=1 git commit -m "$(cat <<'EOF'
 <type>: <subject>
 
 <body — 1–3 sentences on the why, not the what>
@@ -120,6 +122,8 @@ gh issue close <N> -R <tracker-repo> --reason completed
 ```
 
 `git pull --rebase` is mandatory before push because the CI auto-release pipeline runs on each push and may have bumped `plugin.json`.
+
+If the trunk-block hook fires (exit 2): the commit is blocked because the staged diff touches a file on `references/trunk-paths.txt` (CLAUDE.md, hooks, references, cross-skill primitives, etc.). Do NOT retry with `--no-verify` or strip the prefix. Instead: re-label the issue `status:ready` + `owner:human`, leave the worktree as-is, exit. The user will pick the issue up interactively next session; the work isn't lost — the staged diff persists in the worktree until the user resolves it.
 
 ### 6. Outcome log
 
@@ -185,9 +189,21 @@ When `--parallel N` spawns a subagent, the prompt MUST embed:
 
 1. The full issue body verbatim (do not summarize — the subagent has no shared context)
 2. A pointer to `/tdd` SKILL.md (path: `~/work/brain-os-plugin/skills/tdd/SKILL.md`)
-3. Commit-message convention (Conventional Commits + `Closes <tracker-repo>#N` + Co-Authored-By line)
-4. Exit protocol: commit → push → output the issue number on a line by itself so the orchestrator can latch
-5. Worktree note: "you are running with `isolation: 'worktree'`; commit in your worktree branch, do not push, the orchestrator will fast-forward into main"
+3. Commit-message convention (Conventional Commits + `Closes <tracker-repo>#N` + Co-Authored-By line) — and the `IMPL_AFK=1` prefix on the `git commit` invocation (the trunk-block hook gates AFK commits against `references/trunk-paths.txt`; see Gotchas)
+4. **Subagent-side trunk-paths self-check (belt-and-braces).** The PreToolUse(Bash) hook may not fire from a subagent's worktree because the hook process can inherit the orchestrator's cwd, in which case `git diff --cached` reads the wrong index and the gate silently passes. To close that gap, the subagent MUST run this check itself before invoking `git commit`:
+   ```bash
+   git diff --cached --name-only | bash "$CLAUDE_PLUGIN_ROOT/scripts/check-trunk-paths.sh"
+   if [ $? -eq 1 ]; then
+     # Trunk match — re-label and exit (do NOT commit, do NOT push)
+     gh issue edit <N> -R <tracker-repo> \
+       --remove-label status:in-progress --add-label status:ready \
+       --remove-label owner:bot --add-label owner:human
+     exit 0
+   fi
+   ```
+   If the script exits 1 (matches), abort the subagent gracefully. If exit 0, proceed to commit.
+5. Exit protocol: self-check → commit → push → output the issue number on a line by itself so the orchestrator can latch. If the orchestrator's PreToolUse hook ALSO fires and exits 2 (defense in depth), follow the same re-label-and-exit path.
+6. Worktree note: "you are running with `isolation: 'worktree'`; commit in your worktree branch, do not push, the orchestrator will fast-forward into main"
 
 ## When NOT to use /impl
 
@@ -201,6 +217,7 @@ When `--parallel N` spawns a subagent, the prompt MUST embed:
 
 - **`Closes <tracker-repo>#N` not `Closes #N`.** Cross-repo close-on-merge requires the explicit repo prefix because the commit lands in the code repo (e.g. brain-os-plugin) but the issue lives in the tracker repo. `gh issue close` is still required as a belt-and-braces step because cross-repo `Closes` doesn't always auto-fire.
 - **`git pull --rebase` is mandatory before push.** CI auto-release pipelines bump `plugin.json` on every push. Skipping the rebase guarantees a non-fast-forward push failure.
+- **`IMPL_AFK=1` on the commit invocation is required.** It signals to the trunk-block hook (`hooks/pre-commit-trunk-block.sh`) that this is autonomous AFK work. The hook reads the trunk-paths list (`references/trunk-paths.txt`) and exits 2 if any staged file matches — blocks the commit. Without the prefix, the hook is a no-op (interactive direct-push-to-main is unchanged). Source: [grill 2026-04-26](https://github.com/sonthanh/ai-brain/blob/main/daily/grill-sessions/2026-04-26-depth-leaf-trunk-design.md). DO NOT bypass with `--no-verify` or strip the prefix to "make it work" — the right response to a block is `gh issue edit <N> -R <tracker-repo> --remove-label status:in-progress --add-label status:ready --remove-label owner:bot --add-label owner:human` and exit; the user resolves interactively.
 - **Empty backlog sentinel must be wrapped in `<promise>` tags** — emit exactly `<promise>NO_MORE_ISSUES</promise>` in the assistant text response. The ralph-loop Stop hook (`stop-hook.sh:130-141`) extracts the inner text via Perl regex and exact-matches against `--completion-promise "NO_MORE_ISSUES"`. Bare `NO_MORE_ISSUES` without tags only matches when the entire response is *literally that string and nothing else* — adding any surrounding prose (which Claude almost always does) breaks the match. Stdout / `Bash(echo)` is also wrong: ralph reads transcript text blocks (`type: text`), not stdout.
 - **`--team` is DEFERRED.** If a user passes `--team`, print "team mode is deferred to Phase G — see grill 2026-04-25" and exit 1. Don't fall back to `--parallel` silently — the user explicitly asked for the unimplemented mode.
 - **/tdd owns the test loop. /impl owns the issue plumbing.** Do not duplicate /tdd's red-green logic here. If /tdd's discipline isn't holding (reactive `improve: encoded feedback —` patches keep landing), fix /tdd, not /impl.
