@@ -87,18 +87,23 @@ claude_classify() {
     'Apply the rubric. Predict behavior of THIS run (current execution, not future runs).' \
     'Output exactly one JSON object on a single line — no prose, no fences, no markdown:' \
     '' \
-    '{"tier": "<hook|skill|rules|claude-md|memory>",' \
+    '{"tier": "<hook|skill|rules|claude-md|memory|ambiguous>",' \
     ' "source_removed_this_run": <true|false>,' \
     ' "memory_md_regenerated_this_run": <true|false>}' \
     '' \
     'Field semantics — read carefully:' \
     '' \
     '  tier: which tier the rubric routes this fixture into (first match wins).' \
+    '    - Use "ambiguous" when two or more tiers fit equally well, the rule is too' \
+    '      vague to act on, or encoding requires design judgment beyond the rubric' \
+    '      (e.g. brand-new skill creation). The rubric explicitly handles ambiguous' \
+    '      cases by filing a type:human-review issue rather than guessing.' \
     '' \
     '  source_removed_this_run: would Step 0.0 encoding execution call rm on the' \
     '  fixture memory feedback file during the CURRENT run?' \
     '    - tiers hook/skill/rules/claude-md → encoding executes → rm fires → true' \
     '    - tier memory                       → no encoding → file stays → false' \
+    '    - tier ambiguous                    → no encoding (issue filed) → file stays → false' \
     '    - Step 0.7 expiry on its own does NOT delete this run; it only files a' \
     '      type:human-review issue. Only the NEXT run (after the user closes the' \
     '      issue) deletes. So when the tier is memory but the file is also expired,' \
@@ -121,13 +126,16 @@ run_default_mode() {
   local expected_tier
   expected_tier=$(read_field expected_tier "$fixture")
   local expected_source_deleted expected_memory_md
-  if [[ "$expected_tier" == "memory" ]]; then
-    expected_source_deleted=false
-    expected_memory_md=false
-  else
-    expected_source_deleted=true
-    expected_memory_md=true
-  fi
+  case "$expected_tier" in
+    memory|ambiguous)
+      expected_source_deleted=false
+      expected_memory_md=false
+      ;;
+    *)
+      expected_source_deleted=true
+      expected_memory_md=true
+      ;;
+  esac
 
   local json
   json=$(claude_classify "$fixture")

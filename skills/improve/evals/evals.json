@@ -267,5 +267,12 @@
     "expected_tier": "memory",
     "expected_expiry": true,
     "type": "memory-fixture"
+  },
+  {
+    "name": "memory-fixture-ambiguous",
+    "description": "Behavioral fixture: ambiguous feedback (multiple tiers fit) — rubric must route to type:human-review rather than guess",
+    "fixture": "fixtures/memory/feedback_ambiguous_eval_after_test_write.md",
+    "expected_tier": "ambiguous",
+    "type": "memory-fixture"
   }
 ]
