@@ -20,8 +20,43 @@ Wraps "grab next AFK issue → run /tdd → commit + push + close." Designed in 
 - **Repo for issues:** the project tracker named in `working-rules.md` (single tracker for all areas)
 - **Area filter:** `area:plugin-brain-os` (override with `--area <label>`)
 - **Required labels for AFK pick:** `ready` AND `afk` (or `owner:bot` for legacy issues)
-- **Empty backlog sentinel:** emit literally `NO_MORE_ISSUES` to stdout so an outer `/ralph-loop` can latch its `--completion-promise`
+- **Empty backlog sentinel:** emit literally `<promise>NO_MORE_ISSUES</promise>` in your assistant text response so an outer `/ralph-loop --completion-promise "NO_MORE_ISSUES"` can latch and stop. Ralph reads transcript text blocks (`type: text`), not unix stdout — a `Bash(echo)` call will not satisfy the contract.
 - **Test runner inside /tdd:** `bun test` for new code; per-artifact-type table in `/tdd` for hooks, plists, scripts, vault docs
+
+## Recommended invocation patterns
+
+### Manual
+
+```
+/impl                        # Pick one AFK issue, /tdd it, commit/push/close, exit
+/impl --area plugin-vault    # Same, filtered to a different area label
+/impl --parallel 3           # Three issues in worktree-isolated subagents
+```
+
+### Autonomous backlog drain (wrap in `/ralph-loop`)
+
+For unattended, multi-iteration drainage, wrap `/impl` in the ralph-loop Stop hook:
+
+```
+/ralph-loop "/impl" --completion-promise "NO_MORE_ISSUES" --max-iterations 10
+```
+
+How it terminates: each iteration `/impl` picks the next AFK issue, `/tdd`s it, commits, pushes, closes. When the `gh issue list` query returns zero, `/impl` outputs `<promise>NO_MORE_ISSUES</promise>` in its assistant text response. The ralph Stop hook extracts the text inside the `<promise>` tags, exact-matches against `--completion-promise`, and exits cleanly.
+
+Hybrid (each ralph iteration spawns N subagents):
+
+```
+/ralph-loop "/impl --parallel 3" --completion-promise "NO_MORE_ISSUES" --max-iterations 10
+```
+
+Tuning `--max-iterations` (safety cap, never omit):
+- Daytime quick-drain: `1–3 ×` expected backlog depth
+- Overnight drain: `30–50`
+
+Caveats:
+- The sentinel must be in the *text response*, not via `Bash(echo)`. Ralph reads transcript text blocks (`type: text`).
+- Do NOT wrap ralph-loop around HITL skills (`/grill`, `/handover`, `/improve`) — they need human input ralph won't supply.
+- `--completion-promise` is exact-string match on the *inner* tag text — no quotes, no extra whitespace, no paraphrasing.
 
 ## Workflow — `once` mode
 
@@ -35,7 +70,7 @@ gh issue list \
   --limit 1
 ```
 
-If empty → print `NO_MORE_ISSUES` and exit 0.
+If empty → output `<promise>NO_MORE_ISSUES</promise>` in your text response and exit 0.
 
 If one issue returned → continue with that issue's number, title, body.
 
@@ -96,7 +131,7 @@ The main session is the orchestrator. It does NOT touch artifact files itself in
 
 ### 1. Pick N
 
-Same `gh issue list` query as `once` mode but `--limit N`. If fewer than N return, run with what you got. If zero → print `NO_MORE_ISSUES` and exit 0.
+Same `gh issue list` query as `once` mode but `--limit N`. If fewer than N return, run with what you got. If zero → output `<promise>NO_MORE_ISSUES</promise>` in your text response and exit 0.
 
 ### 2. Spawn N subagents in parallel
 
@@ -166,7 +201,7 @@ When `--parallel N` spawns a subagent, the prompt MUST embed:
 
 - **`Closes <tracker-repo>#N` not `Closes #N`.** Cross-repo close-on-merge requires the explicit repo prefix because the commit lands in the code repo (e.g. brain-os-plugin) but the issue lives in the tracker repo. `gh issue close` is still required as a belt-and-braces step because cross-repo `Closes` doesn't always auto-fire.
 - **`git pull --rebase` is mandatory before push.** CI auto-release pipelines bump `plugin.json` on every push. Skipping the rebase guarantees a non-fast-forward push failure.
-- **Empty backlog sentinel must be exactly `NO_MORE_ISSUES`** — that's what `/ralph-loop --completion-promise "NO_MORE_ISSUES"` matches against. Anything else (including extra punctuation or a different case) leaves Ralph spinning until `--max-iterations` exhausts.
+- **Empty backlog sentinel must be wrapped in `<promise>` tags** — emit exactly `<promise>NO_MORE_ISSUES</promise>` in the assistant text response. The ralph-loop Stop hook (`stop-hook.sh:130-141`) extracts the inner text via Perl regex and exact-matches against `--completion-promise "NO_MORE_ISSUES"`. Bare `NO_MORE_ISSUES` without tags only matches when the entire response is *literally that string and nothing else* — adding any surrounding prose (which Claude almost always does) breaks the match. Stdout / `Bash(echo)` is also wrong: ralph reads transcript text blocks (`type: text`), not stdout.
 - **`--team` is DEFERRED.** If a user passes `--team`, print "team mode is deferred to Phase G — see grill 2026-04-25" and exit 1. Don't fall back to `--parallel` silently — the user explicitly asked for the unimplemented mode.
 - **/tdd owns the test loop. /impl owns the issue plumbing.** Do not duplicate /tdd's red-green logic here. If /tdd's discipline isn't holding (reactive `improve: encoded feedback —` patches keep landing), fix /tdd, not /impl.
 

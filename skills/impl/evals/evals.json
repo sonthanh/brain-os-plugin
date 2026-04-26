@@ -35,20 +35,21 @@
     {
       "id": 4,
       "prompt": "What does /impl emit when the AFK backlog is empty, and why?",
-      "expected_output": "Emits the literal string `NO_MORE_ISSUES` to stdout so an outer /ralph-loop with --completion-promise \"NO_MORE_ISSUES\" can latch and stop.",
+      "expected_output": "Emits the literal string `<promise>NO_MORE_ISSUES</promise>` in its assistant text response so an outer /ralph-loop with --completion-promise \"NO_MORE_ISSUES\" can latch and stop. The ralph Stop hook extracts the inner tag text via Perl regex and exact-matches against the completion promise; bare NO_MORE_ISSUES without tags only matches if the response contains nothing else, and stdout / Bash(echo) is wrong because ralph reads transcript text blocks (type: text), not unix stdout.",
       "expectations": [
-        "Mentions the exact sentinel NO_MORE_ISSUES",
+        "Mentions the <promise>NO_MORE_ISSUES</promise> sentinel format with tags",
+        "Says the sentinel goes in the assistant text response, not stdout / not echo",
         "Connects it to /ralph-loop --completion-promise"
       ]
     },
     {
       "id": 5,
       "prompt": "Does /impl wire up ralph-loop itself?",
-      "expected_output": "No. Ralph-loop wiring is a separate issue. /impl is invoked BY ralph-loop (not the other way around) and emits NO_MORE_ISSUES so ralph-loop can stop.",
+      "expected_output": "/impl documents the recommended ralph-loop wiring pattern in its 'Recommended invocation patterns' section (concrete invocation, --completion-promise, --max-iterations tuning), but the loop runtime — Stop hook, state file, completion detection — lives in the ralph-loop plugin. /impl is invoked BY ralph-loop and emits <promise>NO_MORE_ISSUES</promise> in its text response so ralph-loop's hook can match the --completion-promise and exit cleanly.",
       "expectations": [
-        "Says /impl does NOT wire ralph-loop",
-        "Says /impl is invoked BY ralph-loop",
-        "Mentions the NO_MORE_ISSUES handshake"
+        "Says /impl documents the wiring pattern but does not implement loop runtime",
+        "Says /impl is invoked BY ralph-loop (not the reverse)",
+        "Mentions the <promise>NO_MORE_ISSUES</promise> handshake"
       ]
     },
     {
