@@ -89,29 +89,47 @@ trap 'rm -rf "$TMP_FILE" "$TMP_DIR"' EXIT
   echo ""
 } > "$TMP_FILE"
 
-# --- GH queries (parallel) -----------------------------------------------
+# --- GH queries ----------------------------------------------------------
+# Single unfiltered fetch + jq client-side slicing. `gh issue list --label X`
+# hits GitHub's search index, which lags after bulk relabel ops (e.g. /slice
+# story creation) and returns random subsets — observed 4 of 7 sequential
+# calls returning empty for `--label status:ready` after today's cluster
+# grill. Fetching all open issues once and filtering locally is stable.
 GH_AVAILABLE=false
 if [ -n "${GH_TASK_REPO:-}" ] && command -v gh >/dev/null 2>&1; then
   GH_AVAILABLE=true
 
-  gh issue list -R "$GH_TASK_REPO" --state open --label type:handover \
-    --limit 50 --json number,title,body > "$TMP_DIR/handovers.json" 2>/dev/null &
-  gh issue list -R "$GH_TASK_REPO" --state open --label status:in-progress \
-    --limit 50 --json number,title,labels > "$TMP_DIR/in-progress.json" 2>/dev/null &
-  gh issue list -R "$GH_TASK_REPO" --state open --label status:ready \
-    --limit 50 --json number,title,labels > "$TMP_DIR/ready.json" 2>/dev/null &
-  gh issue list -R "$GH_TASK_REPO" --state open --label status:blocked \
-    --limit 50 --json number,title,labels > "$TMP_DIR/blocked.json" 2>/dev/null &
-  gh issue list -R "$GH_TASK_REPO" --state open --label status:backlog \
-    --limit 200 --json number --jq 'length' > "$TMP_DIR/backlog.txt" 2>/dev/null &
-  # Story parents — fetch with body so child checklist can be parsed locally
-  # (avoids fan-out gh calls per child).
-  gh issue list -R "$GH_TASK_REPO" --state open --label type:plan \
-    --limit 50 --json number,title,body > "$TMP_DIR/plans.json" 2>/dev/null &
-  # Bulk lookup table for child state tally (ready / in-progress / closed).
+  gh issue list -R "$GH_TASK_REPO" --state open \
+    --limit 200 --json number,title,body,labels > "$TMP_DIR/all-open.json" 2>/dev/null &
+  # Bulk lookup table for child state tally (ready / in-progress / closed)
+  # — needs CLOSED issues, kept as a separate query.
   gh issue list -R "$GH_TASK_REPO" --state all \
     --limit 500 --json number,state,labels > "$TMP_DIR/all-states.json" 2>/dev/null &
   wait
+
+  slice_by_label() {
+    local label="$1"
+    local out_file="$2"
+    if [ ! -s "$TMP_DIR/all-open.json" ]; then
+      echo "[]" > "$out_file"
+      return
+    fi
+    jq --arg label "$label" \
+      '[.[] | select(.labels | map(.name) | index($label))]' \
+      "$TMP_DIR/all-open.json" > "$out_file" 2>/dev/null || echo "[]" > "$out_file"
+  }
+
+  slice_by_label "type:handover"     "$TMP_DIR/handovers.json"
+  slice_by_label "status:in-progress" "$TMP_DIR/in-progress.json"
+  slice_by_label "status:ready"      "$TMP_DIR/ready.json"
+  slice_by_label "status:blocked"    "$TMP_DIR/blocked.json"
+  slice_by_label "type:plan"         "$TMP_DIR/plans.json"
+  if [ -s "$TMP_DIR/all-open.json" ]; then
+    jq '[.[] | select(.labels | map(.name) | index("status:backlog"))] | length' \
+      "$TMP_DIR/all-open.json" > "$TMP_DIR/backlog.txt" 2>/dev/null || echo 0 > "$TMP_DIR/backlog.txt"
+  else
+    echo 0 > "$TMP_DIR/backlog.txt"
+  fi
 fi
 
 json_count() {
