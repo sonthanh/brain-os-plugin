@@ -32,7 +32,7 @@ export interface Issue {
 // Pure parsers / helpers (covered by run-story.test.ts)
 // =========================================================================
 
-const CHECKLIST_RE = /^- \[[ x]\] #(\d+)\b/gm;
+const CHECKLIST_RE = /^- \[[ x]\] (?:[\w-]+)?#(\d+)\b/gm;
 
 export function parseChecklist(body: string): number[] {
   const nums: number[] = [];

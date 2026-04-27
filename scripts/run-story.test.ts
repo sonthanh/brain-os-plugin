@@ -43,6 +43,26 @@ describe("parseChecklist", () => {
     const body = "- [ ] All sub-issues closed\n- [ ] #146 — child";
     expect(parseChecklist(body)).toEqual([146]);
   });
+
+  test("accepts repo-prefixed cross-repo checklist format (ai-brain#N)", () => {
+    const body = [
+      "## Sub-issues",
+      "- [ ] ai-brain#155 — Label cleanup",
+      "- [ ] ai-brain#156 — Rename /reorg",
+      "- [x] ai-brain#157 — Already done",
+      "- [ ] some-repo#9999 — Other repo",
+    ].join("\n");
+    expect(parseChecklist(body)).toEqual([155, 156, 157, 9999]);
+  });
+
+  test("mixed bare and prefixed forms in same body", () => {
+    const body = [
+      "- [ ] #100",
+      "- [ ] ai-brain#200",
+      "- [x] #300",
+    ].join("\n");
+    expect(parseChecklist(body)).toEqual([100, 200, 300]);
+  });
 });
 
 describe("parseBlockers", () => {
