@@ -1,6 +1,6 @@
 ---
 name: impl
-description: "Per-issue implementation executor for brain-os artifacts. Default mode grabs the next AFK GitHub issue and runs /tdd on it; -p N (alias --parallel N) fans out via Agent-tool subagents with worktree isolation; /impl N runs /tdd on a specific issue regardless of owner label; /impl N,M,... runs a comma-separated list sequentially; /impl -p N,M,... spawns parallel subagents for an explicit list; /impl story <N> drains a multi-issue story DAG; /impl auto wraps /ralph-loop around /impl to drain the AFK queue end-to-end. Use when draining the AFK backlog, picking up a specific issue or list, or running an approved story end-to-end."
+description: "Per-issue implementation executor for brain-os artifacts. Default mode grabs the next AFK GitHub issue and runs /tdd on it; -p N (alias --parallel N) dispatches scripts/run-parallel.ts to spawn N detached claude -w workers with explicit per-issue cwd; /impl N runs /tdd on a specific issue regardless of owner label; /impl N,M,... runs a comma-separated list sequentially; /impl -p N,M,... spawns parallel claude -w workers for an explicit list; /impl story <N> drains a multi-issue story DAG; /impl auto wraps /ralph-loop around /impl to drain the AFK queue end-to-end. Use when draining the AFK backlog, picking up a specific issue or list, or running an approved story end-to-end."
 ---
 
 # /impl — Per-Issue Implementation Executor
@@ -13,7 +13,7 @@ Wraps "grab next AFK issue → run /tdd → commit + push + close." Designed in 
 |------|------------|----------|
 | `once` (default) | `/impl` or `/impl --area <label>` | Grab one AFK issue (`status:ready` AND `owner:bot`), run /tdd, commit, push, close. Exit. |
 | `issue` | `/impl <N>` or `/impl <N>,<M>,...` | Run /tdd on a specific issue number; comma-separated list runs sequentially in list order. Owner-label filter is bypassed (works for `owner:bot` AND `owner:human`). The trunk-block hook still gates AFK trunk-touches via `IMPL_AFK=1`. Use when you (or another skill) already picked the issue(s) and want /impl to handle plumbing. See § Workflow — `issue` mode. |
-| `parallel` | `/impl -p K` (alias `--parallel K`) or `/impl -p <N>,<M>,...` | `-p K` (integer) spawns K Agent-tool subagents with `isolation: "worktree"` picking from queue head (`status:ready,owner:bot`). `-p <list>` (comma-separated) spawns one subagent per listed issue (owner-bypass, same as issue-mode list). Main session merges + pushes + closes. |
+| `parallel` | `/impl -p K` (alias `--parallel K`) or `/impl -p <N>,<M>,...` | Dispatches `scripts/run-parallel.ts` (TS orchestrator, mirrors `/impl story` after #161 + #173). `-p K` (integer) picks K from queue head (`status:ready,owner:bot`); `-p <list>` (comma-separated) spawns one worker per listed issue (owner-bypass, same as issue-mode list). Workers are detached `claude -w` sessions spawned via `Bun.spawn` with explicit per-issue `cwd: inferRepoFromIssueArea(labels)`. `nohup`-detached, ~0 main-session token burn. Hard cap 5. |
 | `story` | `/impl story <parent-N> [-p N]` (alias `/impl --story <parent-N>`) | Bash-orchestrated DAG drain of a multi-issue story. Reads parent issue body checklist + each child's `Blocked by` to build the DAG, spawns AFK workers (claude -w + /impl) up to parallel cap, surfaces HITL children via osascript notify, ticks parent body checklist on each close, closes parent + macOS-notifies on completion. Self-detached via `nohup` — main Claude session exits immediately, ~0 token burn during drain. Both invocation forms dispatch to the same `scripts/run-story.ts` orchestrator. |
 | `auto` | `/impl auto [-p N]` | Autonomous AFK queue drain. One-shot dispatcher that bash-executes `scripts/run-ralph.sh "/impl[ -p N]" --completion-promise NO_MORE_ISSUES --max-iterations 50`, which sets up an in-session `/ralph-loop` whose body is `/impl` (or `/impl -p N`) per iteration. The Stop hook re-feeds the prompt until `/impl` emits `<promise>NO_MORE_ISSUES</promise>` (empty backlog) or 50 iterations elapse. NOT detached — the loop runs in the same Claude session and burns inference per iteration. See § Workflow — `auto` mode. |
 | `team` | DEFERRED — do not implement | Reserved for Phase G when first-party agent teams (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`) prove necessary for cross-session coordination. Today: error and exit if user passes `--team`. |
@@ -35,8 +35,8 @@ Wraps "grab next AFK issue → run /tdd → commit + push + close." Designed in 
 /impl 147                    # Run /tdd on issue #147 specifically (owner override)
 /impl 147,148,149            # Sequential list — /tdd 147, then 148, then 149 (owner override per issue)
 /impl --area plugin-vault    # Same as bare /impl, filtered to a different area label
-/impl -p 3                   # Three issues in worktree-isolated subagents from queue head (alias: --parallel 3)
-/impl -p 147,148             # Parallel explicit list — one subagent per listed issue
+/impl -p 3                   # Dispatch run-parallel.ts: three claude -w workers from queue head (alias: --parallel 3)
+/impl -p 147,148             # Dispatch run-parallel.ts: parallel explicit list, one claude -w worker per listed issue
 /impl story 145              # Drain the story rooted at parent issue #145 (alias: --story 145)
 /impl story 145 -p 5         # Same, raise parallel cap to hard max
 ```
@@ -47,7 +47,7 @@ Wraps "grab next AFK issue → run /tdd → commit + push + close." Designed in 
 
 ```
 /impl auto                   # Drain queue: in-session /ralph-loop wrapping /impl, max 50 iterations
-/impl auto -p 3              # Same, each iteration spawns 3 worktree-isolated subagents
+/impl auto -p 3              # Same, each iteration dispatches run-parallel.ts to spawn 3 detached claude -w workers
 ```
 
 Mechanism: `/impl auto` bash-executes `scripts/run-ralph.sh "/impl[ -p N]" --completion-promise NO_MORE_ISSUES --max-iterations 50`. The wrapper resolves the installed `ralph-loop` plugin path dynamically and forwards to `setup-ralph-loop.sh`, which writes `.claude/ralph-loop.local.md` and emits the initial `/impl` prompt for Claude to act on. Each loop iteration runs `/impl` (or `/impl -p N`), claims one AFK issue, ships it. When the `gh issue list` query returns zero, `/impl` emits `<promise>NO_MORE_ISSUES</promise>` in its assistant text response; the ralph Stop hook extracts the inner tag via Perl regex, exact-matches against `NO_MORE_ISSUES`, and exits cleanly. Hits `--max-iterations 50` if the sentinel never fires.
@@ -440,11 +440,11 @@ The args are hardcoded by design — `/impl auto` is the no-knobs entry point. U
 
 ### Composability with `-p N`
 
-`/impl auto -p N` forwards `-p N` into the *inner* `/impl` invocation, NOT into the ralph-loop wrapper. Each iteration runs `/impl -p N`, which spawns N worktree-isolated subagents per iteration (subject to the `1 ≤ N ≤ 5` parallel cap from `parallel` mode). The ralph wrapper sees a single composite prompt — `"/impl -p 3"` is one prompt to ralph, even though it fans out N subagents inside.
+`/impl auto -p N` forwards `-p N` into the *inner* `/impl` invocation, NOT into the ralph-loop wrapper. Each iteration runs `/impl -p N`, which dispatches `scripts/run-parallel.ts` to spawn N detached `claude -w` workers via `Bun.spawn` with explicit per-issue cwd from `inferRepoFromIssueArea(labels, areaMap)` — NOT Agent-tool subagents (subject to the `1 ≤ N ≤ 5` parallel cap, `HARD_CAP=5` enforced by `clampParallel`). The ralph wrapper sees a single composite prompt — `"/impl -p 3"` is one prompt to ralph, even though it fans out N workers inside.
 
 ### Token cost
 
-Per iteration burns inference in the current Claude session. NOT detached (this is the key contrast with `/impl story`, which `nohup`s a TypeScript orchestrator and burns ~0 main-session tokens). Budget accordingly: a 50-iteration drain with `-p 3` runs up to 50 outer iterations × 3 subagents = 150 tracer-bullet TDD cycles in the worst case before the safety cap triggers. The `<promise>NO_MORE_ISSUES</promise>` sentinel is what brings it home early.
+Per iteration burns inference in the current Claude session for the *outer* /impl invocation that calls run-parallel.ts (NOT detached at the auto-mode layer — the auto-mode loop runs in the same Claude session and re-feeds via the ralph Stop hook). The *inner* run-parallel.ts dispatch IS detached via `nohup`, so each iteration's worker burn happens off-session like `/impl story`. Budget accordingly: a 50-iteration drain with `-p 3` runs up to 50 outer iterations × 3 workers = 150 inner /impl invocations in the worst case before the safety cap triggers. The `<promise>NO_MORE_ISSUES</promise>` sentinel is what brings it home early.
 
 ### Outcome log
 

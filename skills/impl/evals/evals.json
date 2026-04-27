@@ -288,6 +288,18 @@
         "Says invariant: every worker's cwd matches its issue's area:* mapping",
         "Says missing or unknown area:* label throws BEFORE claim (fail-fast)"
       ]
+    },
+    {
+      "id": 25,
+      "prompt": "What does the SKILL.md frontmatter description say about how `/impl -p` is implemented today (post-#173)?",
+      "expected_output": "The frontmatter description states `/impl -p N` (alias `--parallel N`) dispatches `scripts/run-parallel.ts` to spawn N detached `claude -w` workers with explicit per-issue cwd. Same applies to `-p N,M,...` (parallel list form). The description must NOT mention Agent-tool subagents — that pattern was retired by ai-brain#173 and any reference would mislead future skill consumers about the actual runtime. Other modes (`once`, `issue`, `issue list`, `story`, `auto`) should also be summarized in the description so a fresh reader knows the full surface area without opening the body.",
+      "expectations": [
+        "Description names scripts/run-parallel.ts as the dispatch target for -p",
+        "Description names claude -w workers (not Agent-tool subagents) as the spawn pattern",
+        "Description mentions explicit per-issue cwd",
+        "Description summarizes once / issue / issue-list / story / auto modes",
+        "Description does NOT contain the phrase 'Agent-tool subagents'"
+      ]
     }
   ]
 }
