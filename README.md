@@ -124,7 +124,7 @@ Karpathy is building something similar with "LLM Knowledge Bases." Same directio
 | `/tdd` | Red-green-refactor for skills, scripts, hooks, vault docs |
 | `/debug` | Investigate a reported bug + file a /tdd RED-GREEN fix plan as a GH issue |
 | `/improve` | Analyze skill outcomes + propose self-improvements (eval-gated) |
-| `/reorg` | Weekly system-level architecture audit across plugin + vault |
+| `/refactor` | Weekly system-level architecture audit across plugin + vault |
 | `/vault-lint` | Nightly mechanical hygiene — broken links, orphan pages, stale tasks |
 | `/triggers` | Manage and debug scheduled remote agents |
 | `/eval` | Run eval checks on skills to catch regressions |

@@ -1,10 +1,10 @@
 ---
-name: reorg
+name: refactor
 description: |
-  System-level reorganization scan across the brain-os plugin + vault scripts + vault organization (and any additional repos the user lists in their personal scope file). Detects shallow modules, cross-skill duplication, unused code, conflicting patterns, and vault organizational drift. Runs weekly via cron (Sunday 02:00 ICT) — produces a report with proposed refactor issues. Use when user wants a system-level refactor scan, architecture review, codebase audit, or says 'reorganize', 'refactor', 'shallow modules', 'is this codebase still in shape', 'improve architecture', 'audit our architecture', or invokes /reorg. Different from /improve (per-skill, eval-gated) and /vault-lint (mechanical hygiene) — this is structural critique across artifacts.
+  System-level reorganization scan across the brain-os plugin + vault scripts + vault organization (and any additional repos the user lists in their personal scope file). Detects shallow modules, cross-skill duplication, unused code, conflicting patterns, and vault organizational drift. Runs weekly via cron (Sunday 02:00 ICT) — produces a report with proposed refactor issues. Use when user wants a system-level refactor scan, architecture review, codebase audit, or says 'reorganize', 'refactor', 'shallow modules', 'is this codebase still in shape', 'improve architecture', 'audit our architecture', or invokes /refactor. Different from /improve (per-skill, eval-gated) and /vault-lint (mechanical hygiene) — this is structural critique across artifacts.
 ---
 
-# /reorg — System-Level Refactor Scan
+# /refactor — System-Level Refactor Scan
 
 Adapted from [Matt Pocock's `/improve-codebase-architecture`](https://github.com/mattpocock/skills) — Pocock principle: "**codebase quality is the ceiling for AI quality**." Per-skill `/improve` patches individual SKILL.md files; this is the missing system-level layer that proposes "merge skills X+Y", "split skill Z", "deepen this scattered helper", "delete this dead pattern".
 
@@ -14,34 +14,34 @@ Adapted from [Matt Pocock's `/improve-codebase-architecture`](https://github.com
 |-------|-------|--------|---------|
 | `/improve` | Single skill — eval-gated SKILL.md edits via in-memory variants | Auto-applied edit + report | Per-run + weekly cron + manual |
 | `/vault-lint` | Vault content hygiene — broken wiki-links, orphans, READMEs, stale GH issues | Mechanical fixes + report | Daily 03:00 |
-| `/reorg` | Cross-artifact STRUCTURE — shallow modules, duplication, dead code, conflicting patterns, vault organization drift | Report-only + proposed issues | Weekly Sunday 02:00 |
+| `/refactor` | Cross-artifact STRUCTURE — shallow modules, duplication, dead code, conflicting patterns, vault organization drift | Report-only + proposed issues | Weekly Sunday 02:00 |
 
-If the finding can be auto-fixed by `/improve` (single-skill SKILL.md edit) or `/vault-lint` (broken link, orphan), it belongs in those skills — not here. `/reorg` proposes work that requires human judgment AND spans multiple files/skills.
+If the finding can be auto-fixed by `/improve` (single-skill SKILL.md edit) or `/vault-lint` (broken link, orphan), it belongs in those skills — not here. `/refactor` proposes work that requires human judgment AND spans multiple files/skills.
 
 ## Config
 
 **Vault path + GitHub task repo:** read from `${CLAUDE_PLUGIN_ROOT}/brain-os.config.md` (or user-local `~/.brain-os/brain-os.config.md`). Keys: `vault_path:`, `gh_task_repo:`. Substitute `$GH_TASK_REPO` below with the configured value.
 
-**Optional personal scope additions:** read line-delimited paths from `~/.brain-os/reorg.scope` if it exists. Each line is one absolute directory the user wants merged into the scan scope (e.g., a private team plugin). One path per line, `#` for comments, blank lines ignored. The file is user-local — never committed to the public plugin repo.
+**Optional personal scope additions:** read line-delimited paths from `~/.brain-os/refactor.scope` if it exists. Each line is one absolute directory the user wants merged into the scan scope (e.g., a private team plugin). One path per line, `#` for comments, blank lines ignored. The file is user-local — never committed to the public plugin repo.
 
 ## Vault paths
 
-- Reports: `{vault}/daily/reorg-reports/YYYY-MM-DD.md`
-- Outcome log: `{vault}/daily/skill-outcomes/reorg.log`
-- Checkpoint state: `{vault}/daily/reorg-reports/.checkpoint-YYYY-MM-DD.json`
+- Reports: `{vault}/daily/refactor-reports/YYYY-MM-DD.md`
+- Outcome log: `{vault}/daily/skill-outcomes/refactor.log`
+- Checkpoint state: `{vault}/daily/refactor-reports/.checkpoint-YYYY-MM-DD.json`
 
 ## Modes
 
 | Mode | Trigger | Behavior |
 |------|---------|----------|
-| `interactive` (default) | User invokes `/reorg` manually | Run scan → write report → log outcome → if findings present, **chain to `/slice`** with the report as input. |
-| `--cron` | Invoked from `reorg-cron.sh` (Sunday 02:00 ICT) — passes `/reorg --cron` | Run scan → write report → log outcome → push. **Skip `/slice` chain** (no user present to quiz). |
-| `--dry-run` | `/reorg --dry-run` | Run all detectors, print summary to stdout. Skip report write, skip outcome log, skip pipeline. |
-| `--scope <target>` | `/reorg --scope brain-os-plugin` | Limit to one target (debug / focused review). Otherwise scan all targets per § Scan scope. Combinable with `--cron` / `--dry-run`. |
+| `interactive` (default) | User invokes `/refactor` manually | Run scan → write report → log outcome → if findings present, **chain to `/slice`** with the report as input. |
+| `--cron` | Invoked from `refactor-cron.sh` (Sunday 02:00 ICT) — passes `/refactor --cron` | Run scan → write report → log outcome → push. **Skip `/slice` chain** (no user present to quiz). |
+| `--dry-run` | `/refactor --dry-run` | Run all detectors, print summary to stdout. Skip report write, skip outcome log, skip pipeline. |
+| `--scope <target>` | `/refactor --scope brain-os-plugin` | Limit to one target (debug / focused review). Otherwise scan all targets per § Scan scope. Combinable with `--cron` / `--dry-run`. |
 
 The cron-vs-interactive split exists because `/slice` Step 5 quizzes the user on slice granularity. Chaining at cron time would deadlock waiting for input. Cron writes the artifact; the user runs `/slice` against the report when they have time. `/status` surfaces unprocessed reports.
 
-**Mode detection logic**: parse the invocation `args` string. Presence of `--cron` → cron mode. Presence of `--dry-run` → dry-run mode. `--scope <target>` extracts the target. Otherwise → interactive mode (default). The cron orchestrator (`reorg-cron.sh`) always passes `--cron`; never assume cron context from environment.
+**Mode detection logic**: parse the invocation `args` string. Presence of `--cron` → cron mode. Presence of `--dry-run` → dry-run mode. `--scope <target>` extracts the target. Otherwise → interactive mode (default). The cron orchestrator (`refactor-cron.sh`) always passes `--cron`; never assume cron context from environment.
 
 ## Scan scope
 
@@ -51,7 +51,7 @@ System-level means **everything that affects the user's daily work**. The scope 
    - `~/work/brain-os-plugin/` — `skills/`, `hooks/`, `scripts/`
    - `{vault}/scripts/` — vault tooling (invoked from skills + hooks)
    - `{vault}/` — vault organization (top-level zones, RESOLVER.md, README sync, depth)
-2. **Personal additions** — paths listed in `~/.brain-os/reorg.scope` (one absolute path per line). Use this to add private plugins, secondary tooling repos, or personal scripts dirs.
+2. **Personal additions** — paths listed in `~/.brain-os/refactor.scope` (one absolute path per line). Use this to add private plugins, secondary tooling repos, or personal scripts dirs.
 
 Marketplaces (`brain-os-marketplace` and similar) are excluded — they're metadata containers, not code. Re-include via the personal scope file if a marketplace ever grows logic.
 
@@ -64,7 +64,7 @@ For the vault target, scan only **structural** properties:
 - Top-level `CLAUDE.md` SSOT pointers vs actual zone organization
 - Zone depth + cross-zone references
 
-Vault content (broken links, orphans, stale tasks) is `/vault-lint`'s job — `/reorg` only critiques **structural** decisions: "should `business/intelligence/` be split?", "is `daily/` accumulating types that need their own zone?", "does the RESOLVER still match where things actually live?"
+Vault content (broken links, orphans, stale tasks) is `/vault-lint`'s job — `/refactor` only critiques **structural** decisions: "should `business/intelligence/` be split?", "is `daily/` accumulating types that need their own zone?", "does the RESOLVER still match where things actually live?"
 
 ## Detectors
 
@@ -147,12 +147,12 @@ Each detector emits zero or more **candidate findings** — `{detector, target_p
 
 ## Phase A — Collect targets [deterministic]
 
-1. **Resolve scope** — read `--scope` arg if present; else use the static defaults in § Scan scope merged with `~/.brain-os/reorg.scope` lines if that file exists.
+1. **Resolve scope** — read `--scope` arg if present; else use the static defaults in § Scan scope merged with `~/.brain-os/refactor.scope` lines if that file exists.
 2. **Enumerate files per target**:
    - Code targets: `find <target> \( -name '*.sh' -o -name '*.ts' -o -name '*.py' -o -name 'SKILL.md' \) -not -path '*/node_modules/*' -not -path '*/.git/*' -not -path '*/dist/*'`
    - Vault target: `find {vault} -type d -not -path '*/.git/*' -not -path '*/.obsidian/*' -not -path '*/node_modules/*'`
 3. **Honor `architecture-exempt: true` frontmatter** — for any `*.md` file with this frontmatter key, skip ALL detectors. Record the exemption in the report so it's auditable.
-4. **Write checkpoint** — `{vault}/daily/reorg-reports/.checkpoint-{date}.json` with `{phase: "A", targets: [...], started_at: ISO}`. Phases B–E read this on resume.
+4. **Write checkpoint** — `{vault}/daily/refactor-reports/.checkpoint-{date}.json` with `{phase: "A", targets: [...], started_at: ISO}`. Phases B–E read this on resume.
 
 ## Phase B — Heuristic detection [deterministic]
 
@@ -196,18 +196,18 @@ Write checkpoint: `{phase: "C", judged: [...], quota_capped: bool}`.
 
 ## Phase D — Report [deterministic]
 
-Write to `{vault}/daily/reorg-reports/{date}.md`:
+Write to `{vault}/daily/refactor-reports/{date}.md`:
 
 ```markdown
 ---
 date: YYYY-MM-DD
-skill: reorg
+skill: refactor
 mode: cron | interactive | dry-run
 scope: all | <target>
 quota_capped: true | false
 ---
 
-# /reorg Report — YYYY-MM-DD
+# /refactor Report — YYYY-MM-DD
 
 ## Summary
 
@@ -268,7 +268,7 @@ The following are pre-formed slice candidates ready for `/slice` to file as AFK 
 ## Next steps
 
 - Review findings above.
-- Run `/slice daily/reorg-reports/{date}.md` to file proposed slices.
+- Run `/slice daily/refactor-reports/{date}.md` to file proposed slices.
 - Set `architecture-exempt: true` on any flagged file you want suppressed in future runs.
 ```
 
@@ -280,19 +280,19 @@ Skip this phase if `mode: cron` or `mode: dry-run`.
 
 When `mode: interactive` AND the report has ≥ 1 kept finding:
 
-1. Print to user: `Generated report at daily/reorg-reports/{date}.md with N kept findings. Chaining to /slice to file proposed slices…`
-2. Invoke `/slice daily/reorg-reports/{date}.md` via the Skill tool.
+1. Print to user: `Generated report at daily/refactor-reports/{date}.md with N kept findings. Chaining to /slice to file proposed slices…`
+2. Invoke `/slice daily/refactor-reports/{date}.md` via the Skill tool.
 3. `/slice` reads the report, treats the `## Proposed Issues` table as its slice breakdown, quizzes the user (Step 5 of /slice), and files issues to `$GH_TASK_REPO`.
 4. After `/slice` returns, append `## Issues filed (YYYY-MM-DD)` to this report listing the issue numbers (mirrors /slice Step 7 behavior on grill-sessions).
 
-If `/slice` skill is unavailable (plugin not installed, error), fall back to printing: "Run `/slice daily/reorg-reports/{date}.md` manually to file slices." Do NOT silently swallow the error.
+If `/slice` skill is unavailable (plugin not installed, error), fall back to printing: "Run `/slice daily/refactor-reports/{date}.md` manually to file slices." Do NOT silently swallow the error.
 
 ## Phase F — Outcome log + commit [deterministic]
 
-Append to `{vault}/daily/skill-outcomes/reorg.log` per `skill-spec.md § 11`:
+Append to `{vault}/daily/skill-outcomes/refactor.log` per `skill-spec.md § 11`:
 
 ```
-{date} | reorg | scan | ~/work/brain-os-plugin | daily/reorg-reports/{date}.md | commit:{hash} | {result} | mode={mode} score={kept}/{candidates} effort_high={N} quota_capped={true|false}
+{date} | refactor | scan | ~/work/brain-os-plugin | daily/refactor-reports/{date}.md | commit:{hash} | {result} | mode={mode} score={kept}/{candidates} effort_high={N} quota_capped={true|false}
 ```
 
 Result logic:
@@ -311,26 +311,26 @@ Then:
 
 ```bash
 cd {vault}
-git add daily/reorg-reports/ daily/skill-outcomes/reorg.log
-git commit -m "reorg: weekly run {date}"
+git add daily/refactor-reports/ daily/skill-outcomes/refactor.log
+git commit -m "refactor: weekly run {date}"
 git pull --rebase && git push
 ```
 
 ## Auto-improve gate
 
-`/reorg` does NOT auto-invoke `/improve` on `result != pass`. The skill is intentionally human-in-loop downstream — the report IS the deliverable, and `partial`/`fail` mostly indicate quota gates or transient errors. Re-running on next cron is the right recovery, not auto-rewriting this skill from one bad run.
+`/refactor` does NOT auto-invoke `/improve` on `result != pass`. The skill is intentionally human-in-loop downstream — the report IS the deliverable, and `partial`/`fail` mostly indicate quota gates or transient errors. Re-running on next cron is the right recovery, not auto-rewriting this skill from one bad run.
 
-This is an intentional divergence from the `skill-spec.md § 11 Auto-improve rule` — same shape as `/vault-lint`'s tightening (see vault-lint SKILL.md D3 note). If a real defect emerges (e.g., heuristic D2 keeps producing >50% false-positive judge drops), file an issue manually and run `/improve reorg` against the outcome log.
+This is an intentional divergence from the `skill-spec.md § 11 Auto-improve rule` — same shape as `/vault-lint`'s tightening (see vault-lint SKILL.md D3 note). If a real defect emerges (e.g., heuristic D2 keeps producing >50% false-positive judge drops), file an issue manually and run `/improve refactor` against the outcome log.
 
 ## Quota awareness + checkpointing
 
-The skill writes `{vault}/daily/reorg-reports/.checkpoint-{date}.json` after every phase. If interrupted (quota gate, manual cancel, crash), the next invocation:
+The skill writes `{vault}/daily/refactor-reports/.checkpoint-{date}.json` after every phase. If interrupted (quota gate, manual cancel, crash), the next invocation:
 
 1. Reads the checkpoint.
 2. Resumes from the last completed phase (`A` → start at B; `B` → start at C; `C` → start at D; `D` → start at E).
 3. Deletes the checkpoint after Phase F succeeds.
 
-Phase C is the expensive phase. If quota is tight, run `--dry-run` first to see candidate volume, then run for real. The cron orchestrator (`reorg-cron.sh`) gates on `weeklyUsage` per the existing pattern (vault-lint-cron.sh §weekly quota gate).
+Phase C is the expensive phase. If quota is tight, run `--dry-run` first to see candidate volume, then run for real. The cron orchestrator (`refactor-cron.sh`) gates on `weeklyUsage` per the existing pattern (vault-lint-cron.sh §weekly quota gate).
 
 ## Gotchas
 
@@ -338,15 +338,15 @@ Phase C is the expensive phase. If quota is tight, run `--dry-run` first to see 
 - **Don't re-run `/vault-lint`'s job.** If a vault finding is "broken wiki-link" or "orphan page" or "README out of sync (mechanical)", that's `/vault-lint`. This skill's vault detector (D5) is structural — does the layout itself need rethinking?
 - **Don't re-run `/improve`'s job.** A single skill needing a SKILL.md tweak is `/improve`'s loop. This skill's findings should always span ≥ 2 files OR propose a structural decision (split, merge, delete, deepen).
 - **Opus, not sonnet.** Judge calls in Phase C MUST use `model: opus` per user feedback 2026-04-26. Sonnet has been observed to under-weight architectural nuance — false positives slip through, real issues get dropped. Cost is one weekly run; do not "optimize" by switching to sonnet.
-- **Self-eat check.** `/reorg` is itself a brain-os artifact. The skill's own structure should NOT trigger D1 (shallow modules) — keep this SKILL.md as the single deep module, no scattered helper files. If the skill grows enough to need helpers, place them in `references/` (not split SKILL.md).
-- **Static defaults + opt-in personal additions.** The default scope is intentionally narrow (brain-os-plugin + vault). Users add their own private plugins via `~/.brain-os/reorg.scope` — the public SKILL.md never names personal repos.
+- **Self-eat check.** `/refactor` is itself a brain-os artifact. The skill's own structure should NOT trigger D1 (shallow modules) — keep this SKILL.md as the single deep module, no scattered helper files. If the skill grows enough to need helpers, place them in `references/` (not split SKILL.md).
+- **Static defaults + opt-in personal additions.** The default scope is intentionally narrow (brain-os-plugin + vault). Users add their own private plugins via `~/.brain-os/refactor.scope` — the public SKILL.md never names personal repos.
 
 ## Outcome log
 
-Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/reorg.log`:
+Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/refactor.log`:
 
 ```
-{date} | reorg | scan | ~/work/brain-os-plugin | daily/reorg-reports/{date}.md | commit:{hash} | {result}
+{date} | refactor | scan | ~/work/brain-os-plugin | daily/refactor-reports/{date}.md | commit:{hash} | {result}
 ```
 
 - `action`: `scan` (full run), `dry-run` (no write), `resume` (resumed from checkpoint)

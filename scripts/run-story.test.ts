@@ -48,7 +48,7 @@ describe("parseChecklist", () => {
     const body = [
       "## Sub-issues",
       "- [ ] ai-brain#155 — Label cleanup",
-      "- [ ] ai-brain#156 — Rename /reorg",
+      "- [ ] ai-brain#156 — Rename skill",
       "- [x] ai-brain#157 — Already done",
       "- [ ] some-repo#9999 — Other repo",
     ].join("\n");

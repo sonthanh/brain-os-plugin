@@ -44,7 +44,7 @@
   {
     "name": "slice-integration-via-report",
     "description": "Phase E must invoke /slice with the report path, not bypass it",
-    "expected_in_skill": ["Invoke `/slice daily/reorg-reports/{date}.md`", "Proposed Issues", "treats the `## Proposed Issues` table as its slice breakdown"],
+    "expected_in_skill": ["Invoke `/slice daily/refactor-reports/{date}.md`", "Proposed Issues", "treats the `## Proposed Issues` table as its slice breakdown"],
     "type": "skill-content-check"
   },
   {
