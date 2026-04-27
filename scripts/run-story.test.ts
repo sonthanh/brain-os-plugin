@@ -11,9 +11,11 @@ import {
   inferRepoFromIssueArea,
   defaultAreaMap,
   cleanupWorker,
+  runStory,
   type Issue,
   type SpawnClient,
   type Logger,
+  type OrchestratorDeps,
 } from "./run-story.ts";
 
 describe("parseChecklist", () => {
@@ -333,5 +335,99 @@ describe("cleanupWorker", () => {
           l.includes("worktree locked"),
       ),
     ).toBe(true);
+  });
+});
+
+describe("runStory — type:plan assertion", () => {
+  test("parent without type:plan label → refuses to drain, returns empty, no spawn", async () => {
+    let spawnCalls = 0;
+    const notifications: string[] = [];
+    const logs: string[] = [];
+
+    const deps: OrchestratorDeps = {
+      gh: {
+        viewBody: async () => "- [ ] #200 — stray ref in acceptance criteria",
+        viewFull: async () => ({
+          title: "Some leaf issue",
+          // No type:plan label — simulates a wrong-number /impl story call on
+          // a leaf issue whose body happens to contain stray checkbox refs.
+          labels: ["status:ready", "owner:bot", "area:plugin-brain-os", "weight:quick"],
+          body: "- [ ] #200 — stray ref in acceptance criteria",
+          state: "OPEN",
+        }),
+        viewState: async () => "OPEN",
+        editBody: async () => {},
+        closeIssue: async () => {},
+        relabelHuman: async () => {},
+      },
+      spawn: {
+        spawnWorker: () => {
+          spawnCalls++;
+          throw new Error("spawnWorker must not be invoked when parent lacks type:plan");
+        },
+        cleanupWorktree: () => {},
+      },
+      proc: { isAlive: () => true },
+      notify: { notify: (m) => notifications.push(m) },
+      logger: { log: (m) => logs.push(m) },
+      status: { write: () => {} },
+      pollIntervalMs: 1,
+      workerLogDir: "/tmp/run-story-test",
+      areaMap: defaultAreaMap("/Users/test"),
+    };
+
+    const result = await runStory(999, 3, deps);
+
+    expect(result).toEqual({ closed: [], failed: [] });
+    expect(spawnCalls).toBe(0);
+    // The orchestrator emits a "started" notify before the guard runs; the
+    // refusal must appear in *some* later notify, not necessarily the only one.
+    expect(
+      notifications.some((m) => m.includes("not type:plan") && m.includes("/impl")),
+    ).toBe(true);
+  });
+
+  test("parent with type:plan label → guard passes, falls through to existing 'no checklist children' abort when body has no children", async () => {
+    let spawnCalls = 0;
+    const notifications: string[] = [];
+
+    const deps: OrchestratorDeps = {
+      gh: {
+        viewBody: async () => "## PRD\n\nNo sub-issues defined yet.",
+        viewFull: async () => ({
+          title: "Story parent",
+          labels: ["type:plan", "owner:human", "status:in-progress", "area:plugin-brain-os"],
+          body: "## PRD\n\nNo sub-issues defined yet.",
+          state: "OPEN",
+        }),
+        viewState: async () => "OPEN",
+        editBody: async () => {},
+        closeIssue: async () => {},
+        relabelHuman: async () => {},
+      },
+      spawn: {
+        spawnWorker: () => {
+          spawnCalls++;
+          throw new Error("spawnWorker must not be invoked when parent has no checklist children");
+        },
+        cleanupWorktree: () => {},
+      },
+      proc: { isAlive: () => true },
+      notify: { notify: (m) => notifications.push(m) },
+      logger: { log: () => {} },
+      status: { write: () => {} },
+      pollIntervalMs: 1,
+      workerLogDir: "/tmp/run-story-test",
+      areaMap: defaultAreaMap("/Users/test"),
+    };
+
+    const result = await runStory(123, 3, deps);
+
+    expect(result).toEqual({ closed: [], failed: [] });
+    expect(spawnCalls).toBe(0);
+    // Confirms the type:plan guard did NOT fire for this case (no refusal
+    // message); the empty-checklist abort path took over instead.
+    expect(notifications.some((m) => m.includes("not type:plan"))).toBe(false);
+    expect(notifications.some((m) => m.includes("no checklist children"))).toBe(true);
   });
 });

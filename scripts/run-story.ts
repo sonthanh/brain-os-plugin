@@ -424,8 +424,13 @@ export async function runStory(
   });
   notify.notify(`Orchestrator started for #${parent} (PID ${process.pid}, cap ${cap})`);
 
-  const parentBody = await gh.viewBody(parent);
-  const childNums = parseChecklist(parentBody);
+  const parentFull = await gh.viewFull(parent);
+  if (!parentFull.labels.includes("type:plan")) {
+    logger.log(`ERROR: parent #${parent} lacks type:plan label (labels=[${parentFull.labels.join(",")}]) — refusing to drain`);
+    notify.notify(`#${parent} not type:plan, refuse to drain. Use /impl ${parent} for single-issue tdd.`);
+    return { closed: [], failed: [] };
+  }
+  const childNums = parseChecklist(parentFull.body);
   if (childNums.length === 0) {
     logger.log(`ERROR: no checklist children found in parent #${parent}`);
     notify.notify(`Story #${parent} — no checklist children found, aborting`);
