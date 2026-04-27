@@ -62,7 +62,18 @@ Run the `/absorb` skill. Since verify is true, bypass approval — apply all vau
 Commit and push all vault changes to git.
 
 ### Step 5: Notify
-- Create a review task as a GH issue: `gh issue create -R $GH_TASK_REPO --title "Review $BOOK_TITLE notes" --body "..." --label status:ready --label owner:human --label weight:quick`
+- Create a review task as a GH issue via the central filer (validates every label axis against canon — see `references/gh-task-labels.md`):
+  ```bash
+  bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/create-task-issue.sh" \
+    --title "Review $BOOK_TITLE notes" \
+    --body "..." \
+    --area vault \
+    --owner human \
+    --priority p3 \
+    --weight quick \
+    --status ready
+  ```
+  `area:vault` because the review operates on absorbed vault knowledge; `priority:p3` per the filer matrix default for review tasks (not `p4` — that label is retired)
 - Create/update daily note with pipeline log
 - Update audit flag with `pipeline_completed` timestamp
 

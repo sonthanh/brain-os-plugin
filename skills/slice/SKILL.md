@@ -23,7 +23,7 @@ Adapted from [@mattpocockuk/skills/to-issues](https://github.com/mattpocock/skil
 
 **DO NOT skip the parent-issue review gate.** Synthesizing the PRD silently and going straight to child slices removes the user's last chance to revise the PRD before downstream issues encode it. The flow MUST be: file parent with PRD body → surface URL + N to user → await `approve` / `edit <section>` → only then emit children. Bypassing this step (filing children before parent is approved) is the same anti-pattern as bypassing the slice user-quiz, just one layer up.
 
-**DO NOT skip the child-quiz step.** Going straight from parent-approved → `gh issue create` for each child produces issues sized to the LLM's intuition, not the user's. The quiz step (numbered breakdown → user iterates → approved → file) is where slice granularity gets calibrated. Direct invocation via `gh issue create` after PRD approval — even when all details are crystallized in conversation context — counts as bypass; the user-quiz step is not optional.
+**DO NOT skip the child-quiz step.** Going straight from parent-approved → direct issue creation (any path — inline `issue create` shell, or shelling `scripts/gh-tasks/create-task-issue.sh` directly without the quiz) for each child produces issues sized to the LLM's intuition, not the user's. The quiz step (numbered breakdown → user iterates → approved → file) is where slice granularity gets calibrated. Direct invocation after PRD approval — even when all details are crystallized in conversation context — counts as bypass; the user-quiz step is not optional.
 
 **DO NOT create issues out of dependency order.** If child B is blocked by child A, create A first so B can reference A's real issue number in `## Blocked by`. Otherwise the dependency graph encodes placeholders that nobody updates.
 
@@ -56,11 +56,10 @@ If you cannot extract User Story / Settled Decisions / Acceptance / Out of Scope
 
 ### 2.5. File parent story issue [deterministic]
 
-File the parent story issue on `sonthanh/ai-brain` with the synthesized PRD as the body. Required labels: `type:plan`, `owner:human`, `status:in-progress`, plus the area label inherited from the grill scope (e.g. `area:plugin-brain-os`).
+File the parent story issue on `sonthanh/ai-brain` with the synthesized PRD as the body via the central filer (`create-task-issue.sh`), then flip to `status:in-progress` via the central transitioner (`transition-status.sh`). Two calls because the helper rejects `in-progress` as a creation status (creation accepts `ready|blocked|backlog`); a fresh parent enters active state the moment it's filed because work begins immediately on PRD approval. Labels carried: `type:plan`, `owner:human`, `status:in-progress` (after flip), area inherited from the grill scope (e.g. `plugin-brain-os`), priority + weight inherited from the grill's overall framing.
 
 ```bash
-gh issue create \
-  -R sonthanh/ai-brain \
+PARENT_URL=$(bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/create-task-issue.sh" \
   --title "Story: <imperative — what this story delivers>" \
   --body "$(cat <<'EOF'
 ## User Story
@@ -91,7 +90,15 @@ gh issue create \
 <empty for fully-settled stories; otherwise list the questions blocking child creation>
 EOF
 )" \
-  --label "type:plan,owner:human,status:in-progress,area:<area>"
+  --area "<area>" \
+  --owner human \
+  --priority "<p1|p2|p3>" \
+  --weight "<quick|heavy>" \
+  --status ready \
+  --type plan)
+
+PARENT_N="${PARENT_URL##*/}"
+bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/transition-status.sh" "$PARENT_N" --to in-progress
 ```
 
 Capture the returned parent URL + issue number — needed for both Step 2.7 (surface to user) and Step 6 (child `## Parent` references).
@@ -127,7 +134,7 @@ Break the PRD into tracer-bullet child issues. For each slice, decide:
 | Title | Short imperative — `Port /slice skill (Phase B of Pocock skill-process adoption)` |
 | Type | HITL (`owner:human`) or AFK (`owner:bot`). Default AFK; promote to HITL only when human judgment is needed |
 | Area label | `area:plugin-brain-os` / `area:vault` / `area:plugin-<name>` — which code repo this touches |
-| Priority | `priority:p1` (urgent) / `priority:p2` (high) / `priority:p3` (medium) / `priority:p4` (backlog) |
+| Priority | `priority:p1` (urgent) / `priority:p2` (high) / `priority:p3` (medium) — `p4` retired; use `status:backlog` instead |
 | Weight | `weight:quick` (≤30 min) / `weight:heavy` (1h+) |
 | Status | `status:ready` (no blockers) / `status:blocked` (waiting on another slice) / `status:backlog` (later phase) |
 | Files | List of relative paths the slice will touch (warn-soft validator — see § 4) |
@@ -171,11 +178,10 @@ Iterate until the user approves. Do NOT proceed to issue creation while the user
 
 ### 6. Create child issues in dependency order [deterministic]
 
-For each approved child slice, in topological order (blockers first), run:
+For each approved child slice, in topological order (blockers first), run the central filer — every label axis is validated against canon (see `references/gh-task-labels.md` § 1):
 
 ```bash
-gh issue create \
-  -R sonthanh/ai-brain \
+CHILD_URL=$(bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/create-task-issue.sh" \
   --title "<Title>" \
   --body "$(cat <<'EOF'
 ## Parent
@@ -208,10 +214,14 @@ gh issue create \
 (or `None — can start immediately`)
 EOF
 )" \
-  --label "area:<area>,owner:<bot|human>,priority:<p1-p4>,weight:<quick|heavy>,status:<ready|blocked|backlog>"
+  --area "<area>" \
+  --owner "<bot|human>" \
+  --priority "<p1|p2|p3>" \
+  --weight "<quick|heavy>" \
+  --status "<ready|blocked|backlog>")
 ```
 
-After each `gh issue create` call, capture the returned child issue number. Subsequent children that reference this one in `## Blocked by` get the real number substituted in.
+After each call, capture the returned child issue number from `CHILD_URL` (e.g. `CHILD_N="${CHILD_URL##*/}"`). Subsequent children that reference this one in `## Blocked by` get the real number substituted in. `priority:p4` was retired — drop low-urgency children to `status:backlog` instead of inventing a new priority axis.
 
 The `## Parent` reference is what makes the child reachable from the parent's checklist (which `/impl story` reads to drive DAG drainage). The `## Blocked by` section encodes topological order so `/impl story` can identify which children are AFK-ready right now versus waiting for siblings.
 
@@ -258,7 +268,7 @@ Then append to the grill-session file (if input was a grill-session): `## Issues
 
 ## When NOT to use /slice
 
-- **Single bug fix** → `gh issue create` directly. /slice is overhead for a one-issue plan.
+- **Single bug fix** → file directly with `bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/create-task-issue.sh" ...`. /slice is overhead for a one-issue plan.
 - **Exploratory grill where decisions aren't settled** → finish /grill first. /slice will (and should) refuse to slice an unsettled plan.
 - **The plan IS one slice** → file it directly. Don't manufacture sub-issues to satisfy "many thin slices" — that's just paperwork.
 - **Cosmetic / typo / config tweak** → direct edit + push. The Pocock pipeline is for behavior changes, not chore commits.

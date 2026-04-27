@@ -12,9 +12,9 @@
     "expect": "audit-flag.json"
   },
   {
-    "id": "step5-gh-issue-create",
-    "description": "Step 5 must create the review task as a GH issue via `gh issue create -R $GH_TASK_REPO` (replaces the old append-to-inbox.md flow)",
+    "id": "step5-create-task-issue-helper",
+    "description": "Step 5 must create the review task via the central filer `scripts/gh-tasks/create-task-issue.sh` (centralized canonical-label assembly; replaces both the old append-to-inbox.md flow and the inline `gh issue create` call retired in #159)",
     "args": "study",
-    "expect": "gh issue create -R $GH_TASK_REPO"
+    "expect": "scripts/gh-tasks/create-task-issue.sh"
   }
 ]

@@ -73,17 +73,18 @@ case "$STATUS" in
     exit 3
     ;;
   status:ready|"")
-    # Empty status (no status:* label) treated as claimable. Atomic flip in
-    # one API call — GH applies remove + add together.
-    REMOVE_ARGS=()
-    [[ -n "$STATUS" ]] && REMOVE_ARGS=(--remove-label "$STATUS")
-    if gh issue edit "$N" -R "$GH_TASK_REPO" \
-        "${REMOVE_ARGS[@]}" --add-label status:in-progress >/dev/null 2>&1; then
+    # Atomic flip via the canonical helper (single source of truth for all
+    # status:* transitions). transition-status.sh issues one `gh issue edit`
+    # call removing the current status:* and adding the target — same wire
+    # behavior as the previous inline edit, plus uniform validation + logging.
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    TRANSITION="$SCRIPT_DIR/gh-tasks/transition-status.sh"
+    if bash "$TRANSITION" "$N" --to in-progress >/dev/null 2>&1; then
       FROM_LABEL="${STATUS:-(none)}"
       echo "✓ claimed #$N ($FROM_LABEL → status:in-progress)"
       exit 0
     fi
-    echo "ERROR: claim flip failed on #$N (gh edit returned non-zero)" >&2
+    echo "ERROR: claim flip failed on #$N (transition-status.sh returned non-zero)" >&2
     exit 2
     ;;
   status:blocked|status:backlog)

@@ -66,7 +66,7 @@ When the user passes a bare integer (e.g. `/pickup 100`, `cr /pickup 100`), trea
 
 3. **Ready tasks remaining?**
    - **Yes** → skip to step 4 (no groom needed)
-   - **No** → groom Backlog: query `gh issue list -R $GH_TASK_REPO --state open --label status:backlog --json number,title,body`, promote unblocked + clear items to Ready (`gh issue edit N -R $GH_TASK_REPO --remove-label status:backlog --add-label status:ready`); ask user about vague ones
+   - **No** → groom Backlog: query `gh issue list -R $GH_TASK_REPO --state open --label status:backlog --json number,title,body`, promote unblocked + clear items to Ready via `bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/transition-status.sh" N --to ready` (the central transitioner is the single source of truth — atomic, validated, idempotent); ask user about vague ones
 
 4. **Autogrill Ready tasks** (see Autogrill section below) — skip `type:handover` issues (they already have a spec doc)
 
@@ -84,7 +84,7 @@ What the script does:
 1. Resolves `$GH_TASK_REPO` from `hooks/resolve-vault.sh`.
 2. Fetches issue state + status label (one `gh issue view` call).
 3. If `status:in-progress` → no-op (exit 3).
-4. If `status:ready` (or no status:* label) → atomic flip to `status:in-progress` via one `gh issue edit --remove-label status:ready --add-label status:in-progress` call (exit 0).
+4. If `status:ready` (or no status:* label) → atomic flip to `status:in-progress` by shelling out to the central transitioner (`bash scripts/gh-tasks/transition-status.sh N --to in-progress`), which issues a single `gh issue edit` removing `status:ready` and adding `status:in-progress` from one process invocation (exit 0).
 5. If `status:blocked` / `status:backlog` / unknown → abort (exit 1).
 6. On gh / config error → exit 2.
 

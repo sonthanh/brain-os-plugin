@@ -1,7 +1,7 @@
 [
   {
     "id": "uses-create-issue-script",
-    "description": "Handover must call scripts/create-handover-issue.sh instead of inlining `gh issue create` — prose-level shell blocks get silently skipped (memory feedback_md_instructions_untrustworthy).",
+    "description": "Handover must call scripts/create-handover-issue.sh instead of inlining a raw issue-creation command or calling the central filer directly — prose-level shell blocks get silently skipped (memory feedback_md_instructions_untrustworthy).",
     "args": "handover",
     "expect": "scripts/create-handover-issue.sh"
   },

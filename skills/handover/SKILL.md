@@ -17,19 +17,21 @@ Creates a handover document in the vault and opens a GitHub issue that the next 
 
 1. **Scan the current session** — what was discussed, decided, built, still pending
 2. **Create handover file** at `{vault}/daily/handovers/YYYY-MM-DD-topic.md` using the template below
-3. **Open a GitHub issue via the script** — do NOT inline `gh issue create`. Prose-level commands get silently skipped (memory `feedback_md_instructions_untrustworthy`). The script is the only supported path, it fails loudly on error, and it writes the `issue={N}` marker to the outcome log atomically:
+3. **Open a GitHub issue via the script** — do NOT inline `gh issue create` or call `scripts/gh-tasks/create-task-issue.sh` directly. Prose-level commands get silently skipped (memory `feedback_md_instructions_untrustworthy`). The handover script is the only supported path: it fails loudly on error, writes the `issue={N}` marker to the outcome log atomically, and routes label assembly through the central `create-task-issue.sh` filer so the canonical label set stays validated:
    ```bash
    bash "${CLAUDE_PLUGIN_ROOT}/skills/handover/scripts/create-handover-issue.sh" \
      --handover-path "daily/handovers/YYYY-MM-DD-topic.md" \
      --title "Handover: <topic>" \
      --tldr "<one-line summary from the handover doc's TL;DR>" \
      --next-step "<first action from the handover's 'What's Next'>" \
+     --area vault \
      --priority p1 \
      --weight heavy \
      --owner human
    ```
    Flag rules:
-   - `--priority pN` — the priority work resumes at (`p1` default for an active session handover; drop lower only if explicitly less urgent)
+   - `--area <plugin-brain-os|plugin-ai-leaders-vietnam|vault|claude-config>` — the code repo the unfinished work targets. Default `vault` (the handover doc itself lives in the vault); override when the work being continued targets a specific plugin / repo
+   - `--priority pN` — the priority work resumes at (`p1` default for an active session handover; drop lower only if explicitly less urgent). `p4` is retired — use `status:backlog` via a separate transition for low-urgency continuations
    - `--weight heavy|quick` — `heavy` if remaining work is 1h+; `quick` for small continuations
    - `--owner human|bot` — `human` default (handovers usually need a human-aware grill first). Only use `bot` if the remaining steps are fully self-executing
    - The script constructs the body with `[handover](<path>)` automatically — do NOT pre-format

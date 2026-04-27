@@ -100,20 +100,12 @@ For brain-os artifact types, the test-command shape comes from `/tdd` Test Comma
 
 ### 5. File the GH issue [deterministic]
 
-Run `gh issue create -R sonthanh/ai-brain` with:
+File via the central filer — every label axis is validated against canon (see `references/gh-task-labels.md` § 1). Do NOT inline an `issue create` call; the helper guards against typo'd labels and missing required axes that would otherwise drift across debug runs.
 
-**Title** — short imperative, ≤70 chars: `Fix silent geo-digest cron — outcome-log + path resolution`
-
-**Labels** (apply all that fit):
-- `area:plugin-<name>` (e.g. `area:plugin-brain-geo-analysis`, `area:plugin-brain-os`, `area:vault`)
-- `priority:p1|p2|p3|p4` — match severity to user-observable cost
-- `status:ready` — debug always files as ready (not blocked) since investigation is complete
-- `owner:bot` (AFK, default) or `owner:human` (HITL, only when the fix needs human judgment — design choices, sensitive content)
-- `weight:quick` (≤30 min /tdd cycle) or `weight:heavy` (1 h+)
-
-**Body** (template below) — describe behaviors only, no file paths or line numbers:
-
-```markdown
+```bash
+ISSUE_URL=$(bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/create-task-issue.sh" \
+  --title "<short imperative, ≤70 chars — e.g. Fix silent geo-digest cron — outcome-log + path resolution>" \
+  --body "$(cat <<'EOF'
 ## Problem
 
 **Symptom:** <what the user observes>
@@ -148,9 +140,23 @@ Run `gh issue create -R sonthanh/ai-brain` with:
 ## Observable
 
 <one line — the user-visible surface that, if it shows up, proves the fix landed. Required by tracer-bullet hard gate.>
+EOF
+)" \
+  --area "<plugin-brain-os|plugin-ai-leaders-vietnam|vault|claude-config>" \
+  --owner "<bot|human>" \
+  --priority "<p1|p2|p3>" \
+  --weight "<quick|heavy>" \
+  --status ready)
 ```
 
-After `gh issue create`, capture the issue number and URL. Print the URL on its own line so the user can click it.
+Label rules applied by the filer:
+- `--area` — required; matches the code repo the bug lives in
+- `--priority p1|p2|p3` — match severity to user-observable cost (`p4` is retired)
+- `--status ready` — debug always files as ready since investigation is complete
+- `--owner bot` (AFK default) or `--owner human` (HITL when the fix needs human judgment — design choices, sensitive content)
+- `--weight quick` (≤30 min /tdd cycle) or `--weight heavy` (1 h+)
+
+After the call, capture the issue number from `ISSUE_URL` (`ISSUE_N="${ISSUE_URL##*/}"`). Print the URL on its own line so the user can click it.
 
 ### 6. Outcome log [deterministic]
 
@@ -169,7 +175,7 @@ Append per skill-spec.md § 11:
 
 - **One-line typos in vault docs** → just edit them directly. /debug is for behavior gaps, not typos.
 - **Brand new skill with no prior version** → if there's no "expected" baseline, the work is `/grill` + `/slice`, not `/debug`.
-- **The user already has a complete root-cause + fix plan** in their head → file the issue manually with `gh issue create` and skip /debug; the explore step would be wasted.
+- **The user already has a complete root-cause + fix plan** in their head → file the issue manually with the central filer (`scripts/gh-tasks/create-task-issue.sh`) and skip /debug; the explore step would be wasted.
 - **Regression in code you wrote in this session** → just re-read what you changed; /debug's cross-layer Explore is overkill for a 5-minute-old bug.
 
 ## Outcome log

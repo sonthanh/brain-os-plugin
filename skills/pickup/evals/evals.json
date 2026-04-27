@@ -19,9 +19,9 @@
   },
   {
     "id": "claim-via-status-label-flip",
-    "description": "Skill must document the simplified claim protocol: atomic status:ready → status:in-progress flip as the lock (replaces prior claim:session- label approach, which broke because gh --add-label won't auto-create labels).",
+    "description": "Skill must document the simplified claim protocol: atomic status:ready → status:in-progress flip via the central transitioner (`scripts/gh-tasks/transition-status.sh`), which issues a single `gh issue edit` removing status:ready and adding status:in-progress. Replaces both the prior claim:session- label approach (broke because gh --add-label won't auto-create) and the previously-inlined two-flag form (centralized in #159).",
     "args": "pickup",
-    "expect": "--remove-label status:ready --add-label status:in-progress"
+    "expect": "transition-status.sh"
   },
   {
     "id": "direct-claim-by-issue-number",

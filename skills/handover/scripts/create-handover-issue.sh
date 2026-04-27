@@ -14,6 +14,7 @@ HANDOVER_PATH=""
 TITLE=""
 TLDR=""
 NEXT_STEP=""
+AREA="vault"
 PRIORITY="p1"
 WEIGHT="heavy"
 OWNER="human"
@@ -25,7 +26,8 @@ Usage: create-handover-issue.sh \\
   --title "<issue title>" \\
   --tldr "<one-line summary>" \\
   --next-step "<first action from the handover>" \\
-  [--priority p1|p2|p3|p4] (default p1) \\
+  [--area <plugin-brain-os|plugin-ai-leaders-vietnam|vault|claude-config>] (default vault) \\
+  [--priority p1|p2|p3] (default p1) \\
   [--weight heavy|quick]   (default heavy) \\
   [--owner human|bot]      (default human)
 USAGE
@@ -38,6 +40,7 @@ while [[ $# -gt 0 ]]; do
     --title) TITLE="$2"; shift 2 ;;
     --tldr) TLDR="$2"; shift 2 ;;
     --next-step) NEXT_STEP="$2"; shift 2 ;;
+    --area) AREA="$2"; shift 2 ;;
     --priority) PRIORITY="$2"; shift 2 ;;
     --weight) WEIGHT="$2"; shift 2 ;;
     --owner) OWNER="$2"; shift 2 ;;
@@ -69,14 +72,15 @@ Continue unfinished work from the prior session.
 EOF
 )
 
-URL=$(gh issue create -R "$GH_TASK_REPO" \
+URL=$(bash "$PLUGIN_ROOT/scripts/gh-tasks/create-task-issue.sh" \
   --title "$TITLE" \
   --body "$BODY" \
-  --label "status:ready" \
-  --label "type:handover" \
-  --label "owner:$OWNER" \
-  --label "priority:$PRIORITY" \
-  --label "weight:$WEIGHT")
+  --area "$AREA" \
+  --owner "$OWNER" \
+  --priority "$PRIORITY" \
+  --weight "$WEIGHT" \
+  --status ready \
+  --type handover)
 
 ISSUE_NUM="${URL##*/}"
 if ! [[ "$ISSUE_NUM" =~ ^[0-9]+$ ]]; then

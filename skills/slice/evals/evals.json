@@ -56,10 +56,10 @@
     {
       "id": 6,
       "prompt": "If slice B is blocked by slice A, what order does /slice create the GitHub issues in, and why?",
-      "expected_output": "Topological order — A first, then B. Creating B first would force a placeholder reference (#?) in B's `Blocked by` section because A doesn't have a real issue number yet. Creating A first lets B reference A's actual issue number returned by `gh issue create`.",
+      "expected_output": "Topological order — A first, then B. Creating B first would force a placeholder reference (#?) in B's `Blocked by` section because A doesn't have a real issue number yet. Creating A first lets B reference A's actual issue number returned by the central filer (`scripts/gh-tasks/create-task-issue.sh`, which echoes the new issue URL on stdout).",
       "expectations": [
         "Says blockers / dependencies first (topological order)",
-        "Explains the reason (real issue number vs placeholder, captured from gh issue create output)"
+        "Explains the reason (real issue number vs placeholder, captured from the filer's stdout)"
       ]
     },
     {
@@ -75,10 +75,10 @@
     {
       "id": 8,
       "prompt": "When should you NOT use /slice?",
-      "expected_output": "Single bug fix (just `gh issue create` directly), exploratory grill where decisions aren't settled (finish /grill first — the skill should refuse), the plan IS one slice (file it directly without manufacturing sub-issues), cosmetic / typo / config tweak (direct edit + push, no Pocock pipeline overhead).",
+      "expected_output": "Single bug fix (file directly via the central filer `scripts/gh-tasks/create-task-issue.sh`), exploratory grill where decisions aren't settled (finish /grill first — the skill should refuse), the plan IS one slice (file it directly without manufacturing sub-issues), cosmetic / typo / config tweak (direct edit + push, no Pocock pipeline overhead).",
       "expectations": [
         "Mentions at least two of: single bug, unsettled grill, one-slice plan, cosmetic / typo / config",
-        "Distinguishes /slice from direct gh issue create or direct edit + push"
+        "Distinguishes /slice from direct issue creation via the central filer or direct edit + push"
       ]
     },
     {
@@ -94,10 +94,10 @@
     },
     {
       "id": 10,
-      "prompt": "A grill closes with all decisions locked and full details in conversation context. Is it acceptable for Claude to skip /slice and file the implementation issues directly with `gh issue create`?",
-      "expected_output": "No — direct invocation via `gh issue create` after a grill closes, even when all details are crystallized in conversation context, counts as bypass per the § Anti-Patterns rule. The user-quiz step (numbered breakdown → user iterates → approved) calibrates slice granularity to user intuition, not LLM intuition. Skipping it produces issues sized to LLM intuition that the user then has to clean up. The correct action is to invoke /slice.",
+      "prompt": "A grill closes with all decisions locked and full details in conversation context. Is it acceptable for Claude to skip /slice and file the implementation issues directly via the central filer (`scripts/gh-tasks/create-task-issue.sh`) — or any inline shell that creates issues — without going through the slice user-quiz?",
+      "expected_output": "No — any direct issue-creation path after a grill closes, even when all details are crystallized in conversation context, counts as bypass per the § Anti-Patterns rule. The user-quiz step (numbered breakdown → user iterates → approved) calibrates slice granularity to user intuition, not LLM intuition. Skipping it produces issues sized to LLM intuition that the user then has to clean up. The correct action is to invoke /slice; centralization on the filer is orthogonal to whether the quiz happened.",
       "expectations": [
-        "Identifies direct gh issue create after a grill close as a bypass / anti-pattern",
+        "Identifies direct issue creation after a grill close as a bypass / anti-pattern (regardless of which command path)",
         "Mentions the user-quiz step as the reason (slice granularity calibration to user intuition rather than LLM intuition)",
         "Names invoking /slice as the correct action"
       ]

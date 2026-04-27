@@ -103,6 +103,17 @@
         "Mentions brand new skill or no baseline",
         "Mentions user has plan already"
       ]
+    },
+    {
+      "id": 11,
+      "prompt": "How does /debug actually file the GH issue — what command does it run?",
+      "expected_output": "Via the central filer `bash $CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/create-task-issue.sh` with required axes (--area, --owner, --priority, --weight, --status ready) plus --title and --body. Do NOT inline an issue-create shell call — the helper validates every label axis against the canon list (references/gh-task-labels.md § 1) and guards against typo'd labels and missing required axes that would otherwise drift across debug runs.",
+      "expectations": [
+        "Mentions scripts/gh-tasks/create-task-issue.sh as the filer",
+        "Lists the required axes (area, owner, priority, weight, status)",
+        "Says do NOT inline the issue-create call",
+        "Mentions canon validation / references/gh-task-labels.md"
+      ]
     }
   ]
 }
