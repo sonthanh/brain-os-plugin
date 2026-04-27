@@ -104,6 +104,13 @@ if [ -n "${GH_TASK_REPO:-}" ] && command -v gh >/dev/null 2>&1; then
     --limit 50 --json number,title,labels > "$TMP_DIR/blocked.json" 2>/dev/null &
   gh issue list -R "$GH_TASK_REPO" --state open --label status:backlog \
     --limit 200 --json number --jq 'length' > "$TMP_DIR/backlog.txt" 2>/dev/null &
+  # Story parents — fetch with body so child checklist can be parsed locally
+  # (avoids fan-out gh calls per child).
+  gh issue list -R "$GH_TASK_REPO" --state open --label type:plan \
+    --limit 50 --json number,title,body > "$TMP_DIR/plans.json" 2>/dev/null &
+  # Bulk lookup table for child state tally (ready / in-progress / closed).
+  gh issue list -R "$GH_TASK_REPO" --state all \
+    --limit 500 --json number,state,labels > "$TMP_DIR/all-states.json" 2>/dev/null &
   wait
 fi
 
@@ -156,6 +163,77 @@ check_stealth_picked() {
   return 1
 }
 
+# Filter a JSON issue array, dropping entries whose number is in $3 (newline-separated).
+# Empty $3 = identity copy. Used to keep type:plan parents out of Ready/In Progress
+# blocks since they render in their own Stories sub-block.
+filter_out_plans() {
+  local in_file="$1"
+  local out_file="$2"
+  local plan_nums="$3"
+  if [ ! -s "$in_file" ]; then
+    echo "[]" > "$out_file"
+    return
+  fi
+  if [ -z "$plan_nums" ]; then
+    cp "$in_file" "$out_file"
+    return
+  fi
+  local plan_arr
+  plan_arr="[$(printf '%s\n' "$plan_nums" | grep '^[0-9]' | tr '\n' ',' | sed 's/,$//')]"
+  jq --argjson plans "$plan_arr" \
+    '[.[] | select(.number as $n | $plans | index($n) | not)]' \
+    "$in_file" > "$out_file" 2>/dev/null || cp "$in_file" "$out_file"
+}
+
+# Resolve a child issue's bucket from the bulk all-states lookup.
+# Returns ready | in-progress | closed | other (other = blocked/backlog/etc.).
+child_bucket() {
+  local n="$1"
+  jq -r --argjson n "$n" '
+    .[] | select(.number == $n) |
+    if .state == "CLOSED" then "closed"
+    else
+      ((.labels // []) | map(.name) | map(select(startswith("status:"))) | (.[0] // "")) as $s |
+      if $s == "status:in-progress" then "in-progress"
+      elif $s == "status:ready" then "ready"
+      else "other"
+      end
+    end
+  ' "$TMP_DIR/all-states.json" 2>/dev/null
+}
+
+# Render one Story line — "- #N — Title (M children: A ready / B in-progress / C closed)".
+# N counts distinct `#X` refs in `- [ ]` / `- [x]` checklist lines (handles
+# `#X` and `ai-brain#X` styles); bare acceptance items contribute nothing.
+render_story_line() {
+  local pnum="$1"
+  local ptitle="$2"
+  local body
+  body=$(jq -r --argjson n "$pnum" '.[] | select(.number == $n) | .body // ""' "$TMP_DIR/plans.json" 2>/dev/null)
+  # Match only refs directly after the checkbox (`- [ ] #N` / `- [ ] ai-brain#N`)
+  # — skips prose mentions like `- [ ] /slice re-run (ai-brain#153 source) ...`.
+  local children
+  children=$(printf '%s\n' "$body" \
+    | grep -oE '^- \[[ x]\] +(ai-brain)?#[0-9]+' \
+    | grep -oE '[0-9]+$' | sort -un)
+  local n=0 r=0 ip=0 c=0
+  for ch in $children; do
+    n=$((n + 1))
+    case "$(child_bucket "$ch")" in
+      ready)       r=$((r + 1)) ;;
+      in-progress) ip=$((ip + 1)) ;;
+      closed)      c=$((c + 1)) ;;
+    esac
+  done
+  local clean_title
+  clean_title=$(printf '%s' "$ptitle" | sed 's/^Story: *//')
+  if [ "$n" -gt 0 ]; then
+    echo "- #${pnum} — ${clean_title} (${n} children: ${r} ready / ${ip} in-progress / ${c} closed)"
+  else
+    echo "- #${pnum} — ${clean_title}"
+  fi
+}
+
 # Like format_issues but appends 🔄 + pickup footnote for stealth-picked items.
 # Used for Ready bucket where stealth-work creates misleading "untouched" signal.
 format_ready_issues() {
@@ -187,18 +265,38 @@ fi
 # --- Tasks ---------------------------------------------------------------
 echo "### Tasks" >> "$TMP_FILE"
 if $GH_AVAILABLE; then
-  R_COUNT=$(json_count "$TMP_DIR/ready.json")
-  IP_COUNT=$(json_count "$TMP_DIR/in-progress.json")
+  # type:plan parents render in their own Stories sub-block. Filter them out
+  # of Ready / In Progress so they don't double-render.
+  PLAN_NUMS=""
+  P_COUNT=0
+  if [ -s "$TMP_DIR/plans.json" ]; then
+    PLAN_NUMS=$(jq -r '.[].number' "$TMP_DIR/plans.json" 2>/dev/null | sort -u)
+    [ -n "$PLAN_NUMS" ] && P_COUNT=$(printf '%s\n' "$PLAN_NUMS" | grep -c '^[0-9]' 2>/dev/null || echo 0)
+  fi
+  filter_out_plans "$TMP_DIR/ready.json" "$TMP_DIR/ready-filtered.json" "$PLAN_NUMS"
+  filter_out_plans "$TMP_DIR/in-progress.json" "$TMP_DIR/in-progress-filtered.json" "$PLAN_NUMS"
+
+  R_COUNT=$(json_count "$TMP_DIR/ready-filtered.json")
+  IP_COUNT=$(json_count "$TMP_DIR/in-progress-filtered.json")
   B_COUNT=$(json_count "$TMP_DIR/blocked.json")
   BACKLOG=$(tr -d '[:space:]' < "$TMP_DIR/backlog.txt" 2>/dev/null)
   case "$BACKLOG" in ''|*[!0-9]*) BACKLOG=0 ;; esac
 
   {
+    if [ "$P_COUNT" -gt 0 ]; then
+      echo "**Stories ($P_COUNT)**"
+      jq -r '.[] | "\(.number)\t\(.title)"' "$TMP_DIR/plans.json" 2>/dev/null | \
+        while IFS=$'\t' read -r pnum ptitle; do
+          [ -z "$pnum" ] && continue
+          render_story_line "$pnum" "$ptitle"
+        done
+      echo ""
+    fi
     echo "**Ready ($R_COUNT)**"
-    [ "$R_COUNT" -gt 0 ] && format_ready_issues "$TMP_DIR/ready.json"
+    [ "$R_COUNT" -gt 0 ] && format_ready_issues "$TMP_DIR/ready-filtered.json"
     echo ""
     echo "**In Progress ($IP_COUNT)**"
-    [ "$IP_COUNT" -gt 0 ] && format_issues "$TMP_DIR/in-progress.json"
+    [ "$IP_COUNT" -gt 0 ] && format_issues "$TMP_DIR/in-progress-filtered.json"
   } >> "$TMP_FILE"
 
   if [ "$B_COUNT" -gt 0 ]; then
