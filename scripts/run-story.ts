@@ -7,8 +7,9 @@
  * Reads parent issue body checklist + each child's "Blocked by" section to
  * build the DAG. Spawns AFK workers (claude -w + /impl) for owner:bot children
  * up to parallel cap (default 3, hard max 5). Surfaces owner:human children via
- * osascript notify (no spawn). Ticks parent body checklist on each close,
- * closes parent + final macOS-notifies on completion.
+ * a focused Supaterm tab carrying the alert banner (falls back to osascript
+ * notification if Supaterm unreachable). Ticks parent body checklist on each
+ * close, closes parent + final-notifies on completion.
  *
  * Tested via bun test scripts/run-story.test.ts.
  *
@@ -333,13 +334,33 @@ class RealProcessChecker implements ProcessChecker {
 }
 
 class RealNotifier implements Notifier {
+  private static readonly SP = "/Applications/supaterm.app/Contents/Resources/bin/sp";
   constructor(private parent: number) {}
   notify(message: string): void {
-    const escaped = message.replace(/"/g, '\\"');
+    const title = `Brain OS — Story #${this.parent}`;
+    const escapedShell = (s: string) => s.replace(/'/g, "'\\''");
+    const banner = [
+      `clear`,
+      `printf '\\033[1;33m=== %s ===\\033[0m\\n\\n' '${escapedShell(title)}'`,
+      `printf '%s\\n\\n' '${escapedShell(message)}'`,
+      `afplay /System/Library/Sounds/Glass.aiff &`,
+      `read -r -p 'Press Enter to dismiss '`,
+    ].join("; ");
+    try {
+      const sp = Bun.spawnSync({
+        cmd: [RealNotifier.SP, "tab", "new", "--focus", "--quiet", "--script", banner],
+        stdout: "ignore",
+        stderr: "pipe",
+      });
+      if (sp.exitCode === 0) return;
+    } catch {
+      // sp binary missing or threw — fall through to osascript
+    }
+    const osaEscaped = message.replace(/"/g, '\\"');
     Bun.spawn([
       "osascript",
       "-e",
-      `display notification "${escaped}" with title "Brain OS — Story #${this.parent}" sound name "Glass"`,
+      `display notification "${osaEscaped}" with title "${title}" sound name "Glass"`,
     ]);
   }
 }
