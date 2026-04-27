@@ -31,6 +31,26 @@
         "Calls advisor() for independent principle-based review",
         "Logs usage to tracker after completion"
       ]
+    },
+    {
+      "id": 4,
+      "prompt": "After /audit p3 runs and finds 4 FLAGs and 1 PASS, what result code should be logged in audit.log and why?",
+      "expected_output": "result=pass with findings=4FLAG+1PASS — the skill completed successfully; findings= captures content verdict separately",
+      "expectations": [
+        "Logs result=pass because the skill ran and produced findings",
+        "Captures verdict breakdown in findings= field (e.g. 4FLAG+1PASS)",
+        "Does NOT log result=partial just because FLAGs were found in the content"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "When should /audit log result=partial or result=fail?",
+      "expected_output": "partial: some principles couldn't be fully evaluated; fail: advisor call crashed or tracker.md unreadable — both are skill execution errors, not content verdicts",
+      "expectations": [
+        "partial = incomplete evaluation due to skill execution problem",
+        "fail = skill execution error (advisor failed, principles file missing)",
+        "Neither result code relates to what the audit found about the content"
+      ]
     }
   ]
 }

@@ -28,9 +28,12 @@ One-shot audit of current context through your curated principles, verified by a
 
 ## Principle Selection (p0 logic)
 
-When no specific principle is given, pick the **top 3 most relevant** to what's currently being discussed. Relevance = how directly the principle challenges or validates the current approach. Deep > wide.
+When no specific principle is given, pick the **top 3 most relevant** to what's currently being discussed. Pick order:
+1. Principles that directly challenge the current approach (flag candidates first)
+2. Principles that guard the most expensive failure mode (cost-of-wrong matters)
+3. Principles most recently applied to a similar context
 
-Single principle audits produce the sharpest results. Default to p0 (3) but respect user's specific picks.
+Single-principle audits produce the sharpest results. Default p0 to 3 but respect user's specific picks.
 
 ## Output
 
@@ -60,8 +63,9 @@ Also increment the Uses count for each principle applied.
 Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/audit.log`:
 
 ```
-{date} | audit | audit | ~/work/brain-os-plugin | thinking/principles/tracker.md | commit:N/A | {result}
+{date} | audit | audit | ~/work/brain-os-plugin | thinking/principles/tracker.md | commit:N/A | {result} | args="{principles}" findings={summary}
 ```
 
-- `result`: `pass` if all principles PASS, `partial` if any FLAG, `fail` if any FAIL
-- Optional: `args="{principles}"` (e.g., `args="p1 p5"`)
+- `result`: `pass` when audit completes and produces findings (regardless of verdicts); `partial` if some principles couldn't be fully evaluated; `fail` if advisor call failed or tracker.md unreadable
+- `findings`: verdict breakdown capturing content quality separately from skill execution — e.g. `3FLAG+2PASS`, `1FAIL+1FLAG+1PASS`
+- `args=`: principle IDs used (e.g. `p1 p5`)
