@@ -40,5 +40,11 @@
     "description": "Skill must document that seeding / ingestion handovers should be framed by source (e.g. 'Seed from Airtable') not output entity (e.g. 'Seed people'). A single pass through one source produces all entity types — splitting by entity hides that fact and forces redundant scans.",
     "args": "handover",
     "expect": "Tasks by source"
+  },
+  {
+    "id": "close-via-central-helper",
+    "description": "Handover-close instruction must invoke close-issue.sh (the central helper that strips status:* labels first, plugging the ghost-label leak fixed in #160) instead of inlining `gh issue close`. Inline gh issue close leaves status:in-progress stuck on the now-closed issue and re-creates the leak.",
+    "args": "handover",
+    "expect": "close-issue.sh"
   }
 ]

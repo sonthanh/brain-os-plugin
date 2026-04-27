@@ -88,5 +88,11 @@
     "description": "Skill must NOT reference scripts/pickup-auto.sh as an active runnable — the script was deleted alongside this refactor (issue #148). Any prose that still tells the LLM to `bash scripts/pickup-auto.sh` would break at runtime with file-not-found and re-create the auto-spawn surface this refactor removed. A historical mention inside the deprecation block is acceptable as long as no active `bash` invocation remains.",
     "args": "pickup auto",
     "expect-not-command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/pickup-auto.sh\""
+  },
+  {
+    "id": "close-via-central-helper",
+    "description": "Every close-step in /pickup (handover-doc completion, autogrill auto-close ≥80%, plan-execution wrap-up) must invoke close-issue.sh (central helper that strips status:* labels first, plugging the ghost-label leak fixed in #160) instead of inlining `gh issue close`. Bare gh issue close re-creates the leak by leaving status:in-progress stuck on the closed issue.",
+    "args": "pickup",
+    "expect": "close-issue.sh"
   }
 ]

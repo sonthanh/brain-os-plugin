@@ -92,9 +92,9 @@ The flip is atomic by GH semantics — no ephemeral `claim:session-*` labels. Th
 
 Race note: two sessions reading `status:ready` simultaneously and transitioning in the same second will both succeed (GitHub has no label CAS). In practice — solo user, a handful of sessions — this is rare and benign: duplicate work at worst, and the handover / issue body converges the outputs. The TOCTOU window is the helper itself (1-3 ms between view + edit) — much smaller than orchestrator-prose timing.
 
-**On completion** — close the issue:
+**On completion** — close the issue via the central helper (strips `status:*` labels first):
 ```bash
-gh issue close N -R $GH_TASK_REPO --reason completed
+bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/close-issue.sh" N
 ```
 
 ## Step 2: Autogrill Ready Tasks
@@ -133,7 +133,7 @@ For each non-`type:handover` Ready task, run vault-first Q&A:
    ```
 
 4. **Decide per task:**
-   - **≥80% questions answered** → auto-close: produce the artifact, `gh issue close N --reason completed`, log process
+   - **≥80% questions answered** → auto-close: produce the artifact, `bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/close-issue.sh" N`, log process
    - **<80% answered** → escalate: surface specific unanswered questions for human grill
 
 5. **Run tasks in parallel** — launch multiple agents for independent tasks
@@ -199,7 +199,7 @@ Background: see `daily/grill-sessions/2026-04-25-skill-process-pocock-adoption.m
 5. **Start executing step 1** immediately (don't wait for confirmation unless blocked)
 
 ### After completing all steps:
-1. **Close the issue**: `gh issue close N -R $GH_TASK_REPO --reason completed`
+1. **Close the issue** (central helper strips `status:*` labels then closes): `bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/close-issue.sh" N`
 2. **Update handover status** in the vault doc: `status: completed`
 3. **If new unfinished work emerged**: run `/handover` to create a new handover (which opens a new issue)
 
@@ -249,7 +249,7 @@ Session B (new Claude):
   /pickup → queries GH for status:ready + owner:human → filters type:handover first
         → claims (status:ready → status:in-progress) → loads handover doc → starts working
   ... work done ...
-  gh issue close N --reason completed
+  bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/close-issue.sh" N
 
 Session B with explicit issue (any owner):
   /pickup 100 → skip list, directly claim #100 → load body/handover → start

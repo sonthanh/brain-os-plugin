@@ -56,10 +56,10 @@
     {
       "id": 6,
       "prompt": "What command does /impl use to commit, and what is special about the close line?",
-      "expected_output": "Conventional Commits subject + body, ending with `Closes <tracker-repo>#N` (the explicit repo prefix is required because the commit lands in a code repo but the issue lives in the tracker repo) and a Co-Authored-By trailer. Then `gh issue close N --reason completed` as belt-and-braces.",
+      "expected_output": "Conventional Commits subject + body, ending with `Closes <tracker-repo>#N` (the explicit repo prefix is required because the commit lands in a code repo but the issue lives in the tracker repo) and a Co-Authored-By trailer. Then `bash \"$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/close-issue.sh\" N` as belt-and-braces — the helper additionally strips ghost `status:*` labels that bare gh would leave behind.",
       "expectations": [
         "Mentions cross-repo Closes syntax requires the repo prefix",
-        "Mentions gh issue close as a belt-and-braces step",
+        "Mentions close-issue.sh helper as a belt-and-braces step",
         "Mentions Co-Authored-By trailer"
       ]
     },

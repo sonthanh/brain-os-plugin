@@ -58,5 +58,11 @@
     "description": "Output format must document the 🔄 stealth-picked marker + pickup footnote — Ready issues that look picked up in another session without status:in-progress flip, detected via recent vault commit referencing #N OR recent handover/grill/task file matching the issue number.",
     "args": "status",
     "expect": "stealth-picked detection"
+  },
+  {
+    "id": "no-direct-gh-issue-close-instruction",
+    "description": "Skill prose must not contain the literal `gh issue close` instruction — the central close helper (close-issue.sh, wired in #160) is the single close site, and any direct gh issue close mention re-introduces the ghost-label leak surface. The max-age-safety-net narrative may still describe external GH mutations from a plain terminal, but worded so the literal `gh issue close` token does not appear.",
+    "args": "status",
+    "expect-not-command": "gh issue close"
   }
 ]

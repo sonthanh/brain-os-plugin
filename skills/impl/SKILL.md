@@ -131,8 +131,10 @@ EOF
 )"
 git pull --rebase
 git push
-gh issue close <N> -R <tracker-repo> --reason completed
+bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/close-issue.sh" <N>
 ```
+
+`bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/close-issue.sh"` is the single close site — it strips every `status:*` label before flipping state to closed, plugging the ghost-label leak that pre-dated #160. Do NOT inline `gh issue close` here or anywhere else; the helper is the lifecycle close-step.
 
 `git pull --rebase` is mandatory before push because the CI auto-release pipeline runs on each push and may have bumped `plugin.json`.
 
@@ -224,7 +226,7 @@ The orchestrator writes a heartbeat status JSON to `~/.local/state/impl-story/<p
    - AFK spawn = `claude -w "story-<P>-issue-<M>" --dangerously-skip-permissions -p "/impl <M>"` in background.
    - HITL spawn = osascript notify `"HITL: #M needs human. Run: cr /pickup M"` — user resolves manually.
    - Poll each watched child via `gh issue view <M> --json state` — on CLOSED: tick parent body checklist (`sed - [ ] #M → - [x] #M`, `gh issue edit --body`), promote any newly-unblocked waiters to ready queue.
-5. When ready queue + watching set both empty: close parent (`gh issue close <P> --reason completed`).
+5. When ready queue + watching set both empty: close parent via `bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/close-issue.sh" <P>` (strips status:* labels first).
 6. Final macOS notification: `"Story #<P> complete. Run: cr /story-debrief <P> for review"`.
 7. All steps logged to `~/.local/state/impl-story/<parent-N>.log`.
 
@@ -294,7 +296,7 @@ After every successful merge:
 ```bash
 git pull --rebase && git push
 for N in <successful-issue-numbers>; do
-  gh issue close $N -R <tracker-repo> --reason completed
+  bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/close-issue.sh" $N
 done
 ```
 
@@ -406,7 +408,7 @@ If `/impl <N>` is invoked on an `owner:human` issue (legal — owner filter bypa
 
 ## Gotchas
 
-- **`Closes <tracker-repo>#N` not `Closes #N`.** Cross-repo close-on-merge requires the explicit repo prefix because the commit lands in the code repo (e.g. brain-os-plugin) but the issue lives in the tracker repo. `gh issue close` is still required as a belt-and-braces step because cross-repo `Closes` doesn't always auto-fire.
+- **`Closes <tracker-repo>#N` not `Closes #N`.** Cross-repo close-on-merge requires the explicit repo prefix because the commit lands in the code repo (e.g. brain-os-plugin) but the issue lives in the tracker repo. `bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/close-issue.sh" <N>` is still required as a belt-and-braces step because cross-repo `Closes` doesn't always auto-fire — and the helper additionally strips ghost `status:*` labels that bare `gh issue close` leaves behind.
 - **`git pull --rebase` is mandatory before push.** CI auto-release pipelines bump `plugin.json` on every push. Skipping the rebase guarantees a non-fast-forward push failure.
 - **`IMPL_AFK=1` on the commit invocation is required.** It signals to the trunk-block hook (`hooks/pre-commit-trunk-block.sh`) that this is autonomous AFK work. The hook reads the trunk-paths list (`references/trunk-paths.txt`) and exits 2 if any staged file matches — blocks the commit. Without the prefix, the hook is a no-op (interactive direct-push-to-main is unchanged). Source: [grill 2026-04-26](https://github.com/sonthanh/ai-brain/blob/main/daily/grill-sessions/2026-04-26-depth-leaf-trunk-design.md). DO NOT bypass with `--no-verify` or strip the prefix to "make it work" — the right response to a block is `gh issue edit <N> -R <tracker-repo> --remove-label status:in-progress --add-label status:ready --remove-label owner:bot --add-label owner:human` and exit; the user resolves interactively.
 - **Empty backlog sentinel must be wrapped in `<promise>` tags** — emit exactly `<promise>NO_MORE_ISSUES</promise>` in the assistant text response. The ralph-loop Stop hook (`stop-hook.sh:130-141`) extracts the inner text via Perl regex and exact-matches against `--completion-promise "NO_MORE_ISSUES"`. Bare `NO_MORE_ISSUES` without tags only matches when the entire response is *literally that string and nothing else* — adding any surrounding prose (which Claude almost always does) breaks the match. Stdout / `Bash(echo)` is also wrong: ralph reads transcript text blocks (`type: text`), not stdout.

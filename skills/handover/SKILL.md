@@ -108,7 +108,7 @@ The handover doc is useless if nobody picks it up. The GH issue with `type:hando
 `/pickup` parses the issue body for `[handover](daily/handovers/YYYY-MM-DD-topic.md)`. Keep the exact `[handover](...)` anchor text so the parser can find it regardless of other links in the body.
 
 ### Closing a handover issue
-When `/pickup` completes the handover's "What's Next", it runs `gh issue close N -R $GH_TASK_REPO --reason completed`. The closed issue + the handover doc together are the audit trail; no file marker needs to flip.
+When `/pickup` completes the handover's "What's Next", it runs `bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/close-issue.sh" N` (the central close helper that strips `status:*` labels first, plugging the ghost-label leak). The closed issue + the handover doc together are the audit trail; no file marker needs to flip.
 
 ### Cross-session handover → pickup flow
 
