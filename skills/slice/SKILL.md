@@ -29,6 +29,8 @@ Adapted from [@mattpocockuk/skills/to-issues](https://github.com/mattpocock/skil
 
 **DO NOT silently re-grill.** If decisions in the grill-session aren't settled (questions unanswered, RESET sections still active, status frontmatter missing or `status: working`), STOP and tell the user to finish /grill first. Inferring missing decisions is how reactive-patch loops start.
 
+**DO NOT skip the P1/P2 audit gates (Steps 1.5 + 2.4).** The gates exist to stop premature-optimization theater — ideas that mass-touch workflow/vault without a real problem to solve. PASS-only continues; FLAG and FAIL both abort, no override flag, no `--force-no-audit` shortcut. Settled in `daily/grill-sessions/2026-04-27-slice-audit-gate-p1-p2.md`. Bypassing either gate (commenting out the Skill invocation, ignoring the verdict, advancing past abort) is the same failure mode that produced 14+ closed meta-refactor issues in 48h while real backlog sat untouched.
+
 ## Workflow
 
 ### 1. Gather context [deterministic]
@@ -40,6 +42,41 @@ Determine the input source:
 - **In-context plan**: if the conversation already contains a settled plan from this session, work from context. Confirm with the user that nothing earlier needs re-reading.
 
 If the user passes neither a file path nor an issue number, ask which one. Do NOT guess.
+
+### 1.5. P2 audit gate — Start with Why [deterministic]
+
+**Purpose.** Stop premature-optimization theater at the source: ideas filed because tooling could be tweaked, not because a real user-observable problem broke. P2 (Start with Why) requires a named past incident or explicit current pain — forward-looking "pattern will repeat" framing fails this gate.
+
+**Mechanism.** Step 1 already loaded source content (grill-session body OR existing parent issue body OR in-context plan) into conversation. Invoke `/audit p2` via the Skill tool — `/audit` reads conversation context per its own SKILL.md, so it operates on what Step 1 loaded. Audits run unconditionally across all 3 input modes (no skip conditions — in-context-plan is not an escape valve).
+
+```
+Skill: audit
+args: p2
+```
+
+**Verdict handling (deterministic, no LLM judgment).** `/audit` emits a markdown summary table:
+
+```
+## Audit Summary
+| Principle | Verdict | Key Finding |
+|-----------|---------|-------------|
+| P2 | PASS|FLAG|FAIL | … |
+```
+
+Detection:
+
+```bash
+echo "$AUDIT_OUTPUT" | grep -E '^\| P[0-9]+ \| (FAIL|FLAG) \|' && AUDIT_BLOCK=1
+```
+
+If any P2 row matches FAIL or FLAG → ABORT. Surface the table verbatim to the user, list the finding, and STOP. User options:
+1. Re-grill the source to add a named historical incident in `## Why`.
+2. Amend the source to remove the forward-looking framing.
+3. Add explicit `## P2 — pre-positioning` admission section to the source declaring "no incident, accepting risk" (legitimate pre-positioning work like geo-prep, capability gaps surfaced by audit). Then re-run /slice.
+
+PASS only → continue to Step 2. No override flag.
+
+**Why hard block on FLAG too.** FLAG is "non-fatal concern, take action if applicable" — under load, FLAGs get rationalized into PASSes silently. Ternary collapses to binary at this gate. Hard rule, no exceptions.
 
 ### 2. Synthesize PRD [latent]
 
@@ -53,6 +90,33 @@ In conversation context — extract from the source:
 - **Open questions** — must be empty for AFK children; HITL children can carry one if it's the question the human is being pulled in to answer
 
 If you cannot extract User Story / Settled Decisions / Acceptance / Out of Scope, the source is not settled enough → STOP and ask user to finish /grill.
+
+### 2.4. P1 audit gate — First Principles [deterministic]
+
+**Purpose.** Stop overcomplicated PRDs at the synthesis seam. P1 (First Principles / Simple scales) asks: (1) Is this the real problem or a symptom? (2) Does a solution already exist? (3) What's the simplest version? PRDs that propose new mechanisms when existing ones cover the failure mode, or stack layers anticipating edge cases that haven't happened, fail this gate.
+
+**Mechanism.** PRD draft already lives in conversation context from Step 2 synthesis. Invoke `/audit p1` via the Skill tool.
+
+```
+Skill: audit
+args: p1
+```
+
+**Verdict handling.** Same ternary-to-binary contract as Step 1.5:
+
+```bash
+echo "$AUDIT_OUTPUT" | grep -E '^\| P[0-9]+ \| (FAIL|FLAG) \|' && AUDIT_BLOCK=1
+```
+
+FAIL or FLAG → ABORT. Surface the table verbatim, list the finding, STOP. User amends the draft (collapse touch points, drop premature layers, cite existing mechanism) and re-runs /slice. PASS → continue to Step 2.5.
+
+**Common P1 failure modes (calibrated by tracker history):**
+- New mechanism wrapping an existing skill (build `audit-gate.ts` when `/audit` already does the work — tracker line 65 / this very session)
+- Anticipated edge cases without a current incident (3-layer hybrid trunk gate when 2 false-positives both resolvable by Layer 2 alone — Story #154)
+- Refactor scope ballooning from a single root-cause fix (label taxonomy 6-children when fixing #137 alone sufficed — Story #153)
+- Path-list / namespace expansion duplicating existing rubric (depth:leaf|trunk new label namespace when `owner:bot|human` already gates 80% — tracker line 64, killed by P1 mid-grill)
+
+If the PRD draft fits any of these patterns, FLAG/FAIL is the expected verdict. Amend or split before proceeding.
 
 ### 2.5. File parent story issue [deterministic]
 

@@ -153,6 +153,39 @@
         "Names the format `- [ ] ai-brain#<N> — <title>`",
         "Mentions /impl story consuming the parent checklist to drive DAG drainage / progress tracking"
       ]
+    },
+    {
+      "id": 16,
+      "prompt": "After Step 1 loads the grill-session into conversation context, what does Step 1.5 do, and what behavior is required when the audit returns a FLAG verdict on P2?",
+      "expected_output": "Step 1.5 invokes the `/audit p2` skill via the Skill tool. /audit reads the conversation context Step 1 just loaded and emits a markdown summary table (`| P2 | PASS|FLAG|FAIL | … |`). /slice greps the table for any row matching `^\\| P[0-9]+ \\| (FAIL|FLAG) \\|`. A FLAG verdict aborts the same as FAIL — no override flag, no `--force-no-audit` shortcut, and FLAG is NOT silently rationalized into PASS. The user must re-grill, amend the source, or add an explicit `## P2 — pre-positioning` admission section before re-running /slice. PASS only continues to Step 2.",
+      "expectations": [
+        "Mentions invoking /audit p2 via the Skill tool against conversation context loaded in Step 1",
+        "Names FLAG and FAIL as both aborting (ternary collapses to binary)",
+        "Mentions deterministic grep on the audit-summary table (no LLM judgment of the verdict)",
+        "Names the user recovery options: re-grill, amend source, or add `## P2 — pre-positioning` admission section"
+      ]
+    },
+    {
+      "id": 17,
+      "prompt": "Step 2 synthesizes a PRD draft proposing a new wrapper script around an existing skill (e.g. `audit-gate.ts` wrapping `/audit`). What does Step 2.4 do, and why is the verdict expected to be FAIL or FLAG?",
+      "expected_output": "Step 2.4 invokes `/audit p1` via the Skill tool against the PRD draft already in conversation context. P1 asks (1) Is this the real problem? (2) Does a solution already exist? (3) What's the simplest version? Wrapping an existing skill with a new script fails (2) — the existing skill IS the mechanism; the gap is enforcement at a seam, not new mechanism. P1 verdict: FAIL or FLAG. /slice surfaces the table verbatim and aborts. User collapses the touch points (one skill edit invoking the existing skill), amends the PRD draft, and re-runs /slice. Calibration drawn from tracker entries: depth:leaf|trunk killed by P1 mid-grill (existing owner:bot|human gate covered 80%), grill review gate collapsed 3 → 1 touch points (existing `## Implementation plan` section IS the touch-points table).",
+      "expectations": [
+        "Mentions invoking /audit p1 via the Skill tool against the PRD draft in conversation context",
+        "Names the P1 question that fails (does a solution already exist) when proposing a wrapper around an existing skill",
+        "Names FLAG and FAIL as both aborting with no override",
+        "Mentions the user recovery: collapse touch points / cite existing mechanism / re-run /slice"
+      ]
+    },
+    {
+      "id": 18,
+      "prompt": "A grill-session for legitimate pre-positioning work (e.g. geo-prep rally point — capability gap surfaced before any incident) hits Step 1.5. P2 fails because there is no historical incident. How does the user proceed without bypassing the gate?",
+      "expected_output": "The user adds an explicit `## P2 — pre-positioning` admission section to the source grill-session that says: this work is forward-looking, no incident exists, accepting the risk because the cost of waiting until incident exceeds the cost of pre-building. The forced admission preserves rigor (the user IS naming the bet) while unblocking legitimate pre-positioning work. After amending the source, re-run /slice; Step 1.5 re-audits and now sees the explicit acknowledgment, which P2 passes. NOT acceptable: removing the audit invocation, ignoring the abort, adding a bypass flag, or rewriting the why with manufactured incidents.",
+      "expectations": [
+        "Names adding `## P2 — pre-positioning` admission section as the legitimate path",
+        "Mentions re-running /slice after amending the source",
+        "Names what is NOT acceptable (removing the audit, override flag, manufactured incidents)",
+        "Explains why forced admission preserves rigor (user names the bet rather than rubber-stamping)"
+      ]
     }
   ]
 }
