@@ -13,14 +13,16 @@
     },
     {
       "id": 2,
-      "prompt": "How does /impl -p N (alias --parallel N) isolate filesystem changes between subagents?",
-      "expected_output": "Each spawned Agent-tool subagent runs with `isolation: \"worktree\"`. This is always-on, auto-cleanup, free, and prevents the two-teammates-editing-the-same-file overwrite class. The canonical flag is `-p N`; `--parallel N` is retained as an alias for safety.",
+      "prompt": "How does `/impl -p N` (alias `--parallel N`) isolate filesystem changes between workers?",
+      "expected_output": "`/impl -p` dispatches to `scripts/run-parallel.ts` (TS script orchestrator, mirroring `/impl story` after ai-brain#161 + #173). Each spawned worker is a `claude -w \"<name>\" --dangerously-skip-permissions -p \"/impl <M>\"` session launched via `Bun.spawn` with explicit per-issue cwd derived from `inferRepoFromIssueArea(labels, areaMap)` — NOT an Agent-tool subagent. The cwd argument is the hard isolation guarantee: each worker gets a distinct `claude -w` named worktree under `<area-repo>/.claude/worktrees/parallel-<batch>-issue-<M>`, auto-cleaned on close via `cleanupWorker(name, cwd)`. The canonical flag is `-p N` (or `-p N,M,...` list form); `--parallel N` is retained as an alias for safety. Hard cap is `HARD_CAP=5` enforced by `clampParallel`.",
       "expectations": [
-        "Mentions Agent tool",
-        "Mentions isolation: \"worktree\" (verbatim phrase)",
-        "Says it is always-on / not conditional",
-        "Mentions auto-cleanup",
-        "Mentions -p as the canonical flag with --parallel retained as alias"
+        "Says /impl -p dispatches to scripts/run-parallel.ts (TS script orchestrator)",
+        "Says workers are claude -w sessions spawned via Bun.spawn (not Agent-tool subagents)",
+        "Says explicit per-issue cwd from inferRepoFromIssueArea(labels, areaMap)",
+        "Mentions named worktrees under <area-repo>/.claude/worktrees/parallel-<batch>-issue-<M>",
+        "Mentions cleanupWorker on close",
+        "Mentions -p as canonical flag with --parallel retained as alias",
+        "Mentions HARD_CAP=5 via clampParallel"
       ]
     },
     {
@@ -262,11 +264,13 @@
     {
       "id": 23,
       "prompt": "What happens if `/impl 200,201` lists issues from different `area:*` labels (e.g. #200 area:plugin-brain-os and #201 area:vault)?",
-      "expected_output": "Skill aborts before claiming any issue. Same-area assertion is part of the parser flow (sequential AND parallel list forms): pre-check the area:* label of every listed issue via `gh issue view <N> --json labels`. If labels diverge, fatal abort with `FATAL: list spans multiple areas (#200 area:plugin-brain-os, #201 area:vault). Run separate /impl invocations per area.` and exit 1. Reason: the main session has ONE cwd, and Agent({isolation: \"worktree\"}) clones from the orchestrator cwd — a list spanning two repos would land each commit in the wrong repo for the off-area issue. The pre-existing single-issue /impl <N> path inherits this constraint implicitly (operator picks the right repo); list mode amplifies it, so the abort is documented and explicit. Recovery: split into per-area invocations (e.g. /impl 200 in the brain-os-plugin repo, /impl 201 in the brain repo).",
+      "expected_output": "Orchestrator aborts before claiming any issue. Same-area assertion is part of the parser flow (sequential AND parallel list forms): for the sequential form, the skill pre-checks `area:*` labels via `gh issue view <N> --json labels` per issue; for the parallel form, `scripts/run-parallel.ts` calls `validateSameArea(labels)` after `gh.viewFull` per issue. If labels diverge, fatal abort with `FATAL: list spans multiple areas (#200 area:plugin-brain-os, #201 area:vault). Run separate /impl invocations per area.` and exit 1. Reason: even though `run-parallel.ts` spawns each worker with explicit per-issue `cwd: inferRepoFromIssueArea(labels)` (so technically multi-area would *work* at the runtime layer), the outcome would be a single batch with workers landing in different repos — confusing for review, log inspection, and rollback. Sequential form has the harder constraint: the main session has ONE cwd and edits in place, so multi-area would silently land commits in the wrong repo for the off-area issue. The same-area assertion documents this as one consistent invariant for both list forms. Recovery: split into per-area invocations (e.g. /impl 200 in `area:plugin-brain-os`, /impl 201 in `area:vault`).",
       "expectations": [
         "Says skill aborts with FATAL error when list spans multiple areas",
         "Says check happens before claiming any issue (pre-flight)",
-        "Names the reason: single cwd / worktree clones from orchestrator cwd",
+        "Says parallel form runs validateSameArea inside scripts/run-parallel.ts",
+        "Says sequential form pre-checks via gh issue view",
+        "Names the harder reason: sequential single-cwd would land commits in wrong repo",
         "Says assertion applies to BOTH sequential and parallel list forms",
         "Says recovery is to split into per-area invocations"
       ]
