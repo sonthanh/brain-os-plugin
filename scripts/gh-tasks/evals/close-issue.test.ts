@@ -113,13 +113,37 @@ describe("close-issue.sh", () => {
     expect(closeCalls.length).toBe(1);
   });
 
-  test("already-closed issue errors cleanly", () => {
-    writeShim({ state: "CLOSED" });
+  test("already-closed issue with ghost labels: strips labels, skips close, exits 0", () => {
+    writeShim({ state: "CLOSED", statusLabels: ["status:in-progress"] });
     const r = run(["157"]);
-    expect(r.exitCode).not.toBe(0);
-    expect(r.stderr).toMatch(/already closed|closed/i);
+    expect(r.exitCode).toBe(0);
+    const editCalls = r.calls.split("\n").filter(l => l.startsWith("issue edit"));
+    expect(editCalls.length).toBe(1);
+    expect(editCalls[0]).toContain("--remove-label status:in-progress");
     const closeCalls = r.calls.split("\n").filter(l => l.startsWith("issue close"));
     expect(closeCalls.length).toBe(0);
+    const commentCalls = r.calls.split("\n").filter(l => l.startsWith("issue comment"));
+    expect(commentCalls.length).toBe(0);
+    expect(r.stdout).toMatch(/already closed/i);
+  });
+
+  test("already-closed issue with no ghost labels: no-op, exits 0", () => {
+    writeShim({ state: "CLOSED", statusLabels: [] });
+    const r = run(["157"]);
+    expect(r.exitCode).toBe(0);
+    const editCalls = r.calls.split("\n").filter(l => l.startsWith("issue edit"));
+    expect(editCalls.length).toBe(0);
+    const closeCalls = r.calls.split("\n").filter(l => l.startsWith("issue close"));
+    expect(closeCalls.length).toBe(0);
+  });
+
+  test("already-closed in dry-run: prints strip cmd only, no close", () => {
+    writeShim({ state: "CLOSED", statusLabels: ["status:in-progress"] });
+    const r = run(["157", "--dry-run"]);
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toContain("gh issue edit 157");
+    expect(r.stdout).toContain("--remove-label status:in-progress");
+    expect(r.stdout).not.toContain("gh issue close");
   });
 
   test("close uses --reason completed", () => {

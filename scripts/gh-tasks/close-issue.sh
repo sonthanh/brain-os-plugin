@@ -6,6 +6,12 @@
 # plugs the ghost-label leak: closed issues with stale status:in-progress
 # (or status:ready) labels were leaking into /status counts.
 #
+# Idempotent on already-closed issues: when GitHub auto-closed the issue via
+# `Closes <repo>#N` commit-message magic on push, this helper still strips
+# any lingering status:* labels and exits 0 (skips comment + close steps).
+# Without that, push-then-helper sequence leaves ghost status labels on the
+# already-closed issue.
+#
 # Usage: close-issue.sh <issue-N> [--comment <C>] [--dry-run]
 
 set -uo pipefail
@@ -32,7 +38,9 @@ Arguments:
 Behavior:
   - Closes with --reason completed
   - Removes EVERY status:* label in a single gh edit call before close
-  - Errors cleanly on already-closed issues
+  - Idempotent on already-closed issues: strips ghost status:* labels then
+    exits 0 (skips comment + close steps). Required so push-then-helper
+    sequence works when "Closes <repo>#N" auto-closed the issue first.
 EOF
 }
 
@@ -69,9 +77,6 @@ META=$(gh issue view "$ISSUE" -R "$REPO" --json state,labels 2>&1) || {
 }
 
 STATE=$(echo "$META" | jq -r '.state' 2>/dev/null)
-if [[ "$STATE" == "CLOSED" ]]; then
-  echo "ERROR: #$ISSUE is already closed" >&2; exit 1
-fi
 
 # Collect every status:* label on the issue (defensive — there may be more
 # than one if drift has accumulated). Portable read loop (macOS bash 3.2 has
@@ -101,8 +106,10 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
   if [[ ${#STATUS_LABELS[@]} -gt 0 ]]; then
     build_edit_cmd
   fi
-  [[ -n "$COMMENT" ]] && build_comment_cmd
-  build_close_cmd
+  if [[ "$STATE" != "CLOSED" ]]; then
+    [[ -n "$COMMENT" ]] && build_comment_cmd
+    build_close_cmd
+  fi
   exit 0
 fi
 
@@ -115,6 +122,11 @@ if [[ ${#STATUS_LABELS[@]} -gt 0 ]]; then
   if ! gh "${EDIT_ARGS[@]}" >/dev/null 2>&1; then
     echo "ERROR: failed to strip status:* labels on #$ISSUE" >&2; exit 2
   fi
+fi
+
+if [[ "$STATE" == "CLOSED" ]]; then
+  echo "✓ #$ISSUE already closed — stripped ${#STATUS_LABELS[@]} ghost status label(s), skipped close"
+  exit 0
 fi
 
 if [[ -n "$COMMENT" ]]; then
