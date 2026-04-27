@@ -145,6 +145,20 @@ export interface GhClient {
   editBody(n: number, body: string): Promise<void>;
   closeIssue(n: number): Promise<void>;
   relabelHuman(n: number): Promise<void>;
+  /**
+   * List issues by label filter. Used by run-parallel.ts queue-pick mode.
+   * Filter labels are AND-joined into one --label arg per gh CLI semantics.
+   */
+  listIssues(
+    labels: string[],
+    limit: number,
+  ): Promise<Array<{ number: number; title: string; labels: string[] }>>;
+  /**
+   * Atomic claim: status:ready → status:in-progress via the canonical helper.
+   * Used by run-parallel.ts since each parallel batch claims N issues up front
+   * (run-story.ts claims happen inside per-child workers).
+   */
+  claim(n: number): Promise<void>;
 }
 
 export interface SpawnClient {
@@ -213,7 +227,7 @@ export async function cleanupWorker(
 // Real implementations (Bun.spawn / gh CLI / osascript)
 // =========================================================================
 
-class RealGh implements GhClient {
+export class RealGh implements GhClient {
   constructor(private repo: string) {}
 
   private async run(args: string[]): Promise<string> {
@@ -268,9 +282,54 @@ class RealGh implements GhClient {
       try { await this.run(args); } catch { /* tolerate */ }
     }
   }
+
+  async listIssues(
+    labels: string[],
+    limit: number,
+  ): Promise<Array<{ number: number; title: string; labels: string[] }>> {
+    const labelFilter = labels.join(",");
+    const json = await this.run([
+      "issue",
+      "list",
+      "-R",
+      this.repo,
+      "--label",
+      labelFilter,
+      "--state",
+      "open",
+      "--json",
+      "number,title,labels",
+      "--limit",
+      String(limit),
+    ]);
+    const data = JSON.parse(json) as Array<{
+      number: number;
+      title: string;
+      labels: Array<{ name: string }>;
+    }>;
+    return data.map((r) => ({
+      number: r.number,
+      title: r.title,
+      labels: r.labels.map((l) => l.name),
+    }));
+  }
+
+  async claim(n: number): Promise<void> {
+    await this.run([
+      "issue",
+      "edit",
+      String(n),
+      "-R",
+      this.repo,
+      "--remove-label",
+      "status:ready",
+      "--add-label",
+      "status:in-progress",
+    ]);
+  }
 }
 
-class RealSpawn implements SpawnClient {
+export class RealSpawn implements SpawnClient {
   spawnWorker(name: string, prompt: string, logPath: string, cwd: string): { pid: number } {
     const fs = require("fs");
     const fd = fs.openSync(logPath, "a");
@@ -318,7 +377,7 @@ class RealSpawn implements SpawnClient {
   }
 }
 
-class RealProcessChecker implements ProcessChecker {
+export class RealProcessChecker implements ProcessChecker {
   isAlive(pid: number): boolean {
     try {
       // Signal 0 doesn't actually send anything — just checks existence + permission.
@@ -333,11 +392,11 @@ class RealProcessChecker implements ProcessChecker {
   }
 }
 
-class RealNotifier implements Notifier {
+export class RealNotifier implements Notifier {
   private static readonly SP = "/Applications/supaterm.app/Contents/Resources/bin/sp";
-  constructor(private parent: number) {}
+  constructor(private title: string) {}
   notify(message: string): void {
-    const title = `Brain OS — Story #${this.parent}`;
+    const title = this.title;
     const escapedShell = (s: string) => s.replace(/'/g, "'\\''");
     const banner = [
       `clear`,
@@ -365,7 +424,7 @@ class RealNotifier implements Notifier {
   }
 }
 
-class FileLogger implements Logger {
+export class FileLogger implements Logger {
   constructor(private path: string) {}
   log(msg: string): void {
     const line = `${new Date().toISOString()} | ${msg}\n`;
@@ -374,7 +433,7 @@ class FileLogger implements Logger {
   }
 }
 
-class FileStatusWriter implements StatusWriter {
+export class FileStatusWriter implements StatusWriter {
   constructor(private path: string) {}
   write(status: StoryStatus): void {
     const fs = require("fs");
@@ -685,7 +744,7 @@ async function main() {
     gh: new RealGh(repo),
     spawn: new RealSpawn(),
     proc: new RealProcessChecker(),
-    notify: new RealNotifier(parent),
+    notify: new RealNotifier(`Brain OS — Story #${parent}`),
     logger,
     status,
     pollIntervalMs: 30_000,
@@ -711,7 +770,7 @@ async function main() {
       hb: -1,
       error: msg,
     });
-    new RealNotifier(parent).notify(`Story #${parent} crashed: ${msg.slice(0, 80)}`);
+    new RealNotifier(`Brain OS — Story #${parent}`).notify(`Story #${parent} crashed: ${msg.slice(0, 80)}`);
     process.exit(1);
   }
 }

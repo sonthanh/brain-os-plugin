@@ -209,12 +209,12 @@
     {
       "id": 19,
       "prompt": "How does `/impl auto -p 3` compose the parallel cap with the autonomous loop, and what is the worst-case work envelope before the safety cap fires?",
-      "expected_output": "`/impl auto -p 3` forwards `-p 3` into the *inner* `/impl` invocation, not into the ralph-loop wrapper. Each loop iteration runs `/impl -p 3`, which spawns 3 worktree-isolated Agent-tool subagents per iteration (subject to the existing parallel-mode cap, hard max 5). Ralph sees a single composite prompt — `\"/impl -p 3\"` — even though it fans out N subagents internally. Worst-case envelope: 50 outer iterations × 3 subagents = 150 tracer-bullet TDD cycles before `--max-iterations 50` fires, unless `<promise>NO_MORE_ISSUES</promise>` lands earlier and brings the loop home. The empty-backlog sentinel is the fast path to terminate; the iteration cap is the safety net.",
+      "expected_output": "`/impl auto -p 3` forwards `-p 3` into the *inner* `/impl` invocation, not into the ralph-loop wrapper. Each loop iteration runs `/impl -p 3`, which dispatches to the `scripts/run-parallel.ts` script orchestrator (mirroring `/impl story` after ai-brain#161 + #173) — workers are `claude -w` sessions spawned with explicit per-issue cwd from area:* labels via `inferRepoFromIssueArea(labels, areaMap)`, no Agent-tool path. Subject to the parallel cap (HARD_CAP=5). Ralph sees a single composite prompt — `\"/impl -p 3\"` — even though it fans out N workers internally. Worst-case envelope: 50 outer iterations × 3 workers = 150 inner /impl invocations before `--max-iterations 50` fires, unless `<promise>NO_MORE_ISSUES</promise>` lands earlier and brings the loop home. The empty-backlog sentinel is the fast path to terminate; the iteration cap is the safety net.",
       "expectations": [
         "Says -p N is forwarded into the inner /impl, not into ralph-loop",
-        "Says each iteration spawns N worktree-isolated subagents",
+        "Says each iteration spawns N workers via the run-parallel.ts script orchestrator (claude -w sessions, not Agent-tool)",
         "Mentions parallel-cap hard max 5",
-        "Names the worst-case envelope as max-iterations × subagents (50 × 3 = 150) before safety cap",
+        "Names the worst-case envelope as max-iterations × workers (50 × 3 = 150) before safety cap",
         "Says <promise>NO_MORE_ISSUES</promise> is the early-exit handshake that terminates before the cap"
       ]
     },
@@ -236,14 +236,15 @@
     {
       "id": 21,
       "prompt": "How does `/impl -p <N>,<M>,...` (parallel list form) differ from `/impl -p K` (parallel count), and what happens if the list has more than 5 issues?",
-      "expected_output": "Both forms use the existing -p / parallel mode (Agent-tool subagents with isolation: \"worktree\", main session merges + pushes + closes). Difference: `-p K` (integer) picks the top K from the queue via `gh issue list --label status:ready,owner:bot --limit K` — owner-filtered. `-p <list>` (comma-separated) skips the queue query entirely and uses the explicit list as the N issues to spawn — owner filter is bypassed (same as /impl <N> issue-mode owner override; the user named these explicitly). Parser: split on comma, trim, parse each as positive integer; invalid tokens fatal-abort, duplicates deduped with WARN. Hard cap: HARD_CAP = 5. If list.length > 5, clamp to first 5 and emit WARN: clamped parallel list to first 5 (got <list.length>): #<a>, #<b>, ... — do NOT silently drop. Worktree isolation is always-on (never skipped, never conditional). Failure handling and outcome-log same as -p K: failed subagent leaves its issue at status:ready, orchestrator continues; one `parallel` outcome-log row per issue with mode=parallel and n=<list-length> (post-dedupe-and-clamp).",
+      "expected_output": "Both forms dispatch to `scripts/run-parallel.ts` (TS script orchestrator, mirroring `/impl story` after ai-brain#161 + #173). The script runs detached via `nohup` — main Claude session burns ~0 tokens during the drain. Difference at the args layer: `-p K` (integer) invokes `--count K --area plugin-brain-os` which calls `gh.listIssues(status:ready+owner:bot, K)` to pick from queue head — owner-filtered. `-p <list>` (comma-separated) invokes `--issues <list>` which the script's `parseIssueList` parses (split on comma, trim, integer assert; invalid token fatal-aborts; duplicates deduped with WARN; list > HARD_CAP=5 clamps to first 5 with WARN — never silent drop). Owner filter is bypassed in list form (the user named these explicitly, same as /impl <N> issue-mode override). Same-area assertion via `validateSameArea` runs before any claim — mismatched area:* labels throw `FATAL: list spans multiple areas (#X area:a, #Y area:b)`. Workers are `claude -w` sessions spawned via `Bun.spawn` with explicit `cwd: inferRepoFromIssueArea(labels, areaMap)` per issue, NOT Agent-tool subagents. Failure handling: dead worker (PID gone, issue still OPEN) → `gh.relabelHuman(N)` (status:ready + owner:human) + add to failed; siblings continue. Closed worker → `cleanupWorker(name, cwd)` removes worktree + branch. Outcome-log: one row per issue, `mode=parallel,n=<list-length>` (post-dedupe-and-clamp).",
       "expectations": [
-        "Says -p K picks queue head via gh issue list (owner:bot filter)",
-        "Says -p <list> uses the explicit list and bypasses the gh issue list query",
-        "Says -p <list> bypasses the owner filter (operator override, same as issue-mode list)",
-        "Says HARD_CAP is 5 and list >5 clamps to first 5 with WARN (not silent drop)",
-        "Says worktree isolation is always-on for parallel mode",
-        "Says failed subagent re-labels status:ready and orchestrator continues",
+        "Says both -p K and -p <list> dispatch to scripts/run-parallel.ts (TS script orchestrator)",
+        "Says workers are claude -w sessions spawned via Bun.spawn with explicit cwd, NOT Agent-tool subagents",
+        "Says -p K uses --count K --area X (queue-pick with owner:bot filter)",
+        "Says -p <list> uses --issues N,M,... and bypasses the owner filter (operator override)",
+        "Says HARD_CAP=5 with clamp + WARN (not silent drop)",
+        "Says same-area assertion (validateSameArea) runs BEFORE any claim and throws on mismatch",
+        "Says dead worker → relabelHuman + failed; siblings continue. Closed worker → cleanupWorker.",
         "Says outcome-log mode=parallel,n=<post-dedupe-clamp-length>"
       ]
     },
@@ -268,6 +269,20 @@
         "Names the reason: single cwd / worktree clones from orchestrator cwd",
         "Says assertion applies to BOTH sequential and parallel list forms",
         "Says recovery is to split into per-area invocations"
+      ]
+    },
+    {
+      "id": 24,
+      "prompt": "Why does `/impl -p` use a TS script orchestrator (run-parallel.ts) instead of the Agent tool, and what is the cwd-correctness invariant the refactor enforces?",
+      "expected_output": "The Agent-tool path failed two ways for parallel mode (smoke-tested 2026-04-27, ai-brain#173): (1) `Agent({isolation: \"worktree\"})` clones from the parent session's cwd — when main session is in the vault but listed issues are area:plugin-brain-os, the worktree was a vault clone and isolation broke; (2) Agent tool has no cwd arg per spawn, so the workaround \"main session cd into the area repo first\" couldn't be encoded reliably (harness resets cwd between Bash calls). The script orchestrator pattern (mirroring /impl story after #161's same fix) sidesteps both: `Bun.spawn(claude -w ..., { cwd })` takes explicit per-issue cwd derived from `inferRepoFromIssueArea(labels, areaMap)` — each worker lands in the correct repo regardless of where the orchestrator launched. The cwd-correctness invariant: every spawned worker's cwd matches its issue's area:* label mapping; if no area:* label or unknown area, the orchestrator throws before claim. Test coverage: `scripts/run-parallel.test.ts` asserts `state.spawnCalls[i].cwd` matches the area-mapped repo for every issue in a happy-path run.",
+      "expectations": [
+        "Names ai-brain#173 as the issue that drove the refactor",
+        "Says Agent({isolation: \"worktree\"}) clones from parent session's cwd, not per-issue",
+        "Says Agent tool has no cwd arg per spawn",
+        "Says the workaround (main-session cd) couldn't be encoded reliably (harness resets cwd)",
+        "Says script orchestrator uses Bun.spawn with explicit cwd derived from inferRepoFromIssueArea",
+        "Says invariant: every worker's cwd matches its issue's area:* mapping",
+        "Says missing or unknown area:* label throws BEFORE claim (fail-fast)"
       ]
     }
   ]

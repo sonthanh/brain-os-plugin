@@ -285,75 +285,118 @@ Status check anytime via `tail -f ~/.local/state/impl-story/<P>.log` from any te
 
 ## Workflow — `-p N` mode (alias `--parallel N`)
 
-The main session is the orchestrator. It does NOT touch artifact files itself in this mode.
+`/impl -p N` and `/impl -p <N>,<M>,...` both dispatch to a TypeScript script orchestrator (`scripts/run-parallel.ts`, bun runtime, unit-tested via `scripts/run-parallel.test.ts`) — same architecture as `/impl story` (ai-brain#161 + #173). Main Claude session exits after kicking it off, ~0 token burn for the duration of the drain. Workers spawned via `claude -w` with explicit per-issue cwd from `area:*` labels — no Agent-tool path, no orchestrator-cwd dependency.
 
-### 1. Pick N
+### Invocation
 
-Same `gh issue list` query as `once` mode but `--limit N`. If fewer than N return, run with what you got. If zero → output `<promise>NO_MORE_ISSUES</promise>` in your text response and exit 0.
-
-### 2. Spawn N subagents in parallel
-
-Use the `Agent` tool with `isolation: "worktree"` for every spawned subagent. Verbatim:
-
-```
-Agent({
-  description: "impl issue #<N>",
-  subagent_type: "general-purpose",
-  isolation: "worktree",
-  prompt: "<self-contained brief: issue number, full body, /tdd pattern, commit conventions, exit protocol>"
-})
-```
-
-Send all N tool calls in a single assistant message so they run concurrently.
-
-The `isolation: "worktree"` parameter is always-on for parallel mode — never conditional, never optional. It gives each subagent a temporary git worktree, auto-cleaned when the agent makes no changes, and prevents the "two teammates editing the same file" overwrite class identified in the grill.
-
-Because each subagent has its own working tree, you do NOT need to pre-validate disjoint file ownership across the N issues. /slice warns on file overlap as a soft signal; worktree isolation is the hard guarantee.
-
-### 3. Merge
-
-When subagents return:
-
-- Each subagent has produced a commit on a branch in its worktree
-- Pull each branch into the main worktree:
-  ```bash
-  git fetch <branch-or-worktree-ref>
-  git merge --ff-only <branch>  # or rebase if conflicts emerge
-  ```
-- If a subagent reports failure (test still red, or aborted): leave its issue back in `status:ready` (re-label), drop its worktree commits, and continue with the rest. Do not block successful siblings.
-
-### 4. Push + close
-
-After every successful merge:
+When the user types `/impl -p <K>` (integer K, queue-pick mode), execute:
 
 ```bash
-git pull --rebase && git push
-for N in <successful-issue-numbers>; do
-  bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/close-issue.sh" $N
-done
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/ 2>/dev/null | sort -V | tail -1)}"
+PLUGIN_ROOT="${PLUGIN_ROOT%/}"
+SCRIPT="$PLUGIN_ROOT/scripts/run-parallel.ts"
+if [ ! -f "$SCRIPT" ]; then
+  osascript -e 'display notification "FATAL: run-parallel.ts not found" with title "/impl -p"'
+  echo "FATAL: $SCRIPT not found (PLUGIN_ROOT=$PLUGIN_ROOT)"
+  exit 1
+fi
+
+mkdir -p ~/.local/state/impl-parallel
+BATCH_ID="count-<K>-plugin-brain-os-$(date +%s)"
+nohup /opt/homebrew/bin/bun run "$SCRIPT" --count <K> --area plugin-brain-os -p <K> \
+  >> ~/.local/state/impl-parallel/${BATCH_ID}.log 2>&1 &
+PID=$!
+
+sleep 5
+if ! ps -p $PID > /dev/null 2>&1; then
+  osascript -e "display notification \"Orchestrator died within 5s — see log\" with title \"/impl -p\""
+  echo "FATAL: orchestrator (PID $PID) died. Tail of log:"
+  tail -20 ~/.local/state/impl-parallel/${BATCH_ID}.log
+  exit 1
+fi
+echo "Started orchestrator (PID $PID). Log: ~/.local/state/impl-parallel/${BATCH_ID}.log"
 ```
 
-### 5. Outcome log
+When the user types `/impl -p <N>,<M>,...` (explicit list mode), execute:
 
-One log line PER issue (not per parallel run). Each line carries `mode=parallel` in the optional fields so /improve can attribute outcomes back to mode.
+```bash
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/ 2>/dev/null | sort -V | tail -1)}"
+PLUGIN_ROOT="${PLUGIN_ROOT%/}"
+SCRIPT="$PLUGIN_ROOT/scripts/run-parallel.ts"
+[ -f "$SCRIPT" ] || { echo "FATAL: run-parallel.ts not found"; exit 1; }
+
+mkdir -p ~/.local/state/impl-parallel
+ISSUES="<N>,<M>,..."  # raw user input, parser dedupes + clamps inside script
+BATCH_ID="list-${ISSUES//,/-}"
+nohup /opt/homebrew/bin/bun run "$SCRIPT" --issues "$ISSUES" -p <PARALLEL_CAP> \
+  >> ~/.local/state/impl-parallel/${BATCH_ID}.log 2>&1 &
+PID=$!
+
+sleep 5
+if ! ps -p $PID > /dev/null 2>&1; then
+  osascript -e "display notification \"Orchestrator died within 5s — see log\" with title \"/impl -p\""
+  tail -20 ~/.local/state/impl-parallel/${BATCH_ID}.log
+  exit 1
+fi
+echo "Started orchestrator (PID $PID). Log: ~/.local/state/impl-parallel/${BATCH_ID}.log"
+```
+
+Both forms self-detach via `nohup ... &`. The verify block (sleep 5 + `ps`) catches launch-time crashes (module-not-found, bun missing, syntax error). After verify passes, your work is done — exit cleanly.
+
+The orchestrator writes a heartbeat status JSON to `~/.local/state/impl-parallel/<batch-id>.status` on every poll cycle (`{"phase":"polling","watching":[...],"hb":N,...}`). External observers read that file — not the unstructured log — to track progress. On crash the script writes `phase:"died"` with the error.
+
+### What the script does
+
+1. Resolves issue list:
+   - `--issues <N>,<M>,...` → calls `parseIssueList` (split `,` → trim → integer assert → dedupe with WARN → clamp at HARD_CAP=5 with WARN).
+   - `--count K --area X` → calls `gh.listIssues(["area:X","status:ready","owner:bot"], K)` (queue-pick mode, owner:bot filter applied).
+2. Calls `gh.viewFull(N)` for each issue. Asserts same `area:*` label across the list (`validateSameArea`); throws `FATAL: list spans multiple areas (...)` on mismatch BEFORE claiming any issue.
+3. For each OPEN issue: calls `gh.claim(N)` (`status:ready` → `status:in-progress`); already-CLOSED issues are added to `closed` and skipped without spawn or claim. Per-issue cwd derived via `inferRepoFromIssueArea(labels, areaMap)`.
+4. **Greedy parallel drainer loop**:
+   - Top up parallel pool: spawns `claude -w "parallel-<batchId>-issue-<N>" --dangerously-skip-permissions -p "/impl <N>"` workers with explicit `cwd: <area-repo>` up to the parallel cap (clamped to HARD_CAP=5).
+   - Heartbeat status write before sleep.
+   - Poll each watched: `gh.viewState(N)` + `proc.isAlive(pid)` → `decideWorkerAction`. CLOSED → `cleanupWorker(name, cwd)` + add to closed. Dead → `gh.relabelHuman(N)` + add to failed; siblings continue.
+5. Final notify on completion (success vs N failures).
+6. Returns `{closed, failed}`. Inner `/impl <N>` workers handled their own commit + push + close-issue.sh; the orchestrator does NOT push or close from main repo.
+
+### Parallel cap rationale
+
+Default `-p 3`, hard-capped at 5 inside the script (`clampParallel(p, HARD_CAP)`). Each worker is its own `claude -w` session consuming subscription quota. User can raise to 5 with `-p 5`; values above 5 are silently clamped.
+
+### Token cost
+
+| Phase | Main Claude tokens |
+|-------|---------------------|
+| `/impl -p <K>` or `/impl -p <list>` invocation | ~1K (skill prose + bash command) |
+| Detached drain (could be hours) | 0 |
+| Per-worker session | Independent quota, isolated context |
+
+Status check anytime via `tail -f ~/.local/state/impl-parallel/<batch-id>.log` from any terminal — no Claude session needed.
+
+### Why not Agent-tool spawn?
+
+Earlier `/impl -p` versions used `Agent({isolation: "worktree"})` from the main session. Two problems surfaced (smoke-tested 2026-04-27, ai-brain#173):
+
+1. **Wrong-cwd worktree.** `Agent({isolation: "worktree"})` clones from the parent session's cwd — when main session is in the vault but listed issues are `area:plugin-brain-os`, the worktree was a vault clone and isolation broke (or had to be skipped entirely).
+2. **No per-issue cwd param.** Agent tool has no `cwd` arg, so the workaround was "main session must `cd` into the area repo first" — but harness resets cwd between Bash calls, so the workaround couldn't be encoded in skill prose reliably.
+
+The script orchestrator pattern (mirroring `/impl story` after #161's same fix) sidesteps both: `Bun.spawn(claude -w ..., { cwd })` takes explicit per-issue cwd derived from `inferRepoFromIssueArea(labels)`. Each worker lands in the correct repo regardless of where the orchestrator launched.
 
 ### List form — parallel (`/impl -p <N>,<M>,...`)
 
-When the `-p` arg contains one or more commas, parse as a comma-separated list of issue numbers and spawn one subagent per listed issue in parallel.
+The `--issues <N>,<M>,...` form covered above is the list-mode entry. The script's `parseIssueList` enforces parser rules:
 
-**Parser rule.** Same as sequential list: split on `,`, trim, parse each as positive integer. Invalid token → fatal abort. Duplicates → dedupe with `WARN: dropped duplicate #<N> from list`.
+- **Parser rule.** Split on `,`, trim whitespace, parse each token as positive integer. Invalid token (`abc`, `-1`, `0`) → throws `FATAL: invalid issue number in list: <token>`.
+- **Dedupe.** Removes duplicates preserving first occurrence; emits `WARN: dropped duplicate #<N> from list` per drop.
+- **Clamp.** `list.length > HARD_CAP` (5) → keeps first 5 and emits `WARN: clamped parallel list to first 5 (got <length>): dropped #<a>, #<b>, ...`. Does NOT silently drop.
+- **Same-area assertion.** Pre-check `area:*` labels via `validateSameArea`. Mismatch → throws `FATAL: list spans multiple areas (#<X> area:<a>, #<Y> area:<b>). Run separate /impl invocations per area.`. Critical because `Bun.spawn(claude -w ..., {cwd})` takes ONE cwd per worker — multiple areas would still need split invocations even though the script accepts per-issue cwd; the same-area assertion is documentation/safety, not a runtime constraint.
+- **Owner filter bypass.** Listed issues do not need `owner:bot` (same as issue-mode list — the user named them explicitly). Only `--count` queue-pick mode applies the owner filter.
 
-**Same-area assertion (deterministic).** Same as sequential list: pre-check `area:*` labels for every listed issue; if they diverge, fatal abort with the same `FATAL: list spans multiple areas (...)` message. `Agent({isolation: "worktree"})` clones from the orchestrator's cwd — a list spanning two repos would land each subagent's commit in the wrong repo for the off-area issue.
+### Failure handling
 
-**Step 1 — Pick: skipped.** Replace the queue-head `gh issue list --limit N` query with the explicit list. Owner-label filter is bypassed (same as issue-mode list — the user named these explicitly).
+Worker died (PID gone, issue still OPEN) → `gh.relabelHuman(N)` (remove `status:in-progress`+`owner:bot`, add `status:ready`+`owner:human`) + add to `failed`. Loop continues to siblings. Final notification surfaces failure list.
 
-**Step 2 — Clamp.** If `list.length > HARD_CAP` (5), keep first 5 and warn: `WARN: clamped parallel list to first 5 (got <list.length>): #<a>, #<b>, ...`. Do NOT silently drop.
-
-**Steps 2-5 — Spawn / merge / push + close / log: unchanged.** Use the existing `Agent({isolation: "worktree", ...})` spawn pattern, one tool call per listed issue, all in a single assistant message. Outcome-log rows carry `mode=parallel,n=<list-length>` (post-dedupe, post-clamp).
-
-**Failure handling.** Same as `-p K`: a subagent that returns failure leaves its issue at `status:ready` (re-labeled) and the orchestrator continues merging successful siblings. After all subagents return, emit the same final summary block as sequential list (closed / failed / skipped).
-
-**Worktree isolation is always-on.** Same hard guarantee as `-p K` — never conditional, never skipped.
+Worker closed cleanly → `cleanupWorker(name, cwd)` removes the worktree + branch left behind by the closed `claude -w` session.
 
 ## Workflow — `auto` mode
 
@@ -411,32 +454,25 @@ Per iteration burns inference in the current Claude session. NOT detached (this 
 
 The sentinel is `<promise>NO_MORE_ISSUES</promise>` in the assistant text response — see § Defaults → Empty backlog sentinel for the contract. `Bash(echo)` does NOT satisfy it; ralph reads transcript text blocks (`type: text`), not unix stdout. The auto mode inherits this contract from the inner `/impl` it loops.
 
-## Required reading inside the spawned subagent
+## How spawned workers behave
 
-When `-p N` (alias `--parallel N`) spawns a subagent, the prompt MUST embed:
+Workers spawned by `/impl story` (`scripts/run-story.ts`) and `/impl -p` (`scripts/run-parallel.ts`) are full `claude -w "<name>" --dangerously-skip-permissions -p "/impl <N>"` sessions — not Agent-tool subagents. Each worker reads `skills/impl/SKILL.md` fresh on startup and runs the `issue` mode workflow end-to-end (claim → read → /tdd → commit → push → close), which already encodes:
 
-1. The full issue body verbatim (do not summarize — the subagent has no shared context)
-2. A pointer to `/tdd` SKILL.md (path: `~/work/brain-os-plugin/skills/tdd/SKILL.md`)
-3. Commit-message convention (Conventional Commits + `Closes <tracker-repo>#N` + Co-Authored-By line) — and the `IMPL_AFK=1` prefix on the `git commit` invocation (the trunk-block hook gates AFK commits against `references/trunk-paths.txt`; see Gotchas)
-4. **Subagent-side trunk-paths self-check (belt-and-braces).** The PreToolUse(Bash) hook may not fire from a subagent's worktree because the hook process can inherit the orchestrator's cwd, in which case `git diff --cached` reads the wrong index and the gate silently passes. To close that gap, the subagent MUST run this check itself before invoking `git commit`:
-   ```bash
-   PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/ 2>/dev/null | sort -V | tail -1)}"
-   PLUGIN_ROOT="${PLUGIN_ROOT%/}"
-   git diff --cached --name-only | bash "$PLUGIN_ROOT/scripts/check-trunk-paths.sh"
-   if [ $? -eq 1 ]; then
-     # Trunk match — re-label and exit (do NOT commit, do NOT push).
-     # Owner flip FIRST so a mid-sequence failure never leaves the issue
-     # `owner:bot + status:ready` (which `/impl auto` would re-pick and loop on).
-     # Worst-case half-state is `owner:human + status:in-progress` — visible to
-     # the human, ignored by the AFK pickup filter.
-     gh issue edit <N> -R <tracker-repo> --remove-label owner:bot --add-label owner:human
-     bash "$PLUGIN_ROOT/scripts/gh-tasks/transition-status.sh" <N> --to ready
-     exit 0
-   fi
-   ```
-   If the script exits 1 (matches), abort the subagent gracefully. If exit 0, proceed to commit.
-5. Exit protocol: self-check → commit → push → output the issue number on a line by itself so the orchestrator can latch. If the orchestrator's PreToolUse hook ALSO fires and exits 2 (defense in depth), follow the same re-label-and-exit path.
-6. Worktree note: "you are running with `isolation: 'worktree'`; commit in your worktree branch, do not push, the orchestrator will fast-forward into main"
+- Full issue body fetched via `gh issue view <N>`.
+- `/tdd` invocation per artifact-type table at `~/work/brain-os-plugin/skills/tdd/SKILL.md`.
+- Conventional Commits subject + body + `Closes <tracker-repo>#<N>` + Co-Authored-By line.
+- `IMPL_AFK=1` prefix on the commit invocation so the trunk-block hook gates AFK trunk-touches against `references/trunk-paths.txt`.
+- Re-label-and-exit response on trunk-block hook fire (owner flip FIRST so a mid-sequence failure never leaves the issue `owner:bot + status:ready`):
+
+  ```bash
+  gh issue edit <N> -R <tracker-repo> --remove-label owner:bot --add-label owner:human
+  bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/transition-status.sh" <N> --to ready
+  exit 0
+  ```
+
+- Worker exit protocol: print `#<N> done` (or `#<N> FAILED: <reason>`) on a line by itself so external watchers can latch.
+
+The worker's cwd is set explicitly by the parent orchestrator via `Bun.spawn(claude -w ..., { cwd })`, derived from the issue's `area:*` label (`inferRepoFromIssueArea(labels, areaMap)`). Workers do NOT need their own trunk-paths self-check — the parent script already places them in the correct repo, the PreToolUse(Bash) trunk-block hook fires from the correct cwd, and the canonical `IMPL_AFK=1` prefix gate in `issue` mode handles trunk-block reactions.
 
 ## Mid-flow rule
 
