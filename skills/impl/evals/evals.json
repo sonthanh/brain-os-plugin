@@ -217,6 +217,58 @@
         "Names the worst-case envelope as max-iterations × subagents (50 × 3 = 150) before safety cap",
         "Says <promise>NO_MORE_ISSUES</promise> is the early-exit handshake that terminates before the cap"
       ]
+    },
+    {
+      "id": 20,
+      "prompt": "What does `/impl <N>,<M>,...` do (sequential list form), and how does it handle a per-issue failure mid-list?",
+      "expected_output": "`/impl <N>,<M>,...` is the sequential list form of `issue` mode — when the arg contains one or more commas, parse as a comma-separated list of issue numbers and run each through the full `issue` mode workflow (claim → read → /tdd → IMPL_AFK=1 commit → pull --rebase → push → close-issue.sh) in list order. Parser: split on comma, trim, parse each token as positive integer; invalid tokens fatal-abort. Duplicates are deduped with a WARN. Failure handling: if any per-issue step fails (test stays red, /tdd aborts, trunk-block hook fires, push rejected), re-label that issue back to status:ready (and owner:human if trunk-block fired), log the failure, and CONTINUE with the next issue in the list — do not abort the rest. After the loop, emit a final summary block listing closed / failed / skipped issues. Sequential list does NOT use worktree isolation — edits run in the main worktree, same as a single /impl <N>; if you need parallel + isolation use /impl -p <N>,<M>,... instead. Outcome-log: one `once` row per issue with mode=list-sequential and n=<list-length> in the optional fields. NO `<promise>NO_MORE_ISSUES</promise>` — list form has no queue and no empty-condition.",
+      "expectations": [
+        "Says /impl <N>,<M> parses comma-separated list and runs each through issue mode sequentially",
+        "Says each iteration runs the full issue-mode workflow including IMPL_AFK=1 commit + close-issue.sh",
+        "Says failure of one issue does NOT abort the rest of the list — continue with next",
+        "Says failed issue is re-labeled status:ready (and owner:human if trunk-block fired)",
+        "Says final summary block reports closed / failed / skipped",
+        "Says sequential list does NOT use worktree isolation",
+        "Says outcome-log uses mode=list-sequential",
+        "Says NO_MORE_ISSUES sentinel is NOT emitted in list form"
+      ]
+    },
+    {
+      "id": 21,
+      "prompt": "How does `/impl -p <N>,<M>,...` (parallel list form) differ from `/impl -p K` (parallel count), and what happens if the list has more than 5 issues?",
+      "expected_output": "Both forms use the existing -p / parallel mode (Agent-tool subagents with isolation: \"worktree\", main session merges + pushes + closes). Difference: `-p K` (integer) picks the top K from the queue via `gh issue list --label status:ready,owner:bot --limit K` — owner-filtered. `-p <list>` (comma-separated) skips the queue query entirely and uses the explicit list as the N issues to spawn — owner filter is bypassed (same as /impl <N> issue-mode owner override; the user named these explicitly). Parser: split on comma, trim, parse each as positive integer; invalid tokens fatal-abort, duplicates deduped with WARN. Hard cap: HARD_CAP = 5. If list.length > 5, clamp to first 5 and emit WARN: clamped parallel list to first 5 (got <list.length>): #<a>, #<b>, ... — do NOT silently drop. Worktree isolation is always-on (never skipped, never conditional). Failure handling and outcome-log same as -p K: failed subagent leaves its issue at status:ready, orchestrator continues; one `parallel` outcome-log row per issue with mode=parallel and n=<list-length> (post-dedupe-and-clamp).",
+      "expectations": [
+        "Says -p K picks queue head via gh issue list (owner:bot filter)",
+        "Says -p <list> uses the explicit list and bypasses the gh issue list query",
+        "Says -p <list> bypasses the owner filter (operator override, same as issue-mode list)",
+        "Says HARD_CAP is 5 and list >5 clamps to first 5 with WARN (not silent drop)",
+        "Says worktree isolation is always-on for parallel mode",
+        "Says failed subagent re-labels status:ready and orchestrator continues",
+        "Says outcome-log mode=parallel,n=<post-dedupe-clamp-length>"
+      ]
+    },
+    {
+      "id": 22,
+      "prompt": "What happens if the user types `/impl auto 164,165` or `/impl auto -p 164,165`?",
+      "expected_output": "Both forms are rejected. `auto` semantically means \"drain the queue until empty\" — a fixed list has no queue and no `<promise>NO_MORE_ISSUES</promise>` empty-condition; the wrapper would never terminate cleanly. The skill aborts with FATAL: /impl auto does not accept issue lists. Use /impl 164,165 (sequential) or /impl -p 164,165 (parallel) instead. and exits 1. The error message names both correct alternatives so the user has an immediate recovery path; no silent fallback to one or the other.",
+      "expectations": [
+        "Says /impl auto + list arg is rejected with FATAL error",
+        "Explains auto means drain-queue and lists have no queue / no NO_MORE_ISSUES condition",
+        "Says error message names both alternatives (sequential /impl <list> and parallel /impl -p <list>)",
+        "Says NO silent fallback — abort and exit 1"
+      ]
+    },
+    {
+      "id": 23,
+      "prompt": "What happens if `/impl 200,201` lists issues from different `area:*` labels (e.g. #200 area:plugin-brain-os and #201 area:vault)?",
+      "expected_output": "Skill aborts before claiming any issue. Same-area assertion is part of the parser flow (sequential AND parallel list forms): pre-check the area:* label of every listed issue via `gh issue view <N> --json labels`. If labels diverge, fatal abort with `FATAL: list spans multiple areas (#200 area:plugin-brain-os, #201 area:vault). Run separate /impl invocations per area.` and exit 1. Reason: the main session has ONE cwd, and Agent({isolation: \"worktree\"}) clones from the orchestrator cwd — a list spanning two repos would land each commit in the wrong repo for the off-area issue. The pre-existing single-issue /impl <N> path inherits this constraint implicitly (operator picks the right repo); list mode amplifies it, so the abort is documented and explicit. Recovery: split into per-area invocations (e.g. /impl 200 in the brain-os-plugin repo, /impl 201 in the brain repo).",
+      "expectations": [
+        "Says skill aborts with FATAL error when list spans multiple areas",
+        "Says check happens before claiming any issue (pre-flight)",
+        "Names the reason: single cwd / worktree clones from orchestrator cwd",
+        "Says assertion applies to BOTH sequential and parallel list forms",
+        "Says recovery is to split into per-area invocations"
+      ]
     }
   ]
 }
