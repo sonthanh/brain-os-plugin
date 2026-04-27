@@ -110,7 +110,6 @@ Run `gh issue create -R sonthanh/ai-brain` with:
 - `status:ready` — debug always files as ready (not blocked) since investigation is complete
 - `owner:bot` (AFK, default) or `owner:human` (HITL, only when the fix needs human judgment — design choices, sensitive content)
 - `weight:quick` (≤30 min /tdd cycle) or `weight:heavy` (1 h+)
-- `kind:bug` (always for /debug output, distinguishing from feature work)
 
 **Body** (template below) — describe behaviors only, no file paths or line numbers:
 

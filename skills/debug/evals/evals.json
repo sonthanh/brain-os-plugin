@@ -77,12 +77,12 @@
     {
       "id": 8,
       "prompt": "What labels should /debug apply to the GH issue?",
-      "expected_output": "area:<plugin-name> + priority:pN + status:ready + owner:bot|human + weight:quick|heavy + kind:bug",
+      "expected_output": "area:<plugin-name> + priority:pN + status:ready + owner:bot|human + weight:quick|heavy",
       "expectations": [
         "Mentions area: label",
         "Mentions priority: label",
         "Mentions owner:bot or owner:human",
-        "Mentions kind:bug"
+        "Mentions weight:quick or weight:heavy"
       ]
     },
     {
