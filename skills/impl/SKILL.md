@@ -184,13 +184,35 @@ If the trunk-block hook fires for an `owner:human` issue you picked up via `/imp
 When the user types `/impl story <parent-N>` (optionally `-p <N>`), execute:
 
 ```bash
-mkdir -p ~/.local/state/impl-story && \
-  nohup /opt/homebrew/bin/bun run "$CLAUDE_PLUGIN_ROOT/scripts/run-story.ts" <parent-N> -p <N> \
+# Resolve plugin root: env var → glob fallback → fail loud
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/ 2>/dev/null | sort -V | tail -1)}"
+PLUGIN_ROOT="${PLUGIN_ROOT%/}"
+SCRIPT="$PLUGIN_ROOT/scripts/run-story.ts"
+if [ ! -f "$SCRIPT" ]; then
+  osascript -e 'display notification "FATAL: run-story.ts not found" with title "/impl story"'
+  echo "FATAL: $SCRIPT not found (PLUGIN_ROOT=$PLUGIN_ROOT)"
+  exit 1
+fi
+
+mkdir -p ~/.local/state/impl-story
+nohup /opt/homebrew/bin/bun run "$SCRIPT" <parent-N> -p <N> \
   >> ~/.local/state/impl-story/<parent-N>.log 2>&1 &
-echo "Started orchestrator (PID $!). Log: ~/.local/state/impl-story/<parent-N>.log"
+PID=$!
+
+# Verify launch — script writes <parent-N>.status within ~2s of starting
+sleep 5
+if ! ps -p $PID > /dev/null 2>&1; then
+  osascript -e "display notification \"Orchestrator died within 5s — see log\" with title \"/impl story #<parent-N>\""
+  echo "FATAL: orchestrator (PID $PID) died. Tail of log:"
+  tail -20 ~/.local/state/impl-story/<parent-N>.log
+  exit 1
+fi
+echo "Started orchestrator (PID $PID). Log: ~/.local/state/impl-story/<parent-N>.log | Status: ~/.local/state/impl-story/<parent-N>.status"
 ```
 
-`nohup ... &` self-detaches the process — the bash command returns immediately. After the bash invocation returns, your work is done — exit cleanly.
+`nohup ... &` self-detaches the process. The verify block (sleep 5 + `ps`) catches launch-time crashes (module-not-found, bun missing, syntax error in script) — without it, a dead-on-arrival dispatch returns "Started" with no notify ever firing. After the verify block passes, your work is done — exit cleanly.
+
+The orchestrator writes a heartbeat status JSON to `~/.local/state/impl-story/<parent-N>.status` on every poll cycle (`{"phase":"polling","watching":[...],"hb":N,...}`). External observers (main session pings via `ScheduleWakeup`, separate `cr` watcher sessions, manual `cat`) read that file — not the unstructured log — to know whether the drain is alive and progressing. On crash the script writes `phase:"died"` with the error.
 
 ### What the script does
 
@@ -289,7 +311,10 @@ One log line PER issue (not per parallel run). Each line carries `mode=parallel`
 When the user types `/impl auto` (no `-p`):
 
 ```bash
-bash "$CLAUDE_PLUGIN_ROOT/scripts/run-ralph.sh" "/impl" \
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/ 2>/dev/null | sort -V | tail -1)}"
+PLUGIN_ROOT="${PLUGIN_ROOT%/}"
+[ -f "$PLUGIN_ROOT/scripts/run-ralph.sh" ] || { echo "FATAL: run-ralph.sh not found (PLUGIN_ROOT=$PLUGIN_ROOT)"; exit 1; }
+bash "$PLUGIN_ROOT/scripts/run-ralph.sh" "/impl" \
   --completion-promise NO_MORE_ISSUES \
   --max-iterations 50
 ```
@@ -297,7 +322,10 @@ bash "$CLAUDE_PLUGIN_ROOT/scripts/run-ralph.sh" "/impl" \
 When the user types `/impl auto -p 3` (or any `-p N`, `1 ≤ N ≤ 5`):
 
 ```bash
-bash "$CLAUDE_PLUGIN_ROOT/scripts/run-ralph.sh" "/impl -p 3" \
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/ 2>/dev/null | sort -V | tail -1)}"
+PLUGIN_ROOT="${PLUGIN_ROOT%/}"
+[ -f "$PLUGIN_ROOT/scripts/run-ralph.sh" ] || { echo "FATAL: run-ralph.sh not found (PLUGIN_ROOT=$PLUGIN_ROOT)"; exit 1; }
+bash "$PLUGIN_ROOT/scripts/run-ralph.sh" "/impl -p 3" \
   --completion-promise NO_MORE_ISSUES \
   --max-iterations 50
 ```
@@ -337,7 +365,9 @@ When `-p N` (alias `--parallel N`) spawns a subagent, the prompt MUST embed:
 3. Commit-message convention (Conventional Commits + `Closes <tracker-repo>#N` + Co-Authored-By line) — and the `IMPL_AFK=1` prefix on the `git commit` invocation (the trunk-block hook gates AFK commits against `references/trunk-paths.txt`; see Gotchas)
 4. **Subagent-side trunk-paths self-check (belt-and-braces).** The PreToolUse(Bash) hook may not fire from a subagent's worktree because the hook process can inherit the orchestrator's cwd, in which case `git diff --cached` reads the wrong index and the gate silently passes. To close that gap, the subagent MUST run this check itself before invoking `git commit`:
    ```bash
-   git diff --cached --name-only | bash "$CLAUDE_PLUGIN_ROOT/scripts/check-trunk-paths.sh"
+   PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/ 2>/dev/null | sort -V | tail -1)}"
+   PLUGIN_ROOT="${PLUGIN_ROOT%/}"
+   git diff --cached --name-only | bash "$PLUGIN_ROOT/scripts/check-trunk-paths.sh"
    if [ $? -eq 1 ]; then
      # Trunk match — re-label and exit (do NOT commit, do NOT push)
      gh issue edit <N> -R <tracker-repo> \

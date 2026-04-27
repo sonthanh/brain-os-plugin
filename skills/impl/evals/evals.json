@@ -138,15 +138,18 @@
     {
       "id": 14,
       "prompt": "What does /impl story <parent-N> do, and where does the orchestration logic live?",
-      "expected_output": "/impl story <parent-N> drains a multi-issue story in DAG order. The skill prose dispatches to `nohup bun run $CLAUDE_PLUGIN_ROOT/scripts/run-story.ts <parent-N> -p <N> >> ~/.local/state/impl-story/<parent-N>.log 2>&1 &` which self-detaches and returns immediately. The TypeScript script (not the Claude session) reads the parent issue body checklist, builds the dependency DAG from each child's `Blocked by` section, spawns AFK workers (`claude -w + /impl <M>`) within the parallel cap (default 3, hard max 5), greedy-promotes newly-unblocked children, ticks the parent body checklist on each close, and closes the parent + fires an osascript macOS notification when all children resolve. Pure functions covered by unit tests in scripts/run-story.test.ts (bun test). Main Claude session exits after invocation — token cost during drain is ~0 because all polling and orchestration is in bun, not in Claude inference.",
+      "expected_output": "/impl story <parent-N> drains a multi-issue story in DAG order. The skill prose first resolves PLUGIN_ROOT via env var → glob fallback (`~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/`, sort -V tail -1) → fail loud with osascript notify if neither resolves. It then dispatches `nohup bun run $PLUGIN_ROOT/scripts/run-story.ts <parent-N> -p <N> >> ~/.local/state/impl-story/<parent-N>.log 2>&1 &`, captures the PID, and verifies launch with `sleep 5 && ps -p $PID` (tails the log + notifies if the process died inside that window — catches module-not-found at the bun-runtime layer, before the script's own try/catch can fire). The TypeScript script (not the Claude session) reads the parent issue body checklist, builds the dependency DAG from each child's `Blocked by` section, spawns AFK workers (`claude -w + /impl <M>`) within the parallel cap (default 3, hard max 5), greedy-promotes newly-unblocked children, ticks the parent body checklist on each close, and closes the parent + fires an osascript macOS notification when all children resolve. The orchestrator also writes a JSON status file at `~/.local/state/impl-story/<parent-N>.status` on every phase (`starting` / `polling` / `done` / `died`), capturing pid, cap, watching, ready, closed, failed, and a heartbeat counter — external observers (main session ScheduleWakeup pings, watcher cr session, manual cat) read that structured file rather than tailing the unstructured log. Pure functions covered by unit tests in scripts/run-story.test.ts (bun test). Main Claude session exits after the verify block — token cost during drain is ~0 because all polling and orchestration is in bun, not in Claude inference.",
       "expectations": [
         "Mentions scripts/run-story.ts (TypeScript) as the orchestration script",
         "Mentions bun runtime / nohup for self-detach",
+        "Mentions PLUGIN_ROOT resolution (env var → glob fallback → fail loud)",
+        "Mentions launch verify (sleep 5 + ps -p $PID + tail log on death)",
+        "Mentions JSON status file (~/.local/state/impl-story/<P>.status) with phases starting/polling/done/died",
         "Says main Claude session token cost ≈ 0 during drain",
         "Mentions parent body checklist as the source of children",
         "Mentions DAG / Blocked by parsing for dependency order",
         "Mentions parallel cap default 3 / hard max 5",
-        "Mentions osascript notification on parent close",
+        "Mentions osascript notification on parent close (and on launch)",
         "Mentions unit tests (bun test / run-story.test.ts) cover pure functions"
       ]
     },

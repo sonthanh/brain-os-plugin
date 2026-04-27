@@ -163,6 +163,24 @@ export interface Logger {
   log(msg: string): void;
 }
 
+export interface StoryStatus {
+  ts: string;
+  parent: number;
+  phase: "starting" | "polling" | "done" | "died";
+  pid: number;
+  cap: number;
+  watching: number[];
+  ready: number[];
+  closed: number[];
+  failed: number[];
+  hb: number;
+  error?: string;
+}
+
+export interface StatusWriter {
+  write(status: StoryStatus): void;
+}
+
 // Decide what to do with a watched AFK child after a poll cycle.
 // Pure function — testable without IO.
 export type WorkerAction = "running" | "closed" | "dead";
@@ -335,6 +353,14 @@ class FileLogger implements Logger {
   }
 }
 
+class FileStatusWriter implements StatusWriter {
+  constructor(private path: string) {}
+  write(status: StoryStatus): void {
+    const fs = require("fs");
+    fs.writeFileSync(this.path, JSON.stringify(status));
+  }
+}
+
 // =========================================================================
 // Orchestrator
 // =========================================================================
@@ -345,6 +371,7 @@ export interface OrchestratorDeps {
   proc: ProcessChecker;
   notify: Notifier;
   logger: Logger;
+  status: StatusWriter;
   pollIntervalMs: number;
   workerLogDir: string;
   areaMap: Record<string, string>;
@@ -357,10 +384,24 @@ export async function runStory(
 ): Promise<{ closed: number[]; failed: number[] }> {
   const HARD_CAP = 5;
   const cap = clampParallel(parallel, HARD_CAP);
-  const { gh, spawn, proc, notify, logger, pollIntervalMs, workerLogDir, areaMap } = deps;
+  const { gh, spawn, proc, notify, logger, status, pollIntervalMs, workerLogDir, areaMap } = deps;
   const failed: number[] = [];
+  let hb = 0;
 
   logger.log(`=== run-story start | parent=#${parent} parallel=${cap} ===`);
+  status.write({
+    ts: new Date().toISOString(),
+    parent,
+    phase: "starting",
+    pid: process.pid,
+    cap,
+    watching: [],
+    ready: [],
+    closed: [],
+    failed: [],
+    hb,
+  });
+  notify.notify(`Orchestrator started for #${parent} (PID ${process.pid}, cap ${cap})`);
 
   const parentBody = await gh.viewBody(parent);
   const childNums = parseChecklist(parentBody);
@@ -437,6 +478,21 @@ export async function runStory(
       }
     }
     ready = stillReady;
+
+    // Heartbeat status BEFORE sleep — captures current state for external pings
+    hb++;
+    status.write({
+      ts: new Date().toISOString(),
+      parent,
+      phase: "polling",
+      pid: process.pid,
+      cap,
+      watching: [...watching.keys()],
+      ready: [...ready],
+      closed: [...closed],
+      failed: [...failed],
+      hb,
+    });
 
     // Sleep then poll
     await Bun.sleep(pollIntervalMs);
@@ -520,6 +576,18 @@ export async function runStory(
     notify.notify(`Story #${parent} complete. Run: cr /story-debrief ${parent} for review`);
   }
   logger.log(`=== run-story DONE ===`);
+  status.write({
+    ts: new Date().toISOString(),
+    parent,
+    phase: "done",
+    pid: process.pid,
+    cap,
+    watching: [],
+    ready: [],
+    closed: Array.from(closed),
+    failed,
+    hb,
+  });
 
   return {
     closed: Array.from(closed),
@@ -583,14 +651,17 @@ async function main() {
   const fs = await import("fs");
   fs.mkdirSync(logDir, { recursive: true });
   const logPath = `${logDir}/${parent}.log`;
+  const statusPath = `${logDir}/${parent}.status`;
 
   const logger = new FileLogger(logPath);
+  const status = new FileStatusWriter(statusPath);
   const deps: OrchestratorDeps = {
     gh: new RealGh(repo),
     spawn: new RealSpawn(),
     proc: new RealProcessChecker(),
     notify: new RealNotifier(parent),
     logger,
+    status,
     pollIntervalMs: 30_000,
     workerLogDir: logDir,
     areaMap,
@@ -599,8 +670,22 @@ async function main() {
   try {
     await runStory(parent, parallel, deps);
   } catch (err) {
-    logger.log(`FATAL: ${(err as Error).message}`);
-    new RealNotifier(parent).notify(`Story #${parent} crashed — see log`);
+    const msg = (err as Error).message;
+    logger.log(`FATAL: ${msg}`);
+    status.write({
+      ts: new Date().toISOString(),
+      parent,
+      phase: "died",
+      pid: process.pid,
+      cap: clampParallel(parallel, 5),
+      watching: [],
+      ready: [],
+      closed: [],
+      failed: [],
+      hb: -1,
+      error: msg,
+    });
+    new RealNotifier(parent).notify(`Story #${parent} crashed: ${msg.slice(0, 80)}`);
     process.exit(1);
   }
 }
