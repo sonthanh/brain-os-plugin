@@ -64,5 +64,17 @@
     "description": "C3 empty grill detection must match both singular 'Decision' and plural 'Decisions' as a prefix for H2 headings — captures ## Decision Summary, ## Settled Decisions, and similar variants that encode real decisions but use non-standard heading text.",
     "args": "vault-lint",
     "expect": "Decision Summary"
+  },
+  {
+    "id": "c3-h1-decision-match",
+    "description": "C3 empty grill detection must also match H1 '# Decision' prefix in addition to H2 '## Decision' — some sessions use H1 headings (e.g. '# Decisions' table, '# Decision Summary') which are valid decision records. Prevents false-positive flags when decisions are encoded under H1 rather than H2.",
+    "args": "vault-lint",
+    "expect": "H1 prefix"
+  },
+  {
+    "id": "a1-at-tag-excluded",
+    "description": "A1 broken wiki-link scan must exclude Obsidian @-mention links ([[@...]]) — these are person-mention syntax, not file references, and always appear broken in a filesystem check. Eliminates structural false positives from Obsidian @-tag usage.",
+    "args": "vault-lint",
+    "expect": "@-mention"
   }
 ]

@@ -49,9 +49,10 @@ If the tag already exists (re-run same day), append `-N` suffix: `pre-vault-lint
 ### A1. Broken wiki-links
 
 Scan all `.md` files in the vault for `[[...]]` wiki-links. For each link:
-1. Resolve the target path (Obsidian rules: shortest match, case-insensitive filename, `.md` extension optional)
-2. Check if the target file exists
-3. Collect broken links as: `{source_file}:{line} → [[{target}]]`
+1. **Exclude `[[@...]]` Obsidian @-mention links** — links whose target starts with `@` are person-mention syntax, not file references; skip them.
+2. Resolve the target path (Obsidian rules: shortest match, case-insensitive filename, `.md` extension optional)
+3. Check if the target file exists
+4. Collect broken links as: `{source_file}:{line} → [[{target}]]`
 
 Do NOT auto-fix broken links. List them in the report under `## Broken Links`.
 
@@ -140,7 +141,7 @@ Grep vault `.md` files for absolute paths matching `~/work/...` or `/Users/.../w
 Scan `{vault}/daily/handovers/` for files older than 30 days. For each, query `gh issue list -R $GH_TASK_REPO --state open --search "<handover-filename>"` — flag as potentially stale if any open issue still references it.
 
 ### C3. Empty grill sessions [deterministic]
-Scan `{vault}/daily/grill-sessions/` for files with no section heading matching `## Decision` as a prefix (case-insensitive — matches `## Decisions`, `## Decisions Made`, `## Decisions (locked)`, `## Decision Summary`, `## Settled Decisions`, etc.) or where the matching section is empty. Flag as incomplete.
+Scan `{vault}/daily/grill-sessions/` for files with no section heading matching `## Decision` as a prefix (case-insensitive — matches `## Decisions`, `## Decisions Made`, `## Decisions (locked)`, `## Decision Summary`, `## Settled Decisions`, etc.) or `# Decision` as an H1 prefix (case-insensitive — matches `# Decisions`, `# Decision Summary`, etc.) or where the matching section is empty. Flag as incomplete.
 
 Exclude files whose filename contains `autogrill` — these are auto-generated planning/design sessions where a formal `## Decisions` section is not required by design.
 
