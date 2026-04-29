@@ -94,6 +94,26 @@
         "Mentions waiting for user OK or confirmation",
         "Connects the gate to ASCII flowchart rendering"
       ]
+    },
+    {
+      "id": 11,
+      "prompt": "When grill anchors on the user's actual problem, what other thing must it anchor on at the same time before any external solution?",
+      "expected_output": "The atomic unit of meaning — what is the smallest piece that preserves meaning in this domain (e.g. row vs subgraph for data, file vs code-component for code, pillar vs post for content). Anchored together with the user's actual problem before any external solution.",
+      "expectations": [
+        "Mentions atomic unit of meaning",
+        "Pairs unit-of-meaning with user's actual problem as joint anchor",
+        "Says this happens before any external solution"
+      ]
+    },
+    {
+      "id": 12,
+      "prompt": "Replay airtable-knowledge-extract grill: user asks for an auto-eval scaling pipeline to import Airtable data into vault, terse user, doesn't volunteer link-graph info. What should grill do early to avoid the row-batch design failure that cost 5 rounds in the real session?",
+      "expected_output": "Inspect Airtable schema and link metadata before proposing pipeline structure; declare atomic unit (subgraph spanning linked tables, not row) within the first few turns.",
+      "expectations": [
+        "Mentions inspecting Airtable schema or link metadata before pipeline design",
+        "Mentions declaring the atomic unit early",
+        "Mentions subgraph or linked-table or graph-shaped data as the right unit (not row-batch)"
+      ]
     }
   ]
 }
