@@ -59,6 +59,7 @@ import type {
   SeedForReAnchor,
 } from "./re-anchor.mts";
 import { extractSlice } from "./extract-slice.mts";
+import { appendOutcomeLog } from "./outcome-log.mts";
 
 export const DEFAULT_PARALLELISM = 5;
 export const DEFAULT_THRESHOLD = 0.95;
@@ -769,6 +770,8 @@ async function main(parsed: ParsedArgs): Promise<number> {
   const result = await runOrchestrator(args, deps);
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 
+  writeSkillOutcomeLog(result, parsed.runId);
+
   switch (result.kind) {
     case "paused":
     case "no-bases":
@@ -776,6 +779,56 @@ async function main(parsed: ParsedArgs): Promise<number> {
     case "escalated-re-anchor":
     case "escalated-batch":
       return 1;
+  }
+}
+
+function writeSkillOutcomeLog(result: RunResult, runId: string): void {
+  const action = "extract";
+  const sourceRepo = "~/work/brain-os-plugin";
+  const today = new Date().toISOString().slice(0, 10);
+
+  const outResult: "pass" | "partial" | "fail" =
+    result.kind === "paused" || result.kind === "no-bases"
+      ? "pass"
+      : "fail";
+
+  const fields: Record<string, string | number> = { run_id: runId };
+  if (result.baseId) fields.base_id = result.baseId;
+  if (result.kind === "escalated-batch") fields.escalation = "batch";
+  if (result.kind === "escalated-re-anchor") fields.escalation = "re-anchor";
+
+  if (result.baseId) {
+    const progress = result.state.base_progress[result.baseId];
+    if (progress) {
+      fields.batches_done = progress.batches_done;
+      fields.total_batches = progress.total_batches;
+      const passed = progress.batch_results.filter(
+        (r) => r.outcome === "pass",
+      ).length;
+      const total = progress.batch_results.length;
+      fields.pass_rate = total === 0 ? "0" : (passed / total).toFixed(2);
+    }
+  }
+
+  const outputPath =
+    result.metricsPath ??
+    join(homedir(), ".claude", "airtable-extract-cache", runId);
+
+  const writeResult = appendOutcomeLog({
+    date: today,
+    skill: "airtable-knowledge-extract",
+    action,
+    source_repo: sourceRepo,
+    output_path: outputPath,
+    commit_hash: "none",
+    result: outResult,
+    fields,
+  });
+
+  if (!writeResult.ok) {
+    process.stderr.write(
+      `outcome-log: skipped (${writeResult.reason})\n`,
+    );
   }
 }
 

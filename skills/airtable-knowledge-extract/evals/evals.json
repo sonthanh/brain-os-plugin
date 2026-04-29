@@ -4,22 +4,47 @@
     {
       "id": 1,
       "prompt": "What does /airtable-knowledge-extract do?",
-      "expected_output": "Extracts knowledge from Airtable bases into the vault as linked entity pages with per-batch Opus reviewer gate and HITL re-anchor on every new base.",
+      "expected_output": "Extracts knowledge from Airtable bases into a per-run cache as linked entity pages with per-batch Opus reviewer gate and mandatory HITL re-anchor on every new base; user reviews and merges into the vault.",
       "expectations": [
         "Names Airtable bases as the source",
-        "Names the vault as the destination with linked entity pages",
+        "Names linked entity pages as the destination shape",
         "Mentions the per-batch Opus 4.6 reviewer gate at ≥95%",
-        "Mentions mandatory HITL re-anchor on every new base"
+        "Mentions mandatory HITL re-anchor on every new base",
+        "Mentions that pages stage in ~/.claude/airtable-extract-cache, not directly in the vault"
       ]
     },
     {
       "id": 2,
-      "prompt": "What is the current state of the /airtable-knowledge-extract skill?",
-      "expected_output": "Phase 1 MVP scaffolding only — directory + SKILL.md frontmatter + package.json + .gitignore. Full skill prose lands in the C13 polish slice.",
+      "prompt": "How is /airtable-knowledge-extract launched? Can Claude run it from the current session?",
+      "expected_output": "No — Pattern B pipeline. Claude prints the supaterm tab invocation (env -u CLAUDECODE bash -c '...' inside `sp tab new --script`) and stops in-session. The bun runtime in run.mts owns the per-base loop; running a 30–60 min orchestration in-session burns ambient Opus context-tokens.",
       "expectations": [
-        "States the skill is scaffolding only at this point",
-        "References that full prose is deferred to C13",
-        "Does NOT claim the skill is invocable end-to-end yet"
+        "States the skill is Pattern B (refuse to run in-session)",
+        "Mentions launching via supaterm tab (sp tab new --script)",
+        "Mentions stripping CLAUDECODE from env (env -u CLAUDECODE) so child workers run outside the parent session",
+        "Mentions that Claude prints the invocation block and stops in-session, not Bash it"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Where do entity pages and the outcome log land?",
+      "expected_output": "Entity pages: ~/.claude/airtable-extract-cache/<run-id>/bases/<base-id>/out/<entity-type>/<slug>.md (frontmatter + [[wikilinks]]). Outcome log: <vault>/daily/skill-outcomes/airtable-knowledge-extract.log per skill-spec § 11, appended by run.mts CLI main().",
+      "expectations": [
+        "Entity pages path includes ~/.claude/airtable-extract-cache/<run-id>/bases/<base-id>/out/<entity-type>",
+        "Mentions frontmatter + wikilinks shape on entity pages",
+        "Outcome log path is <vault>/daily/skill-outcomes/airtable-knowledge-extract.log",
+        "References skill-spec § 11 as the format spec",
+        "Notes that run.mts (not a separate skill ceremony) does the append"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "What happens when the per-batch reviewer fails?",
+      "expected_output": "Self-improver appends a (raw, corrected, reason) triple to the per-base examples.jsonl, then retries the batch at half parallelism (max(1, floor(P/2))). Two consecutive fail-after-retry outcomes → SIGTERM workers + osascript notify + exit kind=escalated-batch.",
+      "expectations": [
+        "Mentions the (raw, corrected, reason) triple appended to examples.jsonl",
+        "Retry runs at half parallelism",
+        "Two consecutive fail-after-retry outcomes escalate the rung",
+        "Escalation kills workers (SIGTERM) and notifies the user"
       ]
     }
   ]
