@@ -51,6 +51,16 @@
         "fail = skill execution error (advisor failed, principles file missing)",
         "Neither result code relates to what the audit found about the content"
       ]
+    },
+    {
+      "id": 6,
+      "prompt": "When is P3 (Value Equation) not appropriate to include in an /audit?",
+      "expected_output": "P3 requires ≥50 words of content AND structural differences between options (not phrasing-only); skip it for micro-edits or short contexts",
+      "expectations": [
+        "States P3 requires sufficient content scope (e.g., ≥50 words)",
+        "States structural differences needed between options (not just phrasing)",
+        "Implies or states to skip P3 for micro-edits or phrasing-only comparisons"
+      ]
     }
   ]
 }

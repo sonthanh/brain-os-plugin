@@ -35,6 +35,8 @@ When no specific principle is given, pick the **top 3 most relevant** to what's 
 
 Single-principle audits produce the sharpest results. Default p0 to 3 but respect user's specific picks.
 
+**P3 scope check:** P3 (Value Equation) requires ≥50 words of content AND structural differences between options (not phrasing-only). Skip P3 for micro-edits — it won't discriminate.
+
 ## Output
 
 Present the advisor's findings directly. Then append a structured summary:
