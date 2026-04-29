@@ -1,0 +1,9 @@
+{
+  "name": "airtable-knowledge-extract",
+  "private": true,
+  "type": "module",
+  "module": "run.mts",
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}

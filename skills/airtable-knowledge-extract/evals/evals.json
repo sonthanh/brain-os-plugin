@@ -1,0 +1,26 @@
+{
+  "skill_name": "airtable-knowledge-extract",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "What does /airtable-knowledge-extract do?",
+      "expected_output": "Extracts knowledge from Airtable bases into the vault as linked entity pages with per-batch Opus reviewer gate and HITL re-anchor on every new base.",
+      "expectations": [
+        "Names Airtable bases as the source",
+        "Names the vault as the destination with linked entity pages",
+        "Mentions the per-batch Opus 4.6 reviewer gate at ≥95%",
+        "Mentions mandatory HITL re-anchor on every new base"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "What is the current state of the /airtable-knowledge-extract skill?",
+      "expected_output": "Phase 1 MVP scaffolding only — directory + SKILL.md frontmatter + package.json + .gitignore. Full skill prose lands in the C13 polish slice.",
+      "expectations": [
+        "States the skill is scaffolding only at this point",
+        "References that full prose is deferred to C13",
+        "Does NOT claim the skill is invocable end-to-end yet"
+      ]
+    }
+  ]
+}
