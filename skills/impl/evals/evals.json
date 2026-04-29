@@ -152,6 +152,7 @@
         "Mentions DAG / Blocked by parsing for dependency order",
         "Mentions parallel cap default 3 / hard max 5",
         "Mentions osascript notification on parent close (and on launch)",
+        "Mentions completion notify points to ~/.local/state/impl-story/<P>.log (not a non-existent /story-debrief skill)",
         "Mentions unit tests (bun test / run-story.test.ts) cover pure functions"
       ]
     },

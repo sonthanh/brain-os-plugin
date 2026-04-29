@@ -324,17 +324,18 @@ export class RealGh implements GhClient {
   }
 
   async claim(n: number): Promise<void> {
-    await this.run([
-      "issue",
-      "edit",
-      String(n),
-      "-R",
-      this.repo,
-      "--remove-label",
-      "status:ready",
-      "--add-label",
-      "status:in-progress",
-    ]);
+    // Shell out to transition-status.sh — canonical status-flip site (reads
+    // current status:* label, removes it, adds target atomically + canon-
+    // validates against references/gh-task-labels.md § 3). Bypassing it
+    // double-adds when current ≠ status:ready (sibling to close-side ghost-
+    // label leak fixed in 6b41e51 / ai-brain#179, ai-brain#195).
+    const helper = `${import.meta.dir}/gh-tasks/transition-status.sh`;
+    const proc = Bun.spawn(["bash", helper, String(n), "--to", "in-progress"], { stdout: "pipe", stderr: "pipe" });
+    const code = await proc.exited;
+    if (code !== 0) {
+      const err = await new Response(proc.stderr).text();
+      throw new Error(`transition-status.sh ${n} --to in-progress exited ${code}: ${err}`);
+    }
   }
 }
 
@@ -667,7 +668,7 @@ export async function runStory(
       await gh.closeIssue(parent);
       logger.log(`closed parent #${parent}`);
     }
-    notify.notify(`Story #${parent} complete. Run: cr /story-debrief ${parent} for review`);
+    notify.notify(`Story #${parent} complete. Log: ~/.local/state/impl-story/${parent}.log`);
   }
   logger.log(`=== run-story DONE ===`);
   status.write({

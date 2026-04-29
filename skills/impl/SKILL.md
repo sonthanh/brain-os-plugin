@@ -260,7 +260,7 @@ The orchestrator writes a heartbeat status JSON to `~/.local/state/impl-story/<p
    - HITL spawn = osascript notify `"HITL: #M needs human. Run: cr /pickup M"` — user resolves manually.
    - Poll each watched child via `gh issue view <M> --json state` — on CLOSED: tick parent body checklist (`sed - [ ] #M → - [x] #M`, `gh issue edit --body`), promote any newly-unblocked waiters to ready queue.
 5. When ready queue + watching set both empty: close parent via `bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/close-issue.sh" <P>` (strips status:* labels first).
-6. Final macOS notification: `"Story #<P> complete. Run: cr /story-debrief <P> for review"`.
+6. Final macOS notification: `"Story #<P> complete. Log: ~/.local/state/impl-story/<P>.log"`.
 7. All steps logged to `~/.local/state/impl-story/<parent-N>.log`.
 
 ### Parallel cap rationale
