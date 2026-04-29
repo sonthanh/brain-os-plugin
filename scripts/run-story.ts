@@ -268,7 +268,16 @@ export class RealGh implements GhClient {
   }
 
   async closeIssue(n: number): Promise<void> {
-    await this.run(["issue", "close", String(n), "-R", this.repo, "--reason", "completed"]);
+    // Shell out to close-issue.sh — canonical close site (strips status:* labels
+    // first, then closes). Bypassing it leaves ghost status:in-progress on the
+    // parent (root cause of #179 ghost-label leak, 2026-04-29).
+    const helper = `${import.meta.dir}/gh-tasks/close-issue.sh`;
+    const proc = Bun.spawn(["bash", helper, String(n)], { stdout: "pipe", stderr: "pipe" });
+    const code = await proc.exited;
+    if (code !== 0) {
+      const err = await new Response(proc.stderr).text();
+      throw new Error(`close-issue.sh ${n} exited ${code}: ${err}`);
+    }
   }
 
   async relabelHuman(n: number): Promise<void> {
