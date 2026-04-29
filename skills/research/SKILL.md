@@ -88,6 +88,22 @@ WebSearch: "{topic} site:youtube.com podcast 2026"
 WebSearch: "{topic} site:reddit.com discussion 2026"
 ```
 
+### Round 4.5: video / podcast URLs → /transcribe-video FIRST
+
+If the topic search surfaces a YouTube watch link, podcast episode, or audio URL with **direct verbatim signal** (e.g. a key talk by a tracked voice), DO NOT extract quotes from same-cycle aggregator articles. Aggregators conflate quotes from different talks by the same person — citing them as primary source is a recurring failure mode.
+
+Instead, invoke `/transcribe-video` (skill) before quote extraction:
+
+```
+bun ${CLAUDE_PLUGIN_ROOT}/scripts/transcribe-video.ts <URL> --out {vault}/knowledge/research/findings/{slug}/
+```
+
+This writes `_transcript-verbatim.md` to the findings folder. ALL subsequent finding files cite quotes that grep into this file; aggregator articles inform structure (which topics matter) but never source quotes. Source-tag findings as `[primary — verbatim]` not `[paraphrase]`.
+
+When the topic is technical and aggregator articles agree on framing, this step is optional. But when the user pushes back ("did they really say that?") or quotes are load-bearing for content extraction, transcribe-video is mandatory.
+
+See [[skills/transcribe-video/SKILL.md]] for usage contract, two transcription paths (auto-subs vs whisper-cpp), and known-typo replacement table.
+
 ### Quick mode
 5-8 WebSearch calls: focus on voice tracking + topic scanning.
 

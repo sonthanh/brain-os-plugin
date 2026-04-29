@@ -1,0 +1,43 @@
+{
+  "skill_name": "research",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "What does /research do BEFORE extracting quotes from a video URL?",
+      "expected_output": "Invokes /transcribe-video first to capture a verbatim transcript; aggregator articles are not used as quote source",
+      "expectations": [
+        "Mentions /transcribe-video as the first step for video URLs",
+        "Mentions aggregators do not source quotes",
+        "Mentions verbatim or primary source"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "When are aggregator articles allowed in /research output?",
+      "expected_output": "They can inform structure (which topics matter) but never source verbatim quotes — those must come from primary transcripts",
+      "expectations": [
+        "Mentions aggregators inform structure",
+        "Mentions aggregators do not source quotes verbatim",
+        "Mentions primary or verbatim source for quotes"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "What's the default platform mix for /research?",
+      "expected_output": "X-first, then web. Voice-driven (top voices in vault registry).",
+      "expectations": [
+        "Mentions X-first or X as default",
+        "Mentions voice-driven or voice tracking"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "How are findings source-tagged after /research runs against a video URL?",
+      "expected_output": "Findings cite '[primary — verbatim]' not '[paraphrase]' or '[aggregator]', and quotes must grep into the _transcript-verbatim.md file",
+      "expectations": [
+        "Mentions primary or verbatim source tag",
+        "Mentions quotes must come from transcript or grep into verbatim file"
+      ]
+    }
+  ]
+}

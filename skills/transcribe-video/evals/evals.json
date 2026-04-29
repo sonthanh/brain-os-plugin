@@ -1,0 +1,54 @@
+{
+  "skill_name": "transcribe-video",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "When should /transcribe-video be invoked?",
+      "expected_output": "Before extracting findings/quotes from any video or audio source — aggregator articles conflate quotes from different talks by the same person",
+      "expectations": [
+        "Mentions before extracting findings or quotes",
+        "Mentions aggregator articles can hallucinate quotes",
+        "Mentions video, audio, podcast, or YouTube as triggers"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "What are the two transcription paths and when do you use each?",
+      "expected_output": "Auto-subs (default, ~7 sec, complete coverage but typo'd proper nouns) vs whisper-cpp (--whisper flag, ~4 min, higher quality)",
+      "expectations": [
+        "Mentions auto-subs as default fast path",
+        "Mentions whisper-cpp with --whisper flag for higher quality",
+        "Mentions speed difference (seconds vs minutes)",
+        "Mentions auto-subs has typos on proper nouns"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "What output files does the script write?",
+      "expected_output": "_transcript-verbatim.md with frontmatter + _transcription-metadata.json with build metadata",
+      "expectations": [
+        "Mentions _transcript-verbatim.md output",
+        "Mentions _transcription-metadata.json output",
+        "Mentions frontmatter or metadata"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "What does the script do when whisper hits a repetition loop?",
+      "expected_output": "Detects 5+ identical consecutive phrases, falls back to auto-sub coverage in those zones via splice",
+      "expectations": [
+        "Mentions repetition loop detection",
+        "Mentions auto-sub fallback or splice"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "How does the script handle proper nouns mangled by auto-captions?",
+      "expected_output": "Applies known-typo replacement table (references/typo-fixes.json) with scope hierarchy (global > ai > karpathy)",
+      "expectations": [
+        "Mentions typo-fixes.json or replacement table",
+        "Mentions scope hierarchy or topic tags"
+      ]
+    }
+  ]
+}
