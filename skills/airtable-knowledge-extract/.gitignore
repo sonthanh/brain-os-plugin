@@ -5,3 +5,4 @@ out/
 .env
 .env.local
 bun.lockb
+tests/fixtures/judge-fidelity-prompt.md
