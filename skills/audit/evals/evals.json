@@ -61,6 +61,16 @@
         "States structural differences needed between options (not just phrasing)",
         "Implies or states to skip P3 for micro-edits or phrasing-only comparisons"
       ]
+    },
+    {
+      "id": 7,
+      "prompt": "What constraints apply to the Audit Summary table format in /audit's output?",
+      "expected_output": "The ## Audit Summary heading and table structure are a stable format contract consumed programmatically by downstream skills like /slice. Verdict values must be exactly PASS, FLAG, or FAIL.",
+      "expectations": [
+        "States verdict values must be exactly PASS, FLAG, or FAIL (no variations)",
+        "States the ## Audit Summary heading must be present and unchanged",
+        "States or implies format is consumed by downstream skills or used programmatically"
+      ]
     }
   ]
 }

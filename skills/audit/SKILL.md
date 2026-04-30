@@ -50,6 +50,8 @@ Present the advisor's findings directly. Then append a structured summary:
 Logged to tracker.
 ```
 
+**Format contract**: The `## Audit Summary` heading and table structure (`| P{N} | PASS|FLAG|FAIL |`) are consumed programmatically by downstream skills (e.g. `/slice` audit gate). Verdict values must be exactly `PASS`, `FLAG`, or `FAIL` — do not alter heading, column structure, or verdict text.
+
 ## Tracker Integration
 
 After each audit, append to the Log table in `{vault}/thinking/principles/tracker.md`:
