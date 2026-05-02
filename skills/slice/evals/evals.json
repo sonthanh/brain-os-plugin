@@ -186,6 +186,18 @@
         "Names what is NOT acceptable (removing the audit, override flag, manufactured incidents)",
         "Explains why forced admission preserves rigor (user names the bet rather than rubber-stamping)"
       ]
+    },
+    {
+      "id": 19,
+      "prompt": "User runs /slice on a settled grill. Step 5 quiz approved a breakdown with 3 child drafts; the parent body has 4 AC bullets (AC#1..AC#4); two child drafts carry `## Covers AC` listing AC#1 and AC#3 respectively; the third is a pure-component child with an empty `## Covers AC`. What does Step 2.6 do at the Step 5 → Step 6 boundary, and what does the user see?",
+      "expected_output": "Step 2.6 fires deterministically before any child issue is filed. It applies the parent-AC regex from `references/ac-coverage-spec.md` § 3.1 to the parent body → parent_ac_set = {1, 2, 3, 4}. It applies the child Covers-AC regex from § 3.2 inside each draft's `## Covers AC` section → covered = {1} ∪ {3} ∪ {} = {1, 3}. uncovered = {2, 4}. Non-empty → ABORT (no fall-through to Step 6, no override flag). User sees a markdown table listing AC#2 and AC#4 with their descriptions (parent-AC regex group 2), plus exactly three user options: (1) add a covering child draft, (2) promote an existing component child draft to live-AC by adding the bullet to its `## Covers AC`, (3) amend parent body to drop the orphan AC bullet (re-grill if scope changes). The pure-component child's empty `## Covers AC` is legal per § 1.1 (asserts intent vs filer-forgot). After the user amends drafts, re-run /slice; the gate fires again — PASS only continues to Step 6.",
+      "expectations": [
+        "Names Step 2.6 as a deterministic gate firing at the Step 5 → Step 6 boundary (after quiz approval, before any child issue is filed)",
+        "Cites `references/ac-coverage-spec.md` § 3 for the regexes and explicitly notes the regexes are NOT duplicated in /slice prose",
+        "Mentions ABORT with a markdown table of uncovered AC bullets (AC# + description), and that there is no override flag",
+        "Lists all three user options on gate fail (add covering child / promote component to live-AC / amend parent body)",
+        "Mentions that pure-component children carry an empty `## Covers AC` section per § 1.1 (the empty form is legal and asserts intent)"
+      ]
     }
   ]
 }

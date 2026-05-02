@@ -167,6 +167,44 @@ bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/transition-status.sh" "$PARENT_N" --t
 
 Capture the returned parent URL + issue number — needed for both Step 2.7 (surface to user) and Step 6 (child `## Parent` references).
 
+### 2.6. AC coverage gate [deterministic]
+
+**Purpose.** Prevent the parent story from shipping fake-done — children all CLOSED + tests green, but parent `## Acceptance` bullets literally never executed. The pre-rule failure mode (one prior story closed with all 13 children green but 6 parent AC bullets unverified — caches absent, integration tests SKIPPED) broke trust in the AFK pipeline. This gate is the design-time anchor of the three-gate doctrine (Gate A here; Gate B at `scripts/run-story.ts` `runPreCheck()`; Gate C at `scripts/run-story.ts` close-time).
+
+**Required child shape.** Every child draft produced in Step 3 MUST carry a `## Covers AC` H2 section enumerating the parent AC bullet IDs it satisfies. Pure-component children (scaffolding, refactor, build wiring) carry the section with NO bullets — the empty form asserts intent per `references/ac-coverage-spec.md` § 1.1, distinguishing "this child is component" from "the filer forgot the section".
+
+**When the gate fires.** At the Step 5 → Step 6 boundary — after the user has approved the slice breakdown via the quiz step and BEFORE any child issue is filed via `create-task-issue.sh`. Section is numbered 2.6 to group with the other deterministic gates (1.5, 2.4); the actual check requires drafts to exist, so it runs at the file-time boundary. Step 6 carries a forward reference back to this section.
+
+**Mechanism.** Two regexes drive the check — both live in `references/ac-coverage-spec.md` § 3 and MUST NOT be duplicated here:
+
+1. Parent body is already in conversation context from Step 2.5 / 2.7. Apply the **parent-AC regex** (`references/ac-coverage-spec.md` § 3.1) line-by-line to the parent body. Collect `parent_ac_set` = set of integer IDs and remember each ID's description (regex group 2) for the ABORT table.
+2. For each approved child draft in conversation context, locate its `## Covers AC` section (header line `## Covers AC` until next `## ` H2 header or EOF). Apply the **child Covers-AC regex** (`references/ac-coverage-spec.md` § 3.2) line-by-line inside that section. Collect that child's `covers_set`. Empty section is legal and contributes the empty set.
+3. Compute `covered = union(child.covers_set for child in drafts)`.
+4. Compute `uncovered = parent_ac_set - covered`.
+5. If `uncovered` is non-empty → ABORT. Emit the table below verbatim and STOP. Do NOT fall through to Step 6.
+
+**ABORT output.** Print to the user with the exact shape:
+
+```
+ABORT: Step 2.6 AC coverage gate failed.
+
+Uncovered parent ## Acceptance bullets:
+
+| AC | Description |
+|----|-------------|
+| AC#<N> | <description from parent-AC regex group 2> |
+| AC#<M> | <description> |
+
+User options (re-run /slice after action):
+  1. Add a covering child draft (carry `## Covers AC` with the missing AC#).
+  2. Promote an existing component child draft to live-AC by adding the bullet to its `## Covers AC`.
+  3. Amend parent body to drop the orphan AC bullet (re-grill if scope changes).
+```
+
+The three options come straight from the parent-story settled decisions (`references/ac-coverage-spec.md` cross-references). They are the only legitimate paths forward — there is no `--force-no-coverage` override flag, no advisory soft-fail, no "we'll cover it later" promise. The gate exists because trust was broken; an override re-creates the failure surface.
+
+**Why mechanical, not advisory.** Asking the LLM "is each parent AC covered by some child?" papers over the check at slice-time when many drafts are in flight and easy to miscount. Two regexes plus a set difference are the deterministic pre-Step-6 contract — same pattern as the trunk-paths validator (§ 4) and the audit gates (§§ 1.5, 2.4). PASS only continues to Step 6.
+
 ### 2.7. Await PRD approval [latent]
 
 Surface the parent issue URL + number to the user verbatim:
@@ -241,6 +279,8 @@ Then ask:
 Iterate until the user approves. Do NOT proceed to issue creation while the user is still iterating.
 
 ### 6. Create child issues in dependency order [deterministic]
+
+**Pre-condition.** The Step 2.6 AC coverage gate MUST have passed against the approved drafts before this step runs. If the gate ABORT'd, you are not here — the user amended drafts (added covering child / promoted component to live-AC / amended parent body) and re-ran /slice. Filing without 2.6 PASS would re-create the fake-done failure mode.
 
 For each approved child slice, in topological order (blockers first), run the central filer — every label axis is validated against canon (see `references/gh-task-labels.md` § 1):
 
