@@ -1,7 +1,7 @@
 ---
 name: refactor
 description: |
-  System-level reorganization scan across the brain-os plugin + vault scripts + vault organization (and any additional repos the user lists in their personal scope file). Detects shallow modules, cross-skill duplication, unused code, conflicting patterns, and vault organizational drift. Runs weekly via cron (Sunday 02:00 ICT) — produces a report with proposed refactor issues. Use when user wants a system-level refactor scan, architecture review, codebase audit, or says 'reorganize', 'refactor', 'shallow modules', 'is this codebase still in shape', 'improve architecture', 'audit our architecture', or invokes /refactor. Different from /improve (per-skill, eval-gated) and /vault-lint (mechanical hygiene) — this is structural critique across artifacts.
+  System-level reorganization scan — detects shallow modules, cross-skill duplication, unused code, vault drift. Use khi user nói 'reorganize'/'refactor'/'audit architecture'/'system-level review'. Khác /improve (per-skill) và /vault-lint (mechanical hygiene).
 ---
 
 # /refactor — System-Level Refactor Scan

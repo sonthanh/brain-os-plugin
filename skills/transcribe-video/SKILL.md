@@ -1,6 +1,6 @@
 ---
 name: transcribe-video
-description: "Transcribe a YouTube/podcast/audio URL to clean text. Tries auto-captions first (fast, free, complete-coverage but auto-caption typos), falls back to whisper-cpp + Silero VAD for higher quality. Use when /research runs against a video/audio URL, when user shares a YouTube link and wants the actual transcript instead of aggregator summaries, or when user explicitly says 'transcribe', 'get the transcript', 'get raw quotes from'."
+description: "Transcribe YouTube/podcast/audio URL ra clean text. Auto-captions trước, fallback whisper-cpp + Silero VAD. Use trước khi /research video/audio source, hoặc user nói 'transcribe'/'get the transcript'/'get raw quotes from'."
 context: fork
 ---
 

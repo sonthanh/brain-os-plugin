@@ -1,6 +1,6 @@
 ---
 name: airtable-knowledge-extract
-description: "Extract knowledge from Airtable bases into the vault as linked entity pages. Per-base × vertical-slice extract with full-cluster subgraph traversal, Sonnet worker + Opus 4.6 per-batch reviewer at ≥95% gate, self-improving examples bank, mandatory HITL re-anchor on every new base, and legacy-link detection. Use when seeding historical knowledge from company Airtable bases for /think, /connect, /emerge — or when the user invokes /airtable-knowledge-extract."
+description: "Extract knowledge từ Airtable bases vào vault dưới dạng linked entity pages. Sonnet worker + Opus reviewer ≥95% gate, mandatory HITL re-anchor mỗi base mới. Use khi seeding historical knowledge từ company Airtable bases."
 ---
 
 # /airtable-knowledge-extract — Airtable → Vault Knowledge Extractor

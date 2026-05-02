@@ -1,6 +1,6 @@
 ---
 name: impl
-description: "Per-issue implementation executor for brain-os artifacts. Default mode grabs the next AFK GitHub issue and runs /tdd on it; -p N (alias --parallel N) dispatches scripts/run-parallel.ts to spawn N detached claude -w workers with explicit per-issue cwd; /impl N runs /tdd on a specific issue regardless of owner label; /impl N,M,... runs a comma-separated list sequentially; /impl -p N,M,... spawns parallel claude -w workers for an explicit list; /impl story <N> drains a multi-issue story DAG; /impl auto wraps /ralph-loop around /impl to drain the AFK queue end-to-end. Use when draining the AFK backlog, picking up a specific issue or list, or running an approved story end-to-end."
+description: "Per-issue implementation executor — grab next AFK issue, run /tdd, commit + push + close. Modes: /impl N (specific issue), /impl story <N> (story DAG), /impl auto (drain queue), /impl -p N (parallel workers). Use khi drain AFK backlog hoặc execute approved story."
 ---
 
 # /impl — Per-Issue Implementation Executor

@@ -2,10 +2,8 @@
 name: vault-lint
 description: >
   Nightly vault maintenance — fix broken wiki-links, detect orphan pages,
-  enforce bidirectional linking, sync directory indexes, detect CLAUDE.md
-  drift/SSOT violations, flag stale GH-issue tasks, flag dead entities.
-  Use when: vault maintenance, broken links, orphan pages, nightly cron,
-  wiki-links, vault health, lint vault, stale tasks.
+  sync directory indexes, flag stale GH-issue tasks. Use cho: vault
+  maintenance, broken links, orphan pages, nightly cron, lint vault.
 ---
 
 # /vault-lint — Nightly Vault Maintenance

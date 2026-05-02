@@ -1,6 +1,6 @@
 ---
 name: debug
-description: "Investigate a reported bug, find the root cause across code + config + cloud + vault state, and file a brain-os GitHub issue with a /tdd RED-GREEN fix plan. Use when something silently fails, a skill output is wrong, a cron produces nothing, a hook misbehaves, or the user says 'why is X broken' / 'X is not working' / 'debug this' / invokes /debug."
+description: "Investigate reported bug across code + config + cloud + vault state, file brain-os GH issue với /tdd RED-GREEN fix plan. Use khi skill output sai, cron produces nothing, hook misbehaves, hoặc user nói 'why is X broken'/'debug this'/'/debug'."
 ---
 
 # /debug — Triage Brain-os Bugs into /tdd-Ready Issues

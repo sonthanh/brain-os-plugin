@@ -1,6 +1,6 @@
 ---
 name: slice
-description: "Break a settled grill-session, plan, or PRD into a parent story issue (PRD body, awaits user approval) plus independently-grabbable child issues using tracer-bullet vertical slices. Children carry `## Parent` + `## Blocked by` references; parent body holds the auto-filled sub-issues checklist that /impl story walks for DAG drainage. Use when user wants to convert a grill outcome into AFK/HITL implementation tickets, file slices to sonthanh/ai-brain, or break a plan down for parallel execution. Triggers: 'slice this plan', 'break into issues', '/slice', 'file as issues', 'to issues' (legacy)."
+description: "Break grill-session/plan/PRD thành parent story issue + child issues theo tracer-bullet vertical slices. Children có `## Parent` + `## Blocked by`. Use khi convert grill outcome thành AFK tickets, file vào sonthanh/ai-brain. Triggers: 'slice this', '/slice', 'break into issues'."
 ---
 
 # /slice — Grill → Parent PRD Issue + Tracer-Bullet Children

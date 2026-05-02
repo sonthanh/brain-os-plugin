@@ -1,7 +1,7 @@
 ---
 name: improve
 description: |
-  Analyze skill outcomes and user corrections to propose self-improvements. Use when a skill's output repeatedly needs manual fixes, after a grill session surfaces skill weaknesses, or on a schedule to continuously improve skill quality. Triggers on: improve, skill learning, why does this skill keep getting it wrong, make this skill better.
+  Analyze skill outcomes + user corrections để propose self-improvements. Triggers: 'improve', 'skill learning', 'why does this skill keep getting it wrong', '/improve [skill-name]'.
 ---
 
 # Improve — Skill Learning Loop
