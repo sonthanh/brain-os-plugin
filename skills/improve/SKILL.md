@@ -345,7 +345,11 @@ When generating a description-trim candidate, preserve only **WHAT + WHEN + DIFF
 
    **Full judge (when frontmatter changed, even whitespace):** spawn an Agent sub-agent (`subagent_type: general-purpose`, model: sonnet) with this prompt:
 
-   > You are judging whether a proposed edit to a skill's SKILL.md still matches the skill's **original trigger conditions**. The pre-edit frontmatter `description` field is the canonical trigger spec — Claude Code uses it to route invocations. Answer whether the candidate still matches those triggers, or whether it drifts into different skill territory.
+   > You are judging whether a proposed edit to a skill's SKILL.md still matches the skill's **original trigger conditions**. The pre-edit frontmatter `description` field is the canonical trigger spec — Claude Code uses it to route invocations by string-matching user input against text in the description.
+   >
+   > **Routing-surface preservation rule (non-negotiable):** Extract every single-quoted phrase (`'…'`), double-quoted phrase (`"…"`), and backtick-quoted token (`` `…` ``) from the pre-edit description. These — and ONLY these — are the routing surface; Claude Code matches user input against them verbatim. If ANY of these quoted/backticked tokens is missing from the candidate description (verbatim substring match), return FAIL. Unquoted prose, decorative adjectives, and explanatory clauses can be paraphrased, truncated, or dropped freely — they are not routing keywords. Semantic equivalence does not save a missing quoted token: a candidate that drops `'grill me'` but keeps `'stress-test this plan'` is FAIL even if the skill still does the same thing.
+   >
+   > Also FAIL if the candidate drifts into different skill territory (changes scope or primary action), even when all quoted tokens survive.
    >
    > Reply strictly `PASS` or `FAIL` on the first line, then a one-sentence rationale on the second line. No other output.
    >

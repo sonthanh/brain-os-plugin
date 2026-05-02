@@ -1,0 +1,42 @@
+[
+  {
+    "name": "drop-quoted-user-trigger-grill",
+    "comment": "Candidate drops 'grill me' — the primary user-typed trigger. Judge MUST FAIL: silently breaks routing on the most common invocation phrase.",
+    "skill_name": "grill",
+    "pre_edit_description": "Interview the user relentlessly about a topic until reaching a bulletproof, actionable plan. Use when user says 'grill me', 'stress-test this plan', 'poke holes in this', or wants to be challenged on every aspect of a design, strategy, or decision.",
+    "candidate_description": "Interview user about a topic until reaching a bulletproof plan. Use when user says 'stress-test this plan' or 'poke holes in this'.",
+    "expected_verdict": "FAIL"
+  },
+  {
+    "name": "drop-slash-command-mention-refactor",
+    "comment": "Candidate drops the explicit /refactor mention. Judge MUST FAIL: removes the slash-command invocation path.",
+    "skill_name": "refactor",
+    "pre_edit_description": "System-level reorganization scan — detects shallow modules, cross-skill duplication, unused code, vault drift. Use khi user nói 'reorganize'/'refactor'/'audit architecture'/'system-level review'. Khác /improve (per-skill) và /vault-lint (mechanical hygiene).",
+    "candidate_description": "System-level reorganization scan detecting shallow modules and cross-skill duplication across the codebase and vault.",
+    "expected_verdict": "FAIL"
+  },
+  {
+    "name": "synonym-substitution-grill",
+    "comment": "Candidate replaces 'grill me' with synonym 'interview me' — same semantic but routing breaks because Claude Code matches the original phrase. Judge MUST FAIL.",
+    "skill_name": "grill",
+    "pre_edit_description": "Interview the user relentlessly about a topic until reaching a bulletproof, actionable plan. Use when user says 'grill me', 'stress-test this plan', 'poke holes in this', or wants to be challenged on every aspect of a design, strategy, or decision.",
+    "candidate_description": "Interview the user about a topic until reaching a bulletproof plan. Use when user says 'interview me', 'stress-test this plan', 'poke holes in this'.",
+    "expected_verdict": "FAIL"
+  },
+  {
+    "name": "legitimate-trim-preserves-triggers-grill",
+    "comment": "Candidate drops wordy decoration ('relentlessly', 'on every aspect of a design, strategy, or decision') but preserves every quoted trigger phrase. Judge MUST PASS.",
+    "skill_name": "grill",
+    "pre_edit_description": "Interview the user relentlessly about a topic until reaching a bulletproof, actionable plan. Use when user says 'grill me', 'stress-test this plan', 'poke holes in this', or wants to be challenged on every aspect of a design, strategy, or decision.",
+    "candidate_description": "Interview the user about a topic until reaching a bulletproof plan. Use when user says 'grill me', 'stress-test this plan', 'poke holes in this', or wants to be challenged.",
+    "expected_verdict": "PASS"
+  },
+  {
+    "name": "legitimate-trim-preserves-triggers-impl",
+    "comment": "Original was 683 chars listing every /impl mode. Candidate trims to ~270 chars but preserves: skill name, all routing triggers ('drain AFK', 'execute approved story'), and the slash-command. Judge MUST PASS.",
+    "skill_name": "impl",
+    "pre_edit_description": "Per-issue implementation executor for brain-os artifacts. Default mode grabs the next AFK GitHub issue and runs /tdd on it; -p N (alias --parallel N) dispatches scripts/run-parallel.ts to spawn N detached claude -w workers with explicit per-issue cwd; /impl N runs /tdd on a specific issue regardless of owner label; /impl N,M,... runs a comma-separated list sequentially; /impl -p N,M,... spawns parallel claude -w workers for an explicit list; /impl story <N> drains a multi-issue story DAG; /impl auto wraps /ralph-loop around /impl to drain the AFK queue end-to-end. Use when draining the AFK backlog, picking up a specific issue or list, or running an approved story end-to-end.",
+    "candidate_description": "Per-issue implementation executor — grab next AFK issue, run /tdd, commit + push + close. Modes: /impl N (specific issue), /impl story <N> (story DAG), /impl auto (drain queue), /impl -p N (parallel workers). Use khi drain AFK backlog hoặc execute approved story.",
+    "expected_verdict": "PASS"
+  }
+]

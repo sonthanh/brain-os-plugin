@@ -312,6 +312,58 @@
     "type": "skill-content-check"
   },
   {
+    "name": "phase4-judge-routing-surface-rule",
+    "description": "Phase 4 semantic-judge prompt must enforce verbatim preservation of quoted phrases / backticked tokens (routing surface), and explicitly reject the 'covers the same intent' / 'preserves the core function' fallback that lets paraphrases through",
+    "expected_in_skill": ["Routing-surface preservation rule", "single-quoted phrase", "double-quoted phrase", "backtick-quoted token", "verbatim substring match", "ONLY these — are the routing surface", "Semantic equivalence does not save a missing quoted token"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "phase4-judge-unquoted-prose-paraphrase-allowed",
+    "description": "Phase 4 judge prompt must explicitly allow paraphrasing/truncating unquoted prose so legitimate trims aren't blocked",
+    "expected_in_skill": ["Unquoted prose, decorative adjectives, and explanatory clauses can be paraphrased, truncated, or dropped freely"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "judge-fixture-drop-quoted-trigger",
+    "description": "Behavioral fixture: candidate drops a single-quoted user-trigger phrase ('grill me') — judge must FAIL",
+    "fixture": "fixtures/descriptions/judge-cases.json",
+    "fixture_case": "drop-quoted-user-trigger-grill",
+    "expected_verdict": "FAIL",
+    "type": "description-judge"
+  },
+  {
+    "name": "judge-fixture-drop-slash-command",
+    "description": "Behavioral fixture: candidate drops the /refactor invocation + all quoted user phrases — judge must FAIL",
+    "fixture": "fixtures/descriptions/judge-cases.json",
+    "fixture_case": "drop-slash-command-mention-refactor",
+    "expected_verdict": "FAIL",
+    "type": "description-judge"
+  },
+  {
+    "name": "judge-fixture-synonym-substitution",
+    "description": "Behavioral fixture: candidate replaces 'grill me' with synonym 'interview me' — judge must FAIL because routing is string-match not semantic",
+    "fixture": "fixtures/descriptions/judge-cases.json",
+    "fixture_case": "synonym-substitution-grill",
+    "expected_verdict": "FAIL",
+    "type": "description-judge"
+  },
+  {
+    "name": "judge-fixture-legitimate-trim-grill",
+    "description": "Behavioral fixture: candidate drops decorative prose but preserves every quoted trigger — judge must PASS",
+    "fixture": "fixtures/descriptions/judge-cases.json",
+    "fixture_case": "legitimate-trim-preserves-triggers-grill",
+    "expected_verdict": "PASS",
+    "type": "description-judge"
+  },
+  {
+    "name": "judge-fixture-legitimate-trim-impl",
+    "description": "Behavioral fixture: 683-char description trimmed to 270 chars; preserves slash-command + all routing keywords — judge must PASS",
+    "fixture": "fixtures/descriptions/judge-cases.json",
+    "fixture_case": "legitimate-trim-preserves-triggers-impl",
+    "expected_verdict": "PASS",
+    "type": "description-judge"
+  },
+  {
     "name": "descriptions-detector-pre-trim-impl",
     "description": "Detector fixture: pre-trim impl description must flag (chars > 300)",
     "fixture": "fixtures/descriptions/cases.json",
