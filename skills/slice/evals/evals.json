@@ -198,6 +198,17 @@
         "Lists all three user options on gate fail (add covering child / promote component to live-AC / amend parent body)",
         "Mentions that pure-component children carry an empty `## Covers AC` section per § 1.1 (the empty form is legal and asserts intent)"
       ]
+    },
+    {
+      "id": 20,
+      "prompt": "User runs `/slice 207` where ai-brain#207 was filed manually (not via `create-task-issue.sh --type plan`) and therefore lacks the `type:plan` label. Step 1 takes the existing-parent-issue-number branch. What MUST Step 1 do after `gh issue view` returns the labels, and why?",
+      "expected_output": "After `gh issue view` returns labels for the existing parent, Step 1 MUST verify `type:plan` is in the label list. If missing, auto-add it via `gh issue edit <N> -R sonthanh/ai-brain --add-label \"type:plan\"` and surface a one-line note to the user. Default behavior is auto-add (no prompt), because `/slice`'s entire job is preparing the parent for `/impl story` consumption, and `scripts/run-story.ts` (the orchestrator behind `/impl story`) refuses to drain any parent that lacks `type:plan` (parent #N lacks type:plan label → ERROR). Without this verification, a manually-filed parent will pass through `/slice` (children filed correctly, parent body updated correctly) but downstream `/impl story` will refuse to drain the resulting DAG, requiring the user to manually `gh issue edit --add-label type:plan` to unblock. The new-parent path in Step 2.5 already passes `--type plan` to `create-task-issue.sh`, so this verification is needed only on the existing-parent branch.",
+      "expectations": [
+        "Names verifying `type:plan` is in the parent labels as a required Step 1 action on the existing-parent branch",
+        "Mentions auto-adding `type:plan` via `gh issue edit ... --add-label \"type:plan\"` when missing (default — no prompt)",
+        "Cites `/impl story` (or `scripts/run-story.ts`) refusing to drain a parent without `type:plan` as the rationale",
+        "Distinguishes the existing-parent branch from the new-parent path (Step 2.5 already attaches `type:plan` via `create-task-issue.sh --type plan`)"
+      ]
     }
   ]
 }
