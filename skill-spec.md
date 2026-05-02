@@ -146,6 +146,6 @@ Single mentions of a flag or threshold are fine — they're often the trigger ke
 
 ### Detection + remediation
 
-`/improve descriptions` scans all source-repo SKILL.md files via `scripts/scan-skill-descriptions.py`, generates trim candidates, and either auto-applies (when the trigger-preservation gate passes) or escalates to `/grill` (when it would silently drop a routing keyword). Run manually after writing or updating a skill, or wait for the daily cron batch.
+Description hygiene is integrated into the per-skill `/improve` flow, not a separate command. Phase 1 step 6 runs `scripts/scan-skill-descriptions.py --describe-stdin` against the current frontmatter and emits a `description is bloated` pattern when chars > 300. Phase 4 then generates a `description trim` mutation strategy candidate alongside the other strategies. The Phase 4 semantic-preservation judge (Gate 2) verifies that every routing keyword survives the trim — that judge is the safety net. If the trim would silently drop a trigger keyword, the judge returns FAIL and the variant is dropped via the standard Phase 4 revert protocol.
 
-The trigger-preservation gate is the safety net: every quoted phrase, backtick-quoted token, and imperative verb phrase in the original description must appear verbatim in the trim. This is what prevents auto-trim from silently breaking routing.
+No separate `/improve descriptions` sub-mode exists. Every `/improve <skill>` run includes the hygiene check; the daily `/improve` cron picks skills with bloated descriptions alongside outcome-log signals.

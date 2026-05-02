@@ -9,11 +9,12 @@ description: |
 ## Usage
 
 ```
-/improve <skill-name>        # Improve a specific skill (Phase 1–5, from outcome logs)
+/improve <skill-name>        # Improve a specific skill (Phase 1–5, from outcome logs + description hygiene)
 /improve                     # Scan all outcome logs, rank by error rate, suggest which to improve
 /improve memory              # Triage memory feedback inbox via 5-tier rubric (Phase 0 — Step 0.0/0.5/0.7 only)
-/improve descriptions        # Scan SKILL.md frontmatter for bloat, auto-trim with /grill fallback (Phase D)
 ```
+
+Description hygiene is integrated into the per-skill flow — Phase 1 detects bloated frontmatter as one signal source, Phase 4 generates a "description trim" mutation strategy alongside the other strategies, and the existing semantic-judge gate verifies trigger preservation. There is no separate `/improve descriptions` sub-mode; every per-skill run includes the hygiene check.
 
 ## Clarifications
 
@@ -28,14 +29,15 @@ Three modes:
 
 ### Signals — what counts as evidence?
 
-Five sources, processed in Phase 1 in this order:
+Six sources, processed in Phase 1 in this order:
 1. **Outcome logs** (primary) — `{vault}/daily/skill-outcomes/{skill}.log`. `corrections=N` and `interrupt="..."` are strongest direct signals.
 2. **Trace JSONL files** — `{vault}/daily/skill-traces/{skill}.jsonl`. Behavioral patterns (tool-call sequences). Supplementary weight.
 3. **Grill sessions** — `{vault}/daily/grill-sessions/`. Clarifying questions about the skill = underspec signal (see Phase 1 step 3).
 4. **Aha moments** — `{vault}/thinking/aha/`. User-recorded insights mentioning the skill.
 5. **User corrections via git diff** — detected against the skill's anchor commit. Substantive content changes only (whitespace/typos filtered).
+6. **Frontmatter description bloat** — static check on `skills/{skill}/SKILL.md` frontmatter. Char-count floor via `scripts/scan-skill-descriptions.py`. Always runs (no outcome data needed); contributes a "description bloated" pattern to Phase 2 → triggers a "description trim" mutation strategy in Phase 4.
 
-Weight order: direct corrections > interrupts > partial+low score > trace patterns. Trace patterns must co-occur with an outcome-log signal to justify a SKILL.md edit.
+Weight order: direct corrections > interrupts > partial+low score > trace patterns. Trace patterns must co-occur with an outcome-log signal to justify a SKILL.md edit. Description bloat is independent — it can run on its own (no other signal needed), and produces a frontmatter-only candidate that the semantic-judge will route through normally.
 
 ### Auto-apply vs review — does a human gate the change?
 
@@ -46,7 +48,7 @@ Safety relies on the Phase 4 eval gate, not human review:
 - Commit messages are descriptive so the user can revert after the fact if they disagree with a kept variant.
 - Manual review mode is NOT supported. Do not add one — the eval gate is the safety net. Adding optional review flags reintroduces ambiguity about when they apply.
 
-**`/improve descriptions` keeps auto-apply with a `/grill` failure handler.** Description trims are auto-applied when the trigger-preservation gate passes (every quoted phrase and imperative verb phrase from the original description survives verbatim in the trim). When the gate fails — meaning the auto-trim would silently drop a routing keyword — the sub-mode escalates to `/grill` for that single skill rather than dropping silently or asking the user to review. `/grill` is not manual review; it's an interactive escalation when auto can't proceed safely. This preserves the no-HITL invariant: success is auto, failure delegates to a structured interview, never to a yes/no prompt.
+**Description trim variants follow the same Phase 4 gate as every other variant.** The Phase 4 semantic-preservation judge already checks that a candidate's frontmatter matches the pre-edit description's trigger conditions — that is the trigger-preservation gate. If a description trim would silently drop a routing keyword, the judge returns FAIL, the variant is dropped, and Phase 4's standard revert protocol applies. No separate carve-out; the existing eval gate is the safety net.
 
 ### Scope — single skill or all?
 
@@ -180,156 +182,6 @@ step=0.7 expired=<N> issued=<N>
 
 ---
 
-## Phase D — Description hygiene scan (`/improve descriptions`)
-
-Static scan of SKILL.md frontmatter `description` fields across source repos. Flags bloat, generates trims, auto-applies when the trigger-preservation gate passes, escalates to `/grill` when it fails. No yes/no prompts — auto on the success path, structured interview on the failure path.
-
-Description bloat eats always-loaded session-start context: every enabled skill's frontmatter is loaded on every conversation. A 700-char description costs ~140 tokens × every session forever. Trim brings it to ~200 chars × every session.
-
-### Detection rules
-
-Implemented in `scripts/scan-skill-descriptions.py`. Five detectors:
-
-| Rule | Threshold | Type |
-|------|-----------|------|
-| Char count | > 300 | hard |
-| Numbered workflow steps | ≥ 2 occurrences of `(1) … (2) …` or `1. … 2. …` | hard |
-| Multi-paragraph | ≥ 2 line breaks within description (3+ paragraph lines) | hard |
-| Invocation flags | ≥ 2 distinct `--flag` mentions | soft |
-| Technical thresholds | ≥ 2 distinct mentions (Cut N, ≥N% gate, max N rounds, N+ words) | soft |
-
-Hard rules flag on first hit. Soft rules require multiplicity to avoid false-positives on legitimate single trigger keywords like `--week` (a real invocation flag) or `≥95%` (a single threshold reference). A description with just one flag mention or one threshold mention is not bloat — those are useful trigger hints.
-
-### Step D.1 — Run scanner
-
-```bash
-python3 scripts/scan-skill-descriptions.py
-```
-
-Default discovery walks `~/work/*/skills/*/SKILL.md`. Override with `--repo PATH` (repeatable) for non-standard layouts.
-
-Output: ranked table — most-bloated first (signal count desc, char count desc), with per-skill char count, signal reasons, and a rough token-savings estimate (chars over 200 ÷ 4). If zero skills are flagged → log `pass | scanned=N flagged=0 applied=0` and exit; nothing to do.
-
-### Step D.2 — Per-skill auto-trim attempt (latent)
-
-For each flagged skill, in scanner-rank order:
-
-1. **Extract trigger phrases** from the original description. The trigger set is:
-   - Every single- or double-quoted phrase (`'grill me'`, `"why is X broken"`, `` `--week` ``).
-   - Every imperative-mood verb phrase: matches `Use when X`, `Triggers on: X`, `Use khi X`, `Dùng khi X`, `Use trước khi X`, `when X`, `for X`. Capture the noun-phrase object (the X), not the leading verb.
-   - Every backtick-quoted token (skill names, flags, file names).
-   This set is the **routing surface** — what Claude Code's session-start matching is keying off. Anything in this set must survive the trim verbatim.
-2. **Generate candidate trim** per the trim guidance below.
-3. **Run the auto-apply gate** — three deterministic checks:
-   - **G1 — Trigger preservation:** every member of the extracted trigger set appears verbatim in the candidate. Substring match, case-sensitive for quoted phrases. Missing any → gate FAIL.
-   - **G2 — Char ceiling:** candidate is ≤ 300 chars (matches the detector's bloat threshold — a candidate at or below this is no longer bloated by definition). Above → gate FAIL.
-   - **G3 — Frontmatter shape preserved:** candidate fits the same YAML shape (inline string or `|` block scalar) as the original. Mismatched shape → gate FAIL.
-4. **Branch on gate result:**
-   - **PASS** → apply automatically (Step D.3).
-   - **FAIL** → escalate to `/grill` for this skill (Step D.4).
-
-The gate is intentionally conservative on G1: a routing keyword silently dropped is worse than over-escalating to grill. False-positive gate failures (over-cautious) cost a grill round; false-negatives (under-cautious) silently break routing. Bias toward grill.
-
-### Step D.3 — Apply trim (PASS path)
-
-For each PASS skill:
-
-1. Edit `skills/{skill}/SKILL.md` frontmatter — replace the description value with the candidate. Preserve YAML shape (inline string vs `|` block scalar) — match what the skill already uses.
-2. Stage only the SKILL.md.
-3. Commit per-skill with `--no-verify` (cosmetic affordance — `pre-commit-eval-gap.sh`'s header explicitly permits this for typo/whitespace/formatting; a description trim with G1 passing qualifies):
-
-   ```bash
-   git -C {source_repo} commit -m "docs({skill}): trim description ({orig_chars} → {new_chars} chars)" -- skills/{skill}/SKILL.md --no-verify
-   ```
-
-4. After processing all PASS skills in a given source repo, push that repo (`git -C {source_repo} pull --rebase && git -C {source_repo} push`).
-
-### Step D.4 — `/grill` fallback (FAIL path)
-
-When the gate fails for a skill, do NOT silently drop and do NOT prompt the user yes/no. Invoke `/grill` with this opening prompt:
-
-```
-Description trim for `{skill}` failed the auto-apply gate.
-
-Original ({orig_chars} chars):
-  {original_description}
-
-Auto-trim candidate ({cand_chars} chars):
-  {candidate}
-
-Gate failure: {failure_reason}
-  - Triggers extracted from original: {trigger_set}
-  - Triggers missing in candidate: {missing_triggers}
-
-Goal: settle on a description ≤ 300 chars that preserves every trigger phrase
-and routing keyword. Walk through what each phrase is for and which can be
-dropped, merged, or rephrased without losing routing.
-```
-
-Run the `brain-os:grill` skill with that prompt. The grill session converges on a settled description with the user. Once settled:
-
-1. Apply the agreed description per Step D.3 (write + commit + push).
-2. Continue to the next flagged skill — do not block other skills' processing on this one.
-
-If grill is interrupted or the user explicitly opts out for this skill (`skip this`, `leave it`), record it as `skipped` in the outcome metrics and move on.
-
-### Step D.5 — Re-scan + report
-
-After processing all flagged skills:
-
-1. Re-run the scanner — confirm previously-flagged skills no longer flag (or note the residual signals if a soft-rule false-positive remains and was accepted).
-2. Append the report block to `{vault}/daily/improve-reports/{date}-descriptions.md`:
-
-```markdown
-# Improve Descriptions Report — {date}
-
-## Scanned
-- {N} skills walked across {M} source repos.
-- {N_flagged} flagged.
-
-## Applied (auto-pass)
-| Skill | orig chars | new chars | tokens saved |
-|-------|------------|-----------|--------------|
-| ... | ... | ... | ... |
-
-## Escalated to /grill
-| Skill | orig chars | failure reason | grill outcome |
-|-------|------------|----------------|---------------|
-| ... | ... | missing trigger 'X' | applied / skipped |
-
-## Residual flags (re-scan)
-- {N_remaining} skills still flag — listed with reason and rationale.
-```
-
-### Trim guidance (latent — judgment per candidate)
-
-Preserve only **WHAT + WHEN + DIFFERENTIATOR**.
-
-- **WHAT** — one phrase naming the primary action ("Test-driven development", "Pull stats from Substack publish dashboard", "Capture key moments mid-session").
-- **WHEN** — trigger keywords a user would type or say to invoke this skill. Extract verbatim from the original (per Step D.2 trigger-extraction rules). Each trigger phrase MUST appear verbatim in the trim — this is what G1 enforces.
-- **DIFFERENTIATOR** — one short phrase distinguishing this skill from siblings ("Different from /improve (per-skill)", "Bài kinh nghiệm cá nhân → fb-writer", "Not for behavioral feedback").
-
-**Move to SKILL.md body** if not already there: numbered workflow steps, Cut numbers, max-round counts, flag taxonomies, technical thresholds duplicated from body, multi-paragraph elaboration. Most of this content already lives in the body — the description was duplicating it. Skip the body edit when the content is already covered (the common case).
-
-**Drop entirely**: hedge language ("comprehensive", "robust", "elegant"), redundant phrasing, marketing decoration.
-
-### Outcome metrics
-
-Phase D emits these for the cron log AND the outcome log line (see `## Outcome log` below):
-
-```
-scanned=<N> flagged=<N> applied=<N> grilled=<N> skipped=<N> tokens_saved=<N>
-```
-
-- `scanned` — total skills walked across all source repos.
-- `flagged` — skills tripping ≥1 detector.
-- `applied` — trims committed via the PASS path (Step D.3) or after a successful grill.
-- `grilled` — skills that escalated to `/grill` (regardless of outcome — Step D.4 was entered).
-- `skipped` — flagged but ultimately not applied (grill skipped, user opted out, or grill interrupted).
-- `tokens_saved` — sum of `(orig_chars - new_chars) / 4` across applied skills.
-
----
-
 ## Phase 1 — Collect signals (deterministic)
 
 When invoked without a skill name, scan all outcome logs, rank skills by `partial` + `fail` rate, and recommend the top candidate. Stop and report.
@@ -457,10 +309,23 @@ Generate 3-5 candidate SKILL.md edits, each addressing the Phase 2 patterns via 
 | **Gotcha addition** | Add to the Gotchas section as a warning/anti-pattern |
 | **Example-based** | Add a concrete before/after example showing wrong vs. right behavior |
 | **Restructure** | Move/merge existing rules to better cover the gap |
+| **Description trim** | Replace the SKILL.md frontmatter description with a tighter version (≤ 300 chars) preserving routing keywords. Use when Phase 1 emits a `description is bloated` pattern. Variant body equals the pre-edit body — only frontmatter changes. The semantic-judge (Gate 2) verifies trigger preservation; no separate gate. |
 
 Each candidate must use a meaningfully different strategy — not cosmetic rephrasing of the same rule. Keep all changes surgical — only add/modify lines that address the patterns.
 
-**Minimum 3 candidates required.** Generate up to 5 when patterns are complex or when multiple strategies clearly apply.
+**Minimum 3 candidates required** for behavioral patterns. **Description-trim variants are the exception**: when the *only* signal is description bloat (no outcome-log corrections, no traces, no grill questions), Phase 4 generates a single description-trim candidate and runs it through the gates — no need to fabricate alternative behavioral strategies. Generate up to 5 when patterns are complex or when multiple strategies clearly apply.
+
+### Trim guidance for the Description trim strategy (latent — judgment)
+
+When generating a description-trim candidate, preserve only **WHAT + WHEN + DIFFERENTIATOR**:
+
+- **WHAT** — one phrase naming the primary action ("Test-driven development", "Capture key moments mid-session").
+- **WHEN** — trigger keywords a user would type to invoke this skill: every quoted phrase (`'grill me'`, `"why is X broken"`), every backtick-quoted token (skill names, flags), and every imperative verb phrase ("Use when X", "Use khi Y", "Triggers on: Z"). The semantic-judge enforces preservation.
+- **DIFFERENTIATOR** — one short clause distinguishing this skill from siblings ("Different from /improve (per-skill)", "Bài kinh nghiệm cá nhân → fb-writer").
+
+**Move to SKILL.md body** if not already there: numbered workflow steps, technical thresholds duplicated from body, flag taxonomies, multi-paragraph elaboration. Most of this content already lives in the body — the description was duplicating it.
+
+**Drop entirely**: hedge language ("comprehensive", "robust"), redundant phrasing, marketing decoration.
 
 ### Evaluate and select
 
@@ -576,7 +441,7 @@ Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/improve.lo
 {date} | improve | {action} | ~/work/brain-os-plugin | {output_path} | commit:{hash} | {result}
 ```
 
-- `action`: `improve` (Phase 1–5 single-skill), `memory` (Phase 0 only — triage + index reconcile + expiry), `descriptions` (Phase D only — frontmatter bloat scan + HITL trim), `rank` (no-arg rank-only report)
-- `output_path`: `daily/improve-reports/{date}-{skill}.md` for improve/rank; `daily/improve-reports/{date}-descriptions.md` for descriptions; `N/A` for memory mode (artifacts are spread across hooks/skills/rules/CLAUDE.md/issue queue and tracked per-commit)
-- `result`: `pass` if evals improved and changes kept (improve) OR ≥1 memory file processed cleanly (memory) OR ≥1 description trimmed (descriptions); `partial` if some changes reverted, some memory triages routed to ambiguous, some encodings failed, OR some description trims were skipped/revised; `fail` if all reverted, all stale, all description trims rejected, or no input data
-- Optional: `args="{skill-name}"`, `score={after_pass}/{after_total}`, `triaged={N}` (memory mode: total feedback files seen), `encoded={N}` (memory mode: encoded into a tier), `deleted={N}` (memory mode: source files removed), `ambiguous={N}` (memory mode: queued as human-review), `expired={N}` (memory mode: surfaced for confirm-delete), `scanned={N}` (descriptions mode: total skills walked), `flagged={N}` (descriptions mode: skills tripping ≥1 detector), `applied={N}` (descriptions mode: trims committed via auto-pass or after grill), `grilled={N}` (descriptions mode: skills escalated to /grill), `skipped={N}` (descriptions mode: flagged but ultimately not applied), `tokens_saved={N}` (descriptions mode: sum of saved tokens across applied trims)
+- `action`: `improve` (Phase 1–5 single-skill), `memory` (Phase 0 only — triage + index reconcile + expiry), `rank` (no-arg rank-only report)
+- `output_path`: `daily/improve-reports/{date}-{skill}.md` for improve/rank; `N/A` for memory mode (artifacts are spread across hooks/skills/rules/CLAUDE.md/issue queue and tracked per-commit)
+- `result`: `pass` if evals improved and changes kept (improve) OR ≥1 memory file processed cleanly (memory); `partial` if some changes reverted, some memory triages routed to ambiguous, or some encodings failed; `fail` if all reverted, all stale, or no input data
+- Optional: `args="{skill-name}"`, `score={after_pass}/{after_total}`, `desc_trim_applied=1` (Phase 4 description-trim variant won and was applied — a frontmatter-only Phase 4 outcome), `triaged={N}` (memory mode: total feedback files seen), `encoded={N}` (memory mode: encoded into a tier), `deleted={N}` (memory mode: source files removed), `ambiguous={N}` (memory mode: queued as human-review), `expired={N}` (memory mode: surfaced for confirm-delete)

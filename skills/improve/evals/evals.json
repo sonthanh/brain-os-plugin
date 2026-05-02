@@ -276,63 +276,39 @@
     "type": "memory-fixture"
   },
   {
-    "name": "descriptions-mode-documented",
-    "description": "/improve descriptions usage mode must be documented in the Usage block",
-    "expected_in_skill": ["/improve descriptions", "Phase D"],
+    "name": "descriptions-integrated-not-separate-mode",
+    "description": "Description hygiene must be integrated into per-skill flow, not a separate /improve descriptions sub-mode",
+    "expected_in_skill": ["Description hygiene is integrated into the per-skill flow", "There is no separate `/improve descriptions` sub-mode"],
     "type": "skill-content-check"
   },
   {
-    "name": "descriptions-detection-rules",
-    "description": "Phase D must enumerate the five detection rules with their thresholds and hard/soft type",
-    "expected_in_skill": ["Char count", "Numbered workflow steps", "Multi-paragraph", "Invocation flags", "Technical thresholds", "hard", "soft"],
+    "name": "phase1-signal-6-description-bloat",
+    "description": "Phase 1 must list frontmatter description bloat as the 6th signal source, with detector script reference",
+    "expected_in_skill": ["Six sources", "Frontmatter description bloat", "scripts/scan-skill-descriptions.py", "no outcome data needed"],
     "type": "skill-content-check"
   },
   {
-    "name": "descriptions-soft-rule-multiplicity",
-    "description": "Soft rules (flags + thresholds) must require multiplicity to avoid false-positives on legitimate single trigger keywords",
-    "expected_in_skill": ["Soft rules require multiplicity", "single trigger keywords", "useful trigger hints"],
+    "name": "phase4-description-trim-strategy",
+    "description": "Phase 4 must list 'Description trim' as a mutation strategy alongside the other five",
+    "expected_in_skill": ["Description trim", "≤ 300 chars", "preserving routing keywords", "semantic-judge (Gate 2)"],
     "type": "skill-content-check"
   },
   {
-    "name": "descriptions-trigger-preservation-gate",
-    "description": "Phase D Gate 1 (G1) must enforce trigger-set preservation as the auto-apply safety net",
-    "expected_in_skill": ["G1 — Trigger preservation", "extracted trigger set appears verbatim", "Substring match"],
+    "name": "phase4-description-trim-single-candidate-exemption",
+    "description": "Phase 4 must allow a single description-trim candidate when description bloat is the only signal — no need to fabricate alternative behavioral strategies",
+    "expected_in_skill": ["Description-trim variants are the exception", "only* signal is description bloat", "Phase 4 generates a single description-trim candidate"],
     "type": "skill-content-check"
   },
   {
-    "name": "descriptions-grill-fallback",
-    "description": "Phase D must escalate gate failures to /grill rather than silently dropping or prompting yes/no",
-    "expected_in_skill": ["/grill` fallback", "do NOT silently drop", "do NOT prompt the user yes/no", "brain-os:grill"],
+    "name": "phase4-description-trim-guidance-what-when-diff",
+    "description": "Phase 4 description-trim guidance must be WHAT + WHEN + DIFFERENTIATOR with the same trigger-preservation rule",
+    "expected_in_skill": ["Trim guidance for the Description trim strategy", "WHAT + WHEN + DIFFERENTIATOR", "semantic-judge enforces preservation"],
     "type": "skill-content-check"
   },
   {
-    "name": "descriptions-no-verify-cosmetic",
-    "description": "Phase D apply step must use --no-verify (cosmetic affordance) so pre-commit-eval-gap.sh allows the trim",
-    "expected_in_skill": ["--no-verify", "pre-commit-eval-gap.sh", "cosmetic affordance"],
-    "type": "skill-content-check"
-  },
-  {
-    "name": "descriptions-trim-guidance-what-when-diff",
-    "description": "Trim guidance must be WHAT + WHEN + DIFFERENTIATOR; nothing else",
-    "expected_in_skill": ["WHAT + WHEN + DIFFERENTIATOR", "primary action", "trigger keywords", "distinguishing"],
-    "type": "skill-content-check"
-  },
-  {
-    "name": "descriptions-outcome-metrics",
-    "description": "Phase D must emit scanned/flagged/applied/grilled/skipped/tokens_saved metrics",
-    "expected_in_skill": ["scanned=", "flagged=", "applied=", "grilled=", "skipped=", "tokens_saved="],
-    "type": "skill-content-check"
-  },
-  {
-    "name": "descriptions-clarifications-carve-out",
-    "description": "Clarifications must explain why descriptions sub-mode keeps auto-apply with /grill failure handler instead of HITL gate",
-    "expected_in_skill": ["auto-apply with a `/grill` failure handler", "trigger-preservation gate", "no-HITL invariant"],
-    "type": "skill-content-check"
-  },
-  {
-    "name": "descriptions-outcome-log-action",
-    "description": "Outcome log spec must describe the descriptions action with scanned/flagged/applied/grilled/skipped/tokens_saved optional fields",
-    "expected_in_skill": ["`descriptions` (Phase D only", "scanned={N}", "flagged={N}", "applied={N}", "grilled={N}", "skipped={N}", "tokens_saved={N}"],
+    "name": "clarifications-description-trim-uses-existing-gate",
+    "description": "Clarifications must explain that description-trim variants follow the standard Phase 4 semantic-judge gate — no new safety mechanism",
+    "expected_in_skill": ["Description trim variants follow the same Phase 4 gate", "semantic-preservation judge", "trigger-preservation gate", "No separate carve-out"],
     "type": "skill-content-check"
   },
   {
