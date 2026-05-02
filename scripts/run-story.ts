@@ -11,10 +11,24 @@
  * notification if Supaterm unreachable). Ticks parent body checklist on each
  * close, closes parent + final-notifies on completion.
  *
+ * Before the main DAG-drainer loop runs, runPreCheck() (Gate B per
+ * references/ac-coverage-spec.md) inspects the parent's ## Acceptance bullets
+ * and each child's ## Covers AC mapping. If any parent AC has zero covering
+ * child it posts a gh comment on the parent and exits with code 4.
+ *
  * Tested via bun test scripts/run-story.test.ts.
  *
  * Self-detach is the caller's job — invoke with `nohup bun run ... &` (see
  * /impl story SKILL prose).
+ *
+ * Exit codes:
+ *   0 — drain completed (parent CLOSED or left OPEN with failed children logged)
+ *   1 — fatal orchestrator error (spawn failure, area resolution, gh fault)
+ *   4 — Gate B pre-check blocked: parent has AC bullets but children lack
+ *       `## Covers AC` coverage. Comment posted on parent. Distinct from 1 so
+ *       callers (and the manual-replay CLI in `references/ac-coverage-spec.md`
+ *       § 1) can latch on the AC-mapping failure without conflating it with
+ *       generic crashes.
  */
 
 export type Owner = "bot" | "human";
@@ -41,6 +55,82 @@ export function parseChecklist(body: string): number[] {
     nums.push(Number(m[1]));
   }
   return nums;
+}
+
+// Parent ## Acceptance bullet parser. Source of truth for the regex shape:
+// references/ac-coverage-spec.md § 3.1. Em-dash literal is U+2014.
+// Spec mandates global match (multiple bullets per body), so we matchAll
+// directly without sectioning — bullets matching the pattern outside the
+// ## Acceptance section are vanishingly rare and would themselves be a
+// filer bug surfaced by the gate.
+const ACCEPTANCE_AC_RE = /^- \[[ x]\] \*\*AC#(\d+)\*\* — (.+)$/gm;
+
+export function parseAcceptance(body: string): Map<number, string> {
+  const acs = new Map<number, string>();
+  for (const m of body.matchAll(ACCEPTANCE_AC_RE)) {
+    acs.set(Number(m[1]), m[2]);
+  }
+  return acs;
+}
+
+// Child `## Covers AC` parser. Per spec § 1 the section MUST exist on every
+// child filed under a parent story (empty for pure-component children).
+// Per spec § 3.2 the regex is line-anchored and applied INSIDE the section
+// (locate header → walk lines until next H2). Non-matching lines (blanks,
+// stray prose, multi-ID `- AC#1, AC#3` rejected) contribute zero IDs.
+const COVERS_AC_LINE_RE = /^- AC#(\d+)\s*$/;
+
+export function parseCoversAc(body: string): Set<number> {
+  const lines = body.split("\n");
+  let inSection = false;
+  const ids = new Set<number>();
+  for (const line of lines) {
+    if (/^## Covers AC\b/.test(line)) {
+      inSection = true;
+      continue;
+    }
+    if (inSection && /^## /.test(line)) break;
+    if (!inSection) continue;
+    const m = line.match(COVERS_AC_LINE_RE);
+    if (m) ids.add(Number(m[1]));
+  }
+  return ids;
+}
+
+// Coverage-set differential. Returns parent AC IDs no child claims to cover,
+// sorted ascending so the gh-comment id list reads stably across runs.
+export function findUncoveredAc(
+  parentAcIds: Iterable<number>,
+  childCoverage: Map<number, Set<number>>,
+): number[] {
+  const covered = new Set<number>();
+  for (const ids of childCoverage.values()) {
+    for (const id of ids) covered.add(id);
+  }
+  const uncovered: number[] = [];
+  for (const id of parentAcIds) {
+    if (!covered.has(id)) uncovered.push(id);
+  }
+  return uncovered.sort((a, b) => a - b);
+}
+
+// Thrown by runPreCheck() when at least one parent AC has zero child coverage.
+// main() catches this (and only this) to exit 4 instead of 1, so callers can
+// distinguish AC-mapping failure from generic orchestrator crashes.
+export class PreCheckBlockedError extends Error {
+  uncovered: number[];
+  constructor(uncovered: number[]) {
+    super(
+      `AC mapping missing — uncovered: ${uncovered.map((n) => `AC#${n}`).join(", ")}`,
+    );
+    this.name = "PreCheckBlockedError";
+    this.uncovered = uncovered;
+  }
+}
+
+export function formatUncoveredComment(uncovered: number[]): string {
+  const ids = uncovered.map((n) => `AC#${n}`).join(", ");
+  return `AC mapping missing — add \`## Covers AC\` to children before resuming. Uncovered: ${ids}`;
 }
 
 export function parseBlockers(body: string): number[] {
@@ -159,6 +249,11 @@ export interface GhClient {
    * (run-story.ts claims happen inside per-child workers).
    */
   claim(n: number): Promise<void>;
+  /**
+   * Post a comment on an issue. Used by runPreCheck() to surface AC-mapping
+   * gaps on the parent before /impl story enters the main drainer loop.
+   */
+  addComment(n: number, body: string): Promise<void>;
 }
 
 export interface SpawnClient {
@@ -337,6 +432,15 @@ export class RealGh implements GhClient {
       throw new Error(`transition-status.sh ${n} --to in-progress exited ${code}: ${err}`);
     }
   }
+
+  async addComment(n: number, body: string): Promise<void> {
+    // gh's --body arg shells through argv → newlines and backticks survive,
+    // but --body-file is the safer path for arbitrary text. Same pattern as
+    // editBody above.
+    const tmpFile = `/tmp/run-story-comment-${n}-${Date.now()}.md`;
+    await Bun.write(tmpFile, body);
+    await this.run(["issue", "comment", String(n), "-R", this.repo, "--body-file", tmpFile]);
+  }
 }
 
 export class RealSpawn implements SpawnClient {
@@ -449,6 +553,67 @@ export class FileStatusWriter implements StatusWriter {
     const fs = require("fs");
     fs.writeFileSync(this.path, JSON.stringify(status));
   }
+}
+
+// =========================================================================
+// Pre-check (Gate B per references/ac-coverage-spec.md)
+// =========================================================================
+
+export interface PreCheckDeps {
+  gh: GhClient;
+  logger: Logger;
+}
+
+/**
+ * Gate B — refuse to start /impl story if parent has `## Acceptance` bullets
+ * but children lack `## Covers AC` coverage. Posts a gh comment listing
+ * uncovered AC IDs before throwing PreCheckBlockedError. Skips entirely on
+ * legacy parents with no AC bullets (grandfathered).
+ *
+ * Cross-references: references/ac-coverage-spec.md § 1, § 3 (regex SSOT).
+ * Throws on block; main() maps the error to exit code 4.
+ */
+export async function runPreCheck(
+  parent: number,
+  deps: PreCheckDeps,
+): Promise<void> {
+  const { gh, logger } = deps;
+  const parentFull = await gh.viewFull(parent);
+  const parentAc = parseAcceptance(parentFull.body);
+  if (parentAc.size === 0) {
+    logger.log(
+      `pre-check: parent #${parent} has no ## Acceptance bullets — skipping (legacy)`,
+    );
+    return;
+  }
+  const parentAcIds = [...parentAc.keys()].sort((a, b) => a - b);
+  logger.log(
+    `pre-check: parent #${parent} has ${parentAcIds.length} AC bullets: [${parentAcIds.join(",")}]`,
+  );
+
+  const childNums = parseChecklist(parentFull.body);
+  const childCoverage = new Map<number, Set<number>>();
+  for (const n of childNums) {
+    const child = await gh.viewFull(n);
+    const ids = parseCoversAc(child.body);
+    childCoverage.set(n, ids);
+    logger.log(
+      `pre-check: child #${n} covers [${[...ids].sort((a, b) => a - b).join(",")}]`,
+    );
+  }
+
+  const uncovered = findUncoveredAc(parentAcIds, childCoverage);
+  if (uncovered.length === 0) {
+    logger.log(`pre-check: all ${parentAcIds.length} AC covered — proceed`);
+    return;
+  }
+
+  const comment = formatUncoveredComment(uncovered);
+  logger.log(
+    `pre-check: BLOCK — uncovered ${uncovered.map((n) => `AC#${n}`).join(", ")}; posting comment on #${parent}`,
+  );
+  await gh.addComment(parent, comment);
+  throw new PreCheckBlockedError(uncovered);
 }
 
 // =========================================================================
@@ -761,6 +926,33 @@ async function main() {
     workerLogDir: logDir,
     areaMap,
   };
+
+  try {
+    await runPreCheck(parent, { gh: deps.gh, logger });
+  } catch (err) {
+    if (err instanceof PreCheckBlockedError) {
+      const msg = err.message;
+      logger.log(`pre-check BLOCKED, exit 4: ${msg}`);
+      status.write({
+        ts: new Date().toISOString(),
+        parent,
+        phase: "died",
+        pid: process.pid,
+        cap: clampParallel(parallel, 5),
+        watching: [],
+        ready: [],
+        closed: [],
+        failed: [],
+        hb: -1,
+        error: msg,
+      });
+      new RealNotifier(`Brain OS — Story #${parent}`).notify(
+        `Story #${parent} pre-check blocked: ${msg.slice(0, 80)}`,
+      );
+      process.exit(4);
+    }
+    throw err;
+  }
 
   try {
     await runStory(parent, parallel, deps);

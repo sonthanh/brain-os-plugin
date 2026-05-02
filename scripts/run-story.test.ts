@@ -12,10 +12,18 @@ import {
   defaultAreaMap,
   cleanupWorker,
   runStory,
+  parseAcceptance,
+  parseCoversAc,
+  findUncoveredAc,
+  formatUncoveredComment,
+  PreCheckBlockedError,
+  runPreCheck,
   type Issue,
   type SpawnClient,
   type Logger,
   type OrchestratorDeps,
+  type GhClient,
+  type State,
 } from "./run-story.ts";
 
 describe("parseChecklist", () => {
@@ -429,5 +437,299 @@ describe("runStory — type:plan assertion", () => {
     // message); the empty-checklist abort path took over instead.
     expect(notifications.some((m) => m.includes("not type:plan"))).toBe(false);
     expect(notifications.some((m) => m.includes("no checklist children"))).toBe(true);
+  });
+});
+
+// =========================================================================
+// Gate B (runPreCheck) — references/ac-coverage-spec.md § 1, § 3
+// =========================================================================
+
+describe("parseAcceptance", () => {
+  test("returns empty map when body has no AC bullets", () => {
+    expect(parseAcceptance("just prose, no AC bullets here").size).toBe(0);
+  });
+
+  test("matches single AC bullet anchored with em-dash", () => {
+    const body = "- [ ] **AC#1** — Gate A: /slice refuses to file.";
+    const acs = parseAcceptance(body);
+    expect(acs.size).toBe(1);
+    expect(acs.get(1)).toBe("Gate A: /slice refuses to file.");
+  });
+
+  test("matches multiple AC bullets including [x] checked state", () => {
+    const body = [
+      "## Acceptance",
+      "",
+      "- [ ] **AC#1** — first criterion. Verified by replay.",
+      "- [x] **AC#2** — second criterion. Verified by inspection.",
+      "- [ ] **AC#10** — tenth criterion.",
+    ].join("\n");
+    const acs = parseAcceptance(body);
+    expect([...acs.keys()].sort((a, b) => a - b)).toEqual([1, 2, 10]);
+    expect(acs.get(2)).toBe("second criterion. Verified by inspection.");
+  });
+
+  test("rejects ASCII hyphen separator (must be U+2014 em-dash)", () => {
+    const body = "- [ ] **AC#1** - hyphen instead of em-dash";
+    expect(parseAcceptance(body).size).toBe(0);
+  });
+
+  test("rejects bullets without bold AC markers", () => {
+    const body = "- [ ] AC#1 — missing bold markers";
+    expect(parseAcceptance(body).size).toBe(0);
+  });
+});
+
+describe("parseCoversAc", () => {
+  test("returns empty set when body has no Covers AC section", () => {
+    const body = "## Parent\n\n- ai-brain#196\n\n## What to build\n\nfoo";
+    expect(parseCoversAc(body).size).toBe(0);
+  });
+
+  test("returns empty set for empty section (pure-component child)", () => {
+    const body = ["## Parent", "- ai-brain#196", "", "## Covers AC", "", "## What to build"].join(
+      "\n",
+    );
+    expect(parseCoversAc(body).size).toBe(0);
+  });
+
+  test("matches single AC bullet", () => {
+    const body = ["## Covers AC", "", "- AC#3", "", "## Acceptance"].join("\n");
+    expect([...parseCoversAc(body)]).toEqual([3]);
+  });
+
+  test("matches multiple AC bullets", () => {
+    const body = ["## Covers AC", "", "- AC#1", "- AC#5", "- AC#8", "", "## Files"].join("\n");
+    expect([...parseCoversAc(body)].sort((a, b) => a - b)).toEqual([1, 5, 8]);
+  });
+
+  test("rejects multi-ID bullet (`- AC#1, AC#3`) — does not split on comma", () => {
+    const body = ["## Covers AC", "", "- AC#1, AC#3", "", "## Acceptance"].join("\n");
+    expect(parseCoversAc(body).size).toBe(0);
+  });
+
+  test("rejects lowercase AC# tag", () => {
+    const body = ["## Covers AC", "", "- ac#2", "", "## Acceptance"].join("\n");
+    expect(parseCoversAc(body).size).toBe(0);
+  });
+
+  test("section closes at next H2 — bullets after H2 are ignored", () => {
+    const body = ["## Covers AC", "", "- AC#1", "", "## Acceptance", "- AC#999"].join("\n");
+    expect([...parseCoversAc(body)]).toEqual([1]);
+  });
+
+  test("tolerates trailing whitespace on AC bullet", () => {
+    const body = ["## Covers AC", "", "- AC#5  ", "", "## Other"].join("\n");
+    expect([...parseCoversAc(body)]).toEqual([5]);
+  });
+});
+
+describe("findUncoveredAc", () => {
+  test("returns empty when all parent AC IDs are covered by some child", () => {
+    const cov = new Map<number, Set<number>>([
+      [101, new Set([1, 2])],
+      [102, new Set([3])],
+    ]);
+    expect(findUncoveredAc([1, 2, 3], cov)).toEqual([]);
+  });
+
+  test("returns uncovered IDs sorted ascending", () => {
+    const cov = new Map<number, Set<number>>([
+      [101, new Set([1])],
+      [102, new Set([3])],
+    ]);
+    expect(findUncoveredAc([1, 2, 3, 5, 4], cov)).toEqual([2, 4, 5]);
+  });
+
+  test("returns all parent IDs when child coverage map is empty", () => {
+    expect(findUncoveredAc([1, 2, 3], new Map())).toEqual([1, 2, 3]);
+  });
+
+  test("returns all parent IDs when every child has empty coverage", () => {
+    const cov = new Map<number, Set<number>>([
+      [101, new Set()],
+      [102, new Set()],
+    ]);
+    expect(findUncoveredAc([7, 8], cov)).toEqual([7, 8]);
+  });
+
+  test("returns empty when parent has no AC IDs (regardless of children)", () => {
+    const cov = new Map<number, Set<number>>([[101, new Set([99])]]);
+    expect(findUncoveredAc([], cov)).toEqual([]);
+  });
+});
+
+describe("formatUncoveredComment", () => {
+  test("formats single uncovered AC ID", () => {
+    expect(formatUncoveredComment([3])).toBe(
+      "AC mapping missing — add `## Covers AC` to children before resuming. Uncovered: AC#3",
+    );
+  });
+
+  test("formats multiple uncovered AC IDs in given order", () => {
+    expect(formatUncoveredComment([2, 5])).toBe(
+      "AC mapping missing — add `## Covers AC` to children before resuming. Uncovered: AC#2, AC#5",
+    );
+  });
+});
+
+// runPreCheck integration — uses an in-memory GhClient that records each
+// addComment call so tests can assert both the throw AND the comment content.
+function makeGh(bodies: Record<number, { body: string; labels?: string[]; state?: State }>): {
+  gh: GhClient;
+  comments: Array<{ n: number; body: string }>;
+} {
+  const comments: Array<{ n: number; body: string }> = [];
+  const gh: GhClient = {
+    viewBody: async (n) => bodies[n]?.body ?? "",
+    viewFull: async (n) => {
+      const e = bodies[n];
+      if (!e) throw new Error(`unmocked viewFull(${n})`);
+      return {
+        title: `mock #${n}`,
+        body: e.body,
+        labels: e.labels ?? [],
+        state: e.state ?? "OPEN",
+      };
+    },
+    viewState: async (n) => bodies[n]?.state ?? "OPEN",
+    editBody: async () => {},
+    closeIssue: async () => {},
+    relabelHuman: async () => {},
+    listIssues: async () => [],
+    claim: async () => {},
+    addComment: async (n, body) => {
+      comments.push({ n, body });
+    },
+  };
+  return { gh, comments };
+}
+
+describe("runPreCheck — Gate B", () => {
+  test("legacy parent without ## Acceptance bullets → skips entirely (no comment, no throw)", async () => {
+    const logs: string[] = [];
+    const { gh, comments } = makeGh({
+      500: {
+        body: [
+          "## User Story",
+          "Some prose.",
+          "",
+          "## Sub-issues",
+          "- [ ] #501",
+          "",
+          // No ## Acceptance section at all — legacy story.
+        ].join("\n"),
+      },
+      501: { body: "## Covers AC\n\n## What to build\n\nfoo" },
+    });
+    await expect(runPreCheck(500, { gh, logger: { log: (m) => logs.push(m) } })).resolves.toBeUndefined();
+    expect(comments).toHaveLength(0);
+    expect(logs.some((l) => l.includes("no ## Acceptance bullets") && l.includes("legacy"))).toBe(true);
+  });
+
+  test("all parent AC covered by at least one child → returns without comment", async () => {
+    const logs: string[] = [];
+    const { gh, comments } = makeGh({
+      600: {
+        body: [
+          "## Sub-issues",
+          "- [ ] #601",
+          "- [ ] #602",
+          "",
+          "## Acceptance",
+          "",
+          "- [ ] **AC#1** — first.",
+          "- [ ] **AC#2** — second.",
+        ].join("\n"),
+      },
+      601: { body: "## Covers AC\n\n- AC#1\n\n## What to build" },
+      602: { body: "## Covers AC\n\n- AC#2\n\n## What to build" },
+    });
+    await expect(runPreCheck(600, { gh, logger: { log: (m) => logs.push(m) } })).resolves.toBeUndefined();
+    expect(comments).toHaveLength(0);
+    expect(logs.some((l) => l.includes("all 2 AC covered"))).toBe(true);
+  });
+
+  test("partial coverage → throws PreCheckBlockedError + posts comment with concrete uncovered IDs", async () => {
+    const { gh, comments } = makeGh({
+      700: {
+        body: [
+          "## Sub-issues",
+          "- [ ] #701",
+          "- [ ] #702",
+          "",
+          "## Acceptance",
+          "",
+          "- [ ] **AC#1** — covered by 701.",
+          "- [ ] **AC#2** — uncovered.",
+          "- [ ] **AC#5** — uncovered.",
+        ].join("\n"),
+      },
+      701: { body: "## Covers AC\n\n- AC#1\n\n## What to build" },
+      702: { body: "## Covers AC\n\n## What to build" }, // pure-component, empty section
+    });
+
+    await expect(runPreCheck(700, { gh, logger: { log: () => {} } })).rejects.toBeInstanceOf(
+      PreCheckBlockedError,
+    );
+
+    expect(comments).toHaveLength(1);
+    expect(comments[0].n).toBe(700);
+    expect(comments[0].body).toBe(
+      "AC mapping missing — add `## Covers AC` to children before resuming. Uncovered: AC#2, AC#5",
+    );
+  });
+
+  test("parent has AC but zero children with coverage → blocks listing every AC ID", async () => {
+    const { gh, comments } = makeGh({
+      800: {
+        body: [
+          "## Sub-issues",
+          "- [ ] #801",
+          "",
+          "## Acceptance",
+          "",
+          "- [ ] **AC#1** — first.",
+          "- [ ] **AC#2** — second.",
+        ].join("\n"),
+      },
+      // Child 801 has no `## Covers AC` section at all (filer bug — empty
+      // section is required even for pure-component children per spec § 1.1).
+      801: { body: "## Parent\n\n- ai-brain#800\n\n## What to build\n\nfoo" },
+    });
+
+    let caught: PreCheckBlockedError | null = null;
+    try {
+      await runPreCheck(800, { gh, logger: { log: () => {} } });
+    } catch (err) {
+      if (err instanceof PreCheckBlockedError) caught = err;
+      else throw err;
+    }
+    expect(caught).not.toBeNull();
+    expect(caught!.uncovered).toEqual([1, 2]);
+    expect(comments).toHaveLength(1);
+    expect(comments[0].body).toContain("Uncovered: AC#1, AC#2");
+  });
+
+  test("parent has AC but no sub-issue checklist → blocks listing every AC ID", async () => {
+    const { gh, comments } = makeGh({
+      900: {
+        body: [
+          "## User Story",
+          "Just a parent shell with AC but no children filed yet.",
+          "",
+          "## Acceptance",
+          "",
+          "- [ ] **AC#1** — first.",
+          "- [ ] **AC#3** — third.",
+        ].join("\n"),
+      },
+    });
+
+    await expect(runPreCheck(900, { gh, logger: { log: () => {} } })).rejects.toBeInstanceOf(
+      PreCheckBlockedError,
+    );
+    expect(comments).toHaveLength(1);
+    expect(comments[0].body).toContain("Uncovered: AC#1, AC#3");
   });
 });
