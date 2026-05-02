@@ -19,5 +19,12 @@ touch "${HOME}/.cache/brain-os/status.dirty" 2>/dev/null || true
 
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 
+# Workspaces can opt out of the tasks/vault panel to save ~2k context tokens
+# when the panel isn't needed (e.g. content-writing workspaces). Set
+# BRAIN_OS_SESSION_START_MINIMAL=1 in workspace .claude/settings.json env block.
+if [ "${BRAIN_OS_SESSION_START_MINIMAL:-0}" = "1" ]; then
+  exit 0
+fi
+
 bash "$PLUGIN_ROOT/scripts/render-tasks-panel.sh"
 bash "$PLUGIN_ROOT/scripts/render-vault-index.sh"
