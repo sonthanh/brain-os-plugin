@@ -763,7 +763,7 @@ export class RealNotifier implements Notifier {
       `printf '\\033[1;33m=== %s ===\\033[0m\\n\\n' '${escapedShell(title)}'`,
       `printf '%s\\n\\n' '${escapedShell(message)}'`,
       `afplay /System/Library/Sounds/Glass.aiff &`,
-      `read -r -p 'Press Enter to dismiss '`,
+      `printf 'Press Enter to dismiss '; read -r`,
     ].join("; ");
     try {
       const sp = Bun.spawnSync({
