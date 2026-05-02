@@ -115,3 +115,37 @@ Never record `tool_response`. The goal is a cheap signal for pattern mining, not
 ### Failure mode
 
 The hook always exits 0. Trace capture must never block tool execution, even when `jq` is missing, the vault path can't be resolved, or the trace directory is unwritable. Silent drop is the correct behavior — a missing trace is strictly better than a blocked user action.
+
+---
+
+## § 13 — Description hygiene
+
+Every enabled skill's frontmatter `description` field is loaded into Claude Code's session-start context. Bloat compounds across many skills × many sessions, so descriptions are kept tight by convention.
+
+### What a description should contain
+
+Three elements only — **WHAT + WHEN + DIFFERENTIATOR**:
+
+- **WHAT** — one phrase naming the skill's primary action.
+- **WHEN** — the trigger keywords (quoted phrases, slash-command invocations, imperative verb phrases) that should route a user request to this skill. These are the routing surface.
+- **DIFFERENTIATOR** — one short clause explaining when NOT to invoke, or how this skill differs from a sibling that handles an adjacent case.
+
+Anything else belongs in the SKILL.md body — workflow steps, technical thresholds, flag taxonomies, multi-paragraph elaboration, marketing decoration.
+
+### Bloat patterns
+
+A description is bloated if any of:
+
+- More than 300 characters
+- Contains 2+ numbered workflow steps (`(1) … (2) …` or `1. … 2. …`)
+- Contains 2+ line breaks (3+ paragraph lines)
+- Contains 2+ distinct invocation flag mentions (`--flag`)
+- Contains 2+ distinct technical thresholds (Cut N, ≥N% gate, max N rounds, N+ words)
+
+Single mentions of a flag or threshold are fine — they're often the trigger keyword itself (`--week` for `/brainstorm`, `≥95%` for `airtable-knowledge-extract`).
+
+### Detection + remediation
+
+`/improve descriptions` scans all source-repo SKILL.md files via `scripts/scan-skill-descriptions.py`, generates trim candidates, and either auto-applies (when the trigger-preservation gate passes) or escalates to `/grill` (when it would silently drop a routing keyword). Run manually after writing or updating a skill, or wait for the daily cron batch.
+
+The trigger-preservation gate is the safety net: every quoted phrase, backtick-quoted token, and imperative verb phrase in the original description must appear verbatim in the trim. This is what prevents auto-trim from silently breaking routing.

@@ -274,5 +274,100 @@
     "fixture": "fixtures/memory/feedback_ambiguous_eval_after_test_write.md",
     "expected_tier": "ambiguous",
     "type": "memory-fixture"
+  },
+  {
+    "name": "descriptions-mode-documented",
+    "description": "/improve descriptions usage mode must be documented in the Usage block",
+    "expected_in_skill": ["/improve descriptions", "Phase D"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "descriptions-detection-rules",
+    "description": "Phase D must enumerate the five detection rules with their thresholds and hard/soft type",
+    "expected_in_skill": ["Char count", "Numbered workflow steps", "Multi-paragraph", "Invocation flags", "Technical thresholds", "hard", "soft"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "descriptions-soft-rule-multiplicity",
+    "description": "Soft rules (flags + thresholds) must require multiplicity to avoid false-positives on legitimate single trigger keywords",
+    "expected_in_skill": ["Soft rules require multiplicity", "single trigger keywords", "useful trigger hints"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "descriptions-trigger-preservation-gate",
+    "description": "Phase D Gate 1 (G1) must enforce trigger-set preservation as the auto-apply safety net",
+    "expected_in_skill": ["G1 — Trigger preservation", "extracted trigger set appears verbatim", "Substring match"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "descriptions-grill-fallback",
+    "description": "Phase D must escalate gate failures to /grill rather than silently dropping or prompting yes/no",
+    "expected_in_skill": ["/grill` fallback", "do NOT silently drop", "do NOT prompt the user yes/no", "brain-os:grill"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "descriptions-no-verify-cosmetic",
+    "description": "Phase D apply step must use --no-verify (cosmetic affordance) so pre-commit-eval-gap.sh allows the trim",
+    "expected_in_skill": ["--no-verify", "pre-commit-eval-gap.sh", "cosmetic affordance"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "descriptions-trim-guidance-what-when-diff",
+    "description": "Trim guidance must be WHAT + WHEN + DIFFERENTIATOR; nothing else",
+    "expected_in_skill": ["WHAT + WHEN + DIFFERENTIATOR", "primary action", "trigger keywords", "distinguishing"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "descriptions-outcome-metrics",
+    "description": "Phase D must emit scanned/flagged/applied/grilled/skipped/tokens_saved metrics",
+    "expected_in_skill": ["scanned=", "flagged=", "applied=", "grilled=", "skipped=", "tokens_saved="],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "descriptions-clarifications-carve-out",
+    "description": "Clarifications must explain why descriptions sub-mode keeps auto-apply with /grill failure handler instead of HITL gate",
+    "expected_in_skill": ["auto-apply with a `/grill` failure handler", "trigger-preservation gate", "no-HITL invariant"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "descriptions-outcome-log-action",
+    "description": "Outcome log spec must describe the descriptions action with scanned/flagged/applied/grilled/skipped/tokens_saved optional fields",
+    "expected_in_skill": ["`descriptions` (Phase D only", "scanned={N}", "flagged={N}", "applied={N}", "grilled={N}", "skipped={N}", "tokens_saved={N}"],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "descriptions-detector-pre-trim-impl",
+    "description": "Detector fixture: pre-trim impl description must flag (chars > 300)",
+    "fixture": "fixtures/descriptions/cases.json",
+    "fixture_case": "pre-trim-impl",
+    "type": "description-detector"
+  },
+  {
+    "name": "descriptions-detector-pre-trim-substack",
+    "description": "Detector fixture: pre-trim substack-writer must flag with chars + numbered + multi-para + thresholds",
+    "fixture": "fixtures/descriptions/cases.json",
+    "fixture_case": "pre-trim-substack-writer",
+    "type": "description-detector"
+  },
+  {
+    "name": "descriptions-detector-post-trim-clean",
+    "description": "Detector fixture: post-trim impl with single -p flag and short length must NOT flag",
+    "fixture": "fixtures/descriptions/cases.json",
+    "fixture_case": "post-trim-impl",
+    "type": "description-detector"
+  },
+  {
+    "name": "descriptions-detector-soft-rule-single-flag",
+    "description": "Detector fixture: short description with single --week flag must NOT flag (soft rule needs ≥2)",
+    "fixture": "fixtures/descriptions/cases.json",
+    "fixture_case": "edge-single-flag-clean",
+    "type": "description-detector"
+  },
+  {
+    "name": "descriptions-detector-edge-numbered-only",
+    "description": "Detector fixture: short description with (1)…(2)…(3)… numbered steps must flag on numbered",
+    "fixture": "fixtures/descriptions/cases.json",
+    "fixture_case": "edge-numbered-steps-only",
+    "type": "description-detector"
   }
 ]

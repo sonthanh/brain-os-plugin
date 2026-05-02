@@ -1,0 +1,100 @@
+[
+  {
+    "name": "pre-trim-impl",
+    "comment": "Pre-trim impl: 683 chars, multiple /impl modes listed. Hard-flag on chars.",
+    "description": "Per-issue implementation executor for brain-os artifacts. Default mode grabs the next AFK GitHub issue and runs /tdd on it; -p N (alias --parallel N) dispatches scripts/run-parallel.ts to spawn N detached claude -w workers with explicit per-issue cwd; /impl N runs /tdd on a specific issue regardless of owner label; /impl N,M,... runs a comma-separated list sequentially; /impl -p N,M,... spawns parallel claude -w workers for an explicit list; /impl story <N> drains a multi-issue story DAG; /impl auto wraps /ralph-loop around /impl to drain the AFK queue end-to-end. Use when draining the AFK backlog, picking up a specific issue or list, or running an approved story end-to-end.",
+    "expected_flagged": true,
+    "expected_signals": ["chars"]
+  },
+  {
+    "name": "pre-trim-refactor",
+    "comment": "Pre-trim refactor: 756 chars, no other signals.",
+    "description": "System-level reorganization scan across the brain-os plugin + vault scripts + vault organization (and any additional repos the user lists in their personal scope file). Detects shallow modules, cross-skill duplication, unused code, conflicting patterns, and vault organizational drift. Runs weekly via cron (Sunday 02:00 ICT) — produces a report with proposed refactor issues. Use when user wants a system-level refactor scan, architecture review, codebase audit, or says 'reorganize', 'refactor', 'shallow modules', 'is this codebase still in shape', 'improve architecture', 'audit our architecture', or invokes /refactor. Different from /improve (per-skill, eval-gated) and /vault-lint (mechanical hygiene) — this is structural critique across artifacts.",
+    "expected_flagged": true,
+    "expected_signals": ["chars"]
+  },
+  {
+    "name": "pre-trim-airtable",
+    "comment": "Pre-trim airtable: 459 chars, single ≥95% mention (not multi-threshold).",
+    "description": "Extract knowledge from Airtable bases into the vault as linked entity pages. Per-base × vertical-slice extract with full-cluster subgraph traversal, Sonnet worker + Opus 4.6 per-batch reviewer at ≥95% gate, self-improving examples bank, mandatory HITL re-anchor on every new base, and legacy-link detection. Use when seeding historical knowledge from company Airtable bases for /think, /connect, /emerge — or when the user invokes /airtable-knowledge-extract.",
+    "expected_flagged": true,
+    "expected_signals": ["chars"]
+  },
+  {
+    "name": "pre-trim-improve",
+    "comment": "Pre-trim improve: 340 chars, just barely over the chars threshold.",
+    "description": "Analyze skill outcomes and user corrections to propose self-improvements. Use when a skill's output repeatedly needs manual fixes, after a grill session surfaces skill weaknesses, or on a schedule to continuously improve skill quality. Triggers on: improve, skill learning, why does this skill keep getting it wrong, make this skill better.",
+    "expected_flagged": true,
+    "expected_signals": ["chars"]
+  },
+  {
+    "name": "pre-trim-vault-lint",
+    "comment": "Pre-trim vault-lint: 335 chars, edge case just over threshold.",
+    "description": "Nightly vault maintenance — fix broken wiki-links, detect orphan pages, enforce bidirectional linking, sync directory indexes, detect CLAUDE.md drift/SSOT violations, flag stale GH-issue tasks, flag dead entities. Use when: vault maintenance, broken links, orphan pages, nightly cron, wiki-links, vault health, lint vault, stale tasks.",
+    "expected_flagged": true,
+    "expected_signals": ["chars"]
+  },
+  {
+    "name": "pre-trim-substack-writer",
+    "comment": "Pre-trim substack-writer: 645 chars, multi-paragraph + multiple thresholds (Cut N + word count).",
+    "description": "Viết bài Substack deep dive 2000+ từ theo giọng builder-in-public của Thanh Do (AI Leaders Vietnam). Fulfill CTA scope từ fb-writer — không bài tự đứng. Dùng headers, italic subtitle, paywall marker, diagrams, 🔗 sources. Accepts `--handover <path>` — dispatches by `from:` field (writing-checker Cut 2-v2 = fresh write; writing-checker Cut 4-fail = revision round).\nChỉ dùng sau khi fb-writer + writing-checker đã PASS và tạo Cut 2-v2. Không chạy stand-alone.\nSau khi viết xong: (1) checker loop qua subagent trong cùng session (max 3 rounds), (2) audit p3 subagent 1 shot, (3) human gate free-form, (4) approve → cr sang social-image-generator.",
+    "expected_flagged": true,
+    "expected_signals": ["chars", "numbered", "multi-para", "thresholds"]
+  },
+  {
+    "name": "post-trim-impl",
+    "comment": "Post-trim impl: 263 chars, no signals.",
+    "description": "Per-issue implementation executor — grab next AFK issue, run /tdd, commit + push + close. Modes: /impl N (specific issue), /impl story <N> (story DAG), /impl auto (drain queue), /impl -p N (parallel workers). Use khi drain AFK backlog hoặc execute approved story.",
+    "expected_flagged": false,
+    "expected_signals": []
+  },
+  {
+    "name": "post-trim-airtable",
+    "comment": "Post-trim airtable: 220 chars with single ≥95% (soft signal below threshold).",
+    "description": "Extract knowledge từ Airtable bases vào vault dưới dạng linked entity pages. Sonnet worker + Opus reviewer ≥95% gate, mandatory HITL re-anchor mỗi base mới. Use khi seeding historical knowledge từ company Airtable bases.",
+    "expected_flagged": false,
+    "expected_signals": []
+  },
+  {
+    "name": "post-trim-brainstorm",
+    "comment": "Post-trim brainstorm: 196 chars with single --week flag (soft signal below threshold).",
+    "description": "Đề xuất top 3 bài viết tiếp theo từ content-ideas kanban + grill angle trước khi invoke writer. Dùng khi muốn viết bài mới. Mode `--week` lock 3 cards/tuần (Saturday ritual). KHÔNG bulk auto-pick.",
+    "expected_flagged": false,
+    "expected_signals": []
+  },
+  {
+    "name": "post-trim-fb-writer",
+    "comment": "Post-trim fb-writer: 167 chars with single word-count mention (soft signal below threshold).",
+    "description": "Viết bài Facebook + LinkedIn (600-1200 từ) cho AI Leaders Vietnam — bài chia sẻ kinh nghiệm cá nhân triển khai AI. Bài phân tích tin tức bên ngoài → dùng news-analyst.",
+    "expected_flagged": false,
+    "expected_signals": []
+  },
+  {
+    "name": "edge-numbered-steps-only",
+    "comment": "250 chars with explicit (1) ... (2) ... (3) sequence — must flag on numbered.",
+    "description": "Pipeline with three phases: (1) read source markdown into memory, (2) parse frontmatter to extract the configuration block, (3) emit JSON to stdout for downstream consumers. Use when batch-processing markdown files.",
+    "expected_flagged": true,
+    "expected_signals": ["numbered"]
+  },
+  {
+    "name": "edge-multi-paragraph-only",
+    "comment": "Short with 3 paragraph lines (2 newlines) — must flag on multi-para.",
+    "description": "First paragraph describes purpose.\nSecond paragraph adds context.\nThird paragraph names the differentiator from sibling skills.",
+    "expected_flagged": true,
+    "expected_signals": ["multi-para"]
+  },
+  {
+    "name": "edge-multi-flags",
+    "comment": "Short with three distinct --flag mentions — must flag on flags.",
+    "description": "Run the pipeline. Modes: --dry-run (preview only), --force (skip confirmations), --json (machine-readable output). Use when batch-processing or when CI needs structured output.",
+    "expected_flagged": true,
+    "expected_signals": ["flags"]
+  },
+  {
+    "name": "edge-single-flag-clean",
+    "comment": "Short with single --flag mention — must NOT flag (soft rule needs ≥2).",
+    "description": "Generate the weekly digest from yesterday's events. Pass --dry-run to preview the output without sending. Use when the cron triggers or when manually invoked for testing.",
+    "expected_flagged": false,
+    "expected_signals": []
+  }
+]
