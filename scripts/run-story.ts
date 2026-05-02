@@ -31,6 +31,13 @@
  *       generic crashes.
  */
 
+import {
+  aggregateChildCounters,
+  formatImplStoryLogRow,
+  summarizeRun,
+  type ChildResultRecord,
+} from "./lib/ac-coverage.ts";
+
 export type Owner = "bot" | "human";
 export type State = "OPEN" | "CLOSED";
 
@@ -289,6 +296,18 @@ export interface StoryStatus {
 
 export interface StatusWriter {
   write(status: StoryStatus): void;
+}
+
+// Per-child result files written by /impl workers (see SKILL.md § Workflow —
+// `issue` mode → "Child-level ralph + advisor wrapper"). The orchestrator reads
+// these at run-end to aggregate impl-story.log row counters.
+export interface ChildResultReader {
+  read(parent: number, child: number): Promise<ChildResultRecord | null>;
+}
+
+// One-shot append to {vault}/daily/skill-outcomes/impl-story.log. Spec § 5.
+export interface ImplStoryLogWriter {
+  append(line: string): Promise<void>;
 }
 
 // Decide what to do with a watched AFK child after a poll cycle.
@@ -555,6 +574,91 @@ export class FileStatusWriter implements StatusWriter {
   }
 }
 
+export class FileChildResultReader implements ChildResultReader {
+  constructor(private dir: string) {}
+  async read(parent: number, child: number): Promise<ChildResultRecord | null> {
+    const path = `${this.dir}/${parent}-child-${child}.result`;
+    try {
+      const fs = require("fs");
+      const raw = fs.readFileSync(path, "utf-8");
+      return JSON.parse(raw) as ChildResultRecord;
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === "ENOENT") return null;
+      throw err;
+    }
+  }
+}
+
+export class FileImplStoryLogWriter implements ImplStoryLogWriter {
+  constructor(private path: string) {}
+  async append(line: string): Promise<void> {
+    const fs = require("fs");
+    const path = require("path");
+    fs.mkdirSync(path.dirname(this.path), { recursive: true });
+    fs.appendFileSync(this.path, line + "\n");
+  }
+}
+
+// =========================================================================
+// AC#10 instrumentation — per-run impl-story.log row
+// =========================================================================
+
+export interface WriteImplStoryLogArgs {
+  parent: number;
+  childBodies: Map<number, string>;
+  parentBody: string;
+  failed: number[];
+  parentClosed: boolean;
+  wallTimeSec: number;
+  childResults?: ChildResultReader;
+  implStoryLog?: ImplStoryLogWriter;
+  logger: Logger;
+}
+
+export async function writeImplStoryLogRow(args: WriteImplStoryLogArgs): Promise<void> {
+  if (!args.implStoryLog) {
+    args.logger.log("WARN: implStoryLog not configured — skipping impl-story.log row");
+    return;
+  }
+
+  const records: ChildResultRecord[] = [];
+  for (const child of args.childBodies.keys()) {
+    if (!args.childResults) continue;
+    try {
+      const rec = await args.childResults.read(args.parent, child);
+      if (rec) {
+        records.push(rec);
+      } else {
+        args.logger.log(
+          `WARN: no per-child result file for #${child} (worker may have crashed mid-flight) — counters=0 for this child`,
+        );
+      }
+    } catch (err) {
+      args.logger.log(
+        `WARN: failed reading result file for #${child}: ${(err as Error).message} — counters=0 for this child`,
+      );
+    }
+  }
+
+  const counters = aggregateChildCounters(records);
+  const row = summarizeRun(
+    {
+      parentIssue: args.parent,
+      childBodies: args.childBodies,
+      parentBody: args.parentBody,
+      counters,
+      wallTimeSec: args.wallTimeSec,
+      failedChildren: args.failed,
+    },
+    args.parentClosed,
+  );
+  await args.implStoryLog.append(formatImplStoryLogRow(row));
+  args.logger.log(
+    `impl-story.log row appended (${row.result}, advisor_calls=${row.advisorCalls}, advisor_rejections=${row.advisorRejections}, wall=${row.wallTimeSec}s)`,
+  );
+}
+
 // =========================================================================
 // Pre-check (Gate B per references/ac-coverage-spec.md)
 // =========================================================================
@@ -630,6 +734,13 @@ export interface OrchestratorDeps {
   pollIntervalMs: number;
   workerLogDir: string;
   areaMap: Record<string, string>;
+  // AC#10 instrumentation — optional so existing callers (and tests) work
+  // unchanged. When absent, the run skips the impl-story.log row write but
+  // logs a one-line warning.
+  childResults?: ChildResultReader;
+  implStoryLog?: ImplStoryLogWriter;
+  // Injectable clock for deterministic wall-time test assertions.
+  now?: () => number;
 }
 
 export async function runStory(
@@ -642,6 +753,8 @@ export async function runStory(
   const { gh, spawn, proc, notify, logger, status, pollIntervalMs, workerLogDir, areaMap } = deps;
   const failed: number[] = [];
   let hb = 0;
+  const now = deps.now ?? (() => Date.now());
+  const startMs = now();
 
   logger.log(`=== run-story start | parent=#${parent} parallel=${cap} ===`);
   status.write({
@@ -672,10 +785,12 @@ export async function runStory(
   }
   logger.log(`children: ${childNums.join(", ")}`);
 
-  // Build issue index
+  // Build issue index — also stash bodies for impl-story.log live_ac_child_count.
   const issues: Issue[] = [];
+  const childBodies = new Map<number, string>();
   for (const n of childNums) {
     const full = await gh.viewFull(n);
+    childBodies.set(n, full.body);
     const blockers = parseBlockers(full.body).filter((b) => b !== parent);
     const owner = parseOwner(full.labels);
     let cwd: string;
@@ -825,16 +940,34 @@ export async function runStory(
 
   // Close parent only if no failures
   const parentState = await gh.viewState(parent);
+  let parentClosed = parentState === "CLOSED";
   if (failed.length > 0) {
     logger.log(`drain finished with ${failed.length} failures: [${failed.join(",")}] — leaving parent #${parent} OPEN`);
     notify.notify(`Story #${parent} drained with ${failed.length} failed children. Run: cr /pickup <N> to resolve.`);
   } else {
-    if (parentState !== "CLOSED") {
+    if (!parentClosed) {
       await gh.closeIssue(parent);
+      parentClosed = true;
       logger.log(`closed parent #${parent}`);
     }
     notify.notify(`Story #${parent} complete. Log: ~/.local/state/impl-story/${parent}.log`);
   }
+
+  // AC#10 instrumentation: read per-child counters, summarize, append impl-story.log row.
+  await writeImplStoryLogRow(
+    {
+      parent,
+      childBodies,
+      parentBody: parentFull.body,
+      failed,
+      parentClosed,
+      wallTimeSec: Math.max(0, Math.round((now() - startMs) / 1000)),
+      childResults: deps.childResults,
+      implStoryLog: deps.implStoryLog,
+      logger,
+    },
+  );
+
   logger.log(`=== run-story DONE ===`);
   status.write({
     ts: new Date().toISOString(),
@@ -913,6 +1046,17 @@ async function main() {
   const logPath = `${logDir}/${parent}.log`;
   const statusPath = `${logDir}/${parent}.status`;
 
+  // Resolve vault path for impl-story.log (AC#10 instrumentation).
+  let vaultPath = `${home}/work/brain`;
+  try {
+    const conf = fs.readFileSync(configPath, "utf-8");
+    const m = conf.match(/^vault_path:\s*(\S+)/m);
+    if (m) vaultPath = m[1];
+  } catch {
+    // fall through to default
+  }
+  const implStoryLogPath = `${vaultPath}/daily/skill-outcomes/impl-story.log`;
+
   const logger = new FileLogger(logPath);
   const status = new FileStatusWriter(statusPath);
   const deps: OrchestratorDeps = {
@@ -925,6 +1069,8 @@ async function main() {
     pollIntervalMs: 30_000,
     workerLogDir: logDir,
     areaMap,
+    childResults: new FileChildResultReader(logDir),
+    implStoryLog: new FileImplStoryLogWriter(implStoryLogPath),
   };
 
   try {

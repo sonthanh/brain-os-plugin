@@ -326,6 +326,46 @@
         "Says 1 is for generic fatal orchestrator errors",
         "Explains the distinction enables callers to handle AC-mapping failure separately from crashes"
       ]
+    },
+    {
+      "id": 28,
+      "prompt": "Inside `/impl <N>` (issue mode), what happens after `/tdd` produces GREEN on a live-AC child versus a pure-component child?",
+      "expected_output": "On GREEN, /impl shells out to `bun run \"$CLAUDE_PLUGIN_ROOT/scripts/ac-coverage-cli.ts\" classify <N>` to classify the child. Pure-component (empty `## Covers AC` OR Covers AC IDs that don't intersect parent's live-AC ID set per references/ac-coverage-spec.md § 1.2) → emit `<promise>AC_VERIFIED</promise>` and break — NO advisor call (cost-optimized). Live-AC (Covers AC overlaps parent's live-AC ID set) → call `advisor()` primed with the diff + /tdd output + parent AC text; parse verdict via substring search (\"AC met\" → AC_VERIFIED, \"AC not met: <reason>\" → log + retry next iter). The wrapper allows up to 3 ralph iters total; iters 2/3 inject `--prior-attempt-failed-because <hint>` into /tdd. After 3 iters without AC_VERIFIED: re-label `status:ready + owner:human` (owner-first via gh, then status via transition-status.sh), gh comment with the handoff template, write the per-child result file, exit 0.",
+      "expectations": [
+        "Mentions ac-coverage-cli.ts classify subcommand (no inline regex in prose)",
+        "Pure-component path skips advisor (cost optimization)",
+        "Live-AC path calls advisor with diff + /tdd output + parent AC text",
+        "Verdict parsing via 'AC met' / 'AC not met: <reason>' substring search",
+        "Max 3 ralph iters; iter 2/3 use --prior-attempt-failed-because hint",
+        "On 3-fail: relabel via central transitioner (transition-status.sh) and gh comment",
+        "References references/ac-coverage-spec.md § 1.2 for the intersection rule"
+      ]
+    },
+    {
+      "id": 29,
+      "prompt": "What gets written to `{vault}/daily/skill-outcomes/impl-story.log`, and what do the columns mean?",
+      "expected_output": "Each `/impl story <P>` run appends exactly ONE TSV row to `{vault}/daily/skill-outcomes/impl-story.log` on completion (success or failure). 8 columns in order: date (YYYY-MM-DD), parent_issue (integer), child_count (integer), live_ac_child_count (integer — children whose Covers AC IDs intersect the parent's live-AC set per references/ac-coverage-spec.md § 1.2), advisor_calls (integer — total advisor invocations across live-AC children), advisor_rejections (integer — subset that returned 'AC not met'), wall_time_sec (integer), result (enum: pass | partial | fail | hitl-fallback). Append-only (POSIX O_APPEND). Schema is canonical at references/ac-coverage-spec.md § 5; this is distinct from the per-issue impl.log written by `/impl <N>` and `/impl -p`.",
+      "expectations": [
+        "8 columns, TSV format",
+        "Lists columns in order: date, parent_issue, child_count, live_ac_child_count, advisor_calls, advisor_rejections, wall_time_sec, result",
+        "Mentions the 4-value result enum (pass/partial/fail/hitl-fallback)",
+        "Says one row per /impl story run (not per child)",
+        "Distinguishes impl-story.log from per-issue impl.log",
+        "Cites references/ac-coverage-spec.md § 5 as the schema SSOT"
+      ]
+    },
+    {
+      "id": 30,
+      "prompt": "Where does `/impl`'s child-level wrapper logic live, and what is the contract between SKILL.md prose and the TypeScript code?",
+      "expected_output": "The canonical contract is `scripts/lib/ac-gate.ts` (`runChildAdvisorGate`), with behavior pinned by `scripts/lib/ac-gate.test.ts`. Workers run /impl prose, not the TS function — but the prose declares the function as the contract. If the prose ever drifts from the function, the function wins; the right response to a discrepancy is to file an issue against the prose, not the function. Parsers (Covers AC, parent Acceptance, live-AC detection, advisor verdict, handoff comment template, impl-story.log row format) live in `scripts/lib/ac-coverage.ts` with tests in `scripts/lib/ac-coverage.test.ts`. Prose calls these via the CLI wrapper at `scripts/ac-coverage-cli.ts` (subcommands: classify, parent, handoff-comment, record-result) so prose does NOT inline regex from references/ac-coverage-spec.md (closes the no-duplication acceptance criterion).",
+      "expectations": [
+        "Names scripts/lib/ac-gate.ts (runChildAdvisorGate) as the canonical loop contract",
+        "Names scripts/lib/ac-coverage.ts as the parser SSOT consumer",
+        "Names scripts/ac-coverage-cli.ts as the prose-facing CLI",
+        "Says prose follows the function; if drift, function wins",
+        "Mentions the four CLI subcommands or a representative subset (classify, parent, handoff-comment, record-result)",
+        "Articulates the no-duplication discipline (prose does not inline regex)"
+      ]
     }
   ]
 }

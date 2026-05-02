@@ -18,13 +18,17 @@ import {
   formatUncoveredComment,
   PreCheckBlockedError,
   runPreCheck,
+  writeImplStoryLogRow,
   type Issue,
   type SpawnClient,
   type Logger,
   type OrchestratorDeps,
   type GhClient,
   type State,
+  type ChildResultReader,
+  type ImplStoryLogWriter,
 } from "./run-story.ts";
+import type { ChildResultRecord } from "./lib/ac-coverage.ts";
 
 describe("parseChecklist", () => {
   test("extracts unchecked + checked child issue numbers from parent body", () => {
@@ -731,5 +735,333 @@ describe("runPreCheck — Gate B", () => {
     );
     expect(comments).toHaveLength(1);
     expect(comments[0].body).toContain("Uncovered: AC#1, AC#3");
+  });
+});
+
+// =========================================================================
+// AC#10 instrumentation — writeImplStoryLogRow
+// =========================================================================
+
+function makeChildResults(records: Record<number, ChildResultRecord | null>): {
+  reader: ChildResultReader;
+  reads: Array<{ parent: number; child: number }>;
+} {
+  const reads: Array<{ parent: number; child: number }> = [];
+  return {
+    reader: {
+      async read(parent, child) {
+        reads.push({ parent, child });
+        return records[child] ?? null;
+      },
+    },
+    reads,
+  };
+}
+
+function makeStoryLogWriter() {
+  const lines: string[] = [];
+  const writer: ImplStoryLogWriter = {
+    async append(line) {
+      lines.push(line);
+    },
+  };
+  return { writer, lines };
+}
+
+const PARENT_BODY_2_LIVE = [
+  "## Acceptance",
+  "- [ ] **AC#1** — Live one. Verified by replay with live integration.",
+  "- [ ] **AC#7** — Spec. Verified by inspection.",
+].join("\n");
+
+describe("writeImplStoryLogRow", () => {
+  test("happy path — counters aggregated, row written with correct TSV format", async () => {
+    const { reader } = makeChildResults({
+      10: {
+        parent: 196,
+        child: 10,
+        verified: true,
+        tddRunCount: 1,
+        advisorCalls: 1,
+        advisorRejections: 0,
+        ts: "",
+      },
+      11: {
+        parent: 196,
+        child: 11,
+        verified: true,
+        tddRunCount: 2,
+        advisorCalls: 2,
+        advisorRejections: 1,
+        ts: "",
+      },
+    });
+    const { writer, lines } = makeStoryLogWriter();
+    const logs: string[] = [];
+    const logger: Logger = { log: (m) => logs.push(m) };
+
+    await writeImplStoryLogRow({
+      parent: 196,
+      childBodies: new Map<number, string>([
+        [10, `## Covers AC\n\n- AC#1\n\n## End\n`],
+        [11, `## Covers AC\n\n- AC#7\n\n## End\n`],
+      ]),
+      parentBody: PARENT_BODY_2_LIVE,
+      failed: [],
+      parentClosed: true,
+      wallTimeSec: 5430,
+      childResults: reader,
+      implStoryLog: writer,
+      logger,
+    });
+
+    expect(lines).toHaveLength(1);
+    const cols = lines[0].split("\t");
+    expect(cols).toHaveLength(8);
+    // date / parent / child_count / live_ac_child_count / advisor_calls / advisor_rejections / wall_time / result
+    expect(cols[1]).toBe("196");
+    expect(cols[2]).toBe("2");   // childCount
+    expect(cols[3]).toBe("1");   // liveAcChildCount (only #10 covers live AC#1)
+    expect(cols[4]).toBe("3");   // advisorCalls = 1+2
+    expect(cols[5]).toBe("1");   // advisorRejections = 0+1
+    expect(cols[6]).toBe("5430"); // wall_time
+    expect(cols[7]).toBe("pass");
+  });
+
+  test("missing result file → warn + counters zero for that child, run still writes row", async () => {
+    const { reader } = makeChildResults({
+      10: {
+        parent: 196,
+        child: 10,
+        verified: true,
+        tddRunCount: 1,
+        advisorCalls: 1,
+        advisorRejections: 0,
+        ts: "",
+      },
+      // 11 missing entirely
+    });
+    const { writer, lines } = makeStoryLogWriter();
+    const logs: string[] = [];
+    const logger: Logger = { log: (m) => logs.push(m) };
+
+    await writeImplStoryLogRow({
+      parent: 196,
+      childBodies: new Map<number, string>([
+        [10, `## Covers AC\n\n- AC#1\n\n## End\n`],
+        [11, `## Covers AC\n\n- AC#1\n\n## End\n`],
+      ]),
+      parentBody: PARENT_BODY_2_LIVE,
+      failed: [],
+      parentClosed: true,
+      wallTimeSec: 100,
+      childResults: reader,
+      implStoryLog: writer,
+      logger,
+    });
+
+    expect(logs.some((l) => l.includes("no per-child result file") && l.includes("#11"))).toBe(true);
+    expect(lines).toHaveLength(1);
+    const cols = lines[0].split("\t");
+    expect(cols[4]).toBe("1"); // advisorCalls = only #10
+    expect(cols[5]).toBe("0");
+  });
+
+  test("failed children + parent open → result=hitl-fallback", async () => {
+    const { reader } = makeChildResults({
+      10: {
+        parent: 196,
+        child: 10,
+        verified: false,
+        tddRunCount: 3,
+        advisorCalls: 3,
+        advisorRejections: 3,
+        ts: "",
+      },
+    });
+    const { writer, lines } = makeStoryLogWriter();
+    const logger: Logger = { log: () => {} };
+
+    await writeImplStoryLogRow({
+      parent: 196,
+      childBodies: new Map<number, string>([
+        [10, `## Covers AC\n\n- AC#1\n\n## End\n`],
+      ]),
+      parentBody: PARENT_BODY_2_LIVE,
+      failed: [10],
+      parentClosed: false,
+      wallTimeSec: 200,
+      childResults: reader,
+      implStoryLog: writer,
+      logger,
+    });
+
+    expect(lines).toHaveLength(1);
+    const cols = lines[0].split("\t");
+    expect(cols[7]).toBe("hitl-fallback");
+  });
+
+  test("implStoryLog absent → skip with warning, no row written", async () => {
+    const logs: string[] = [];
+    const logger: Logger = { log: (m) => logs.push(m) };
+
+    await writeImplStoryLogRow({
+      parent: 196,
+      childBodies: new Map<number, string>([[10, ""]]),
+      parentBody: "",
+      failed: [],
+      parentClosed: true,
+      wallTimeSec: 1,
+      childResults: undefined,
+      implStoryLog: undefined,
+      logger,
+    });
+
+    expect(logs.some((l) => l.includes("implStoryLog not configured"))).toBe(true);
+  });
+
+  test("io error reading result file is caught and warned (does not abort run)", async () => {
+    const reader: ChildResultReader = {
+      async read() {
+        throw new Error("EACCES: permission denied");
+      },
+    };
+    const { writer, lines } = makeStoryLogWriter();
+    const logs: string[] = [];
+    const logger: Logger = { log: (m) => logs.push(m) };
+
+    await writeImplStoryLogRow({
+      parent: 196,
+      childBodies: new Map<number, string>([[10, ""]]),
+      parentBody: "",
+      failed: [],
+      parentClosed: true,
+      wallTimeSec: 0,
+      childResults: reader,
+      implStoryLog: writer,
+      logger,
+    });
+
+    expect(logs.some((l) => l.includes("failed reading result file") && l.includes("EACCES"))).toBe(true);
+    // Row still written
+    expect(lines).toHaveLength(1);
+  });
+});
+
+// =========================================================================
+// End-to-end replay — live-AC child whose worker exits with verified:false
+// after 3 advisor rejections.  Demonstrates the full wiring: orchestrator
+// flags worker DEAD, reads per-child result file, emits hitl-fallback row.
+// Maps to acceptance criterion: "Replay test in commit message".
+// =========================================================================
+
+describe("runStory — replay: live-AC child + advisor 3x reject → hitl-fallback row", () => {
+  test("end-to-end: dead worker + result file w/ 3 rejections → row=hitl-fallback, counters aggregated", async () => {
+    const PARENT = 196;
+    const CHILD = 210;
+    const PARENT_BODY = [
+      "## Acceptance",
+      "- [ ] **AC#1** — Live one. Verified by replay with live integration.",
+    ].join("\n");
+    const CHILD_BODY = `## Parent\n\n- ai-brain#${PARENT}\n\n## Covers AC\n\n- AC#1\n\n## What to build\n`;
+
+    let pollCount = 0;
+    const aliveStates = [true, false]; // worker dies after first poll
+    const deps: OrchestratorDeps = {
+      gh: {
+        viewBody: async (n) => (n === PARENT ? `- [ ] #${CHILD}` : ""),
+        viewFull: async (n) => {
+          if (n === PARENT) {
+            return {
+              title: "Story parent",
+              labels: ["type:plan", "owner:human", "status:in-progress", "area:plugin-brain-os"],
+              body: `${PARENT_BODY}\n\n- [ ] #${CHILD}`,
+              state: "OPEN",
+            };
+          }
+          return {
+            title: "Live-AC child",
+            labels: ["status:ready", "owner:bot", "area:plugin-brain-os"],
+            body: CHILD_BODY,
+            state: "OPEN",
+          };
+        },
+        viewState: async () => "OPEN",  // child never closes — worker died after recording its rejection
+        editBody: async () => {},
+        closeIssue: async () => {},
+        relabelHuman: async () => {},
+      },
+      spawn: {
+        spawnWorker: () => ({ pid: 12345 }),
+        cleanupWorktree: () => {},
+      },
+      proc: {
+        isAlive: () => {
+          pollCount++;
+          return aliveStates[Math.min(pollCount - 1, aliveStates.length - 1)];
+        },
+      },
+      notify: { notify: () => {} },
+      logger: { log: () => {} },
+      status: { write: () => {} },
+      pollIntervalMs: 1,
+      workerLogDir: "/tmp/run-story-replay",
+      areaMap: defaultAreaMap("/Users/test"),
+      childResults: {
+        async read(parent, child) {
+          if (parent === PARENT && child === CHILD) {
+            return {
+              parent,
+              child,
+              verified: false,
+              tddRunCount: 3,
+              advisorCalls: 3,
+              advisorRejections: 3,
+              lastFailure: "advisor: integration test mocks live API",
+              lastVerdict: "AC not met: integration test mocks live API",
+              ts: "2026-05-08T00:00:00Z",
+            };
+          }
+          return null;
+        },
+      },
+      implStoryLog: {
+        append: async (line) => {
+          replayRows.push(line);
+        },
+      },
+      now: () => Date.now(),  // real clock; wall-time content not asserted exactly
+    };
+
+    const replayRows: string[] = [];
+    // Replace the implStoryLog stub with one capturing into replayRows. Since
+    // bun test doesn't allow forward-reference of replayRows in the literal
+    // above without hoisting, inject via Object.assign.
+    Object.assign(deps.implStoryLog as object, {
+      append: async (line: string) => {
+        replayRows.push(line);
+      },
+    });
+
+    const result = await runStory(PARENT, 1, deps);
+
+    // 1. Worker process flagged DEAD → child added to failed, NOT closed.
+    expect(result.failed).toEqual([CHILD]);
+    expect(result.closed).toEqual([]);
+
+    // 2. Exactly one impl-story.log row written.
+    expect(replayRows).toHaveLength(1);
+
+    // 3. Row schema: 8 TSV columns.
+    const cols = replayRows[0].split("\t");
+    expect(cols).toHaveLength(8);
+
+    // 4. Counters aggregated from result file (3 advisor calls, 3 rejections).
+    expect(cols[1]).toBe(String(PARENT));
+    expect(cols[2]).toBe("1");                  // child_count
+    expect(cols[3]).toBe("1");                  // live_ac_child_count
+    expect(cols[4]).toBe("3");                  // advisor_calls
+    expect(cols[5]).toBe("3");                  // advisor_rejections
+    expect(cols[7]).toBe("hitl-fallback");      // result enum
   });
 });

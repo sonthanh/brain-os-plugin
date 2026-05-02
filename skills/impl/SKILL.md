@@ -160,7 +160,7 @@ Append one line to `{vault}/daily/skill-outcomes/impl.log` (see § Outcome log b
 | Owner check | Required (`owner:bot` only) | Bypassed — accepts any owner |
 | Claim | `status:ready` → `status:in-progress` | Same |
 | Read | Issue body, "Required reading", "Acceptance", `Blocked by` | Same |
-| /tdd | Same | Same |
+| /tdd | Single pass | Wrapped in child-level ralph + advisor (max 3 iters) — see below |
 | Commit | `IMPL_AFK=1 git commit ...` | `IMPL_AFK=1 git commit ...` (still required) |
 | Push + close | Same | Same |
 
@@ -169,6 +169,94 @@ Append one line to `{vault}/daily/skill-outcomes/impl.log` (see § Outcome log b
 Even though `issue` mode accepts `owner:human`, the `IMPL_AFK=1` prefix is mandatory on the commit invocation. Reason: the prefix is what the trunk-block hook (`hooks/pre-commit-trunk-block.sh`) keys on to decide whether to scan staged paths against `references/trunk-paths.txt`. The owner label is *intent* metadata; the prefix is the *gate*. They are independent — owner controls the pick path, prefix controls the commit gate. Drop the prefix only when the user is hand-driving the commit interactively (and even then, the leaf-vs-trunk discipline still applies — the hook just isn't enforcing it).
 
 If the trunk-block hook fires for an `owner:human` issue you picked up via `/impl <N>`: same response as `once` mode — re-label the issue `status:ready` + `owner:human`, leave the worktree as-is, exit. The user can resolve interactively next session.
+
+### Child-level ralph + advisor wrapper
+
+`/impl <N>` does NOT call /tdd once and ship. It wraps /tdd in a 3-iteration ralph loop with a per-iteration advisor verdict gate. The wrapper is what enforces parent acceptance gate AC#6 — a child whose tests pass GREEN but whose live-AC criterion was actually mocked is caught by advisor and re-tried (or escalated to HITL after 3 iters). Pure-component children skip the advisor call to preserve cost optimization.
+
+Canonical TS contract: `scripts/lib/ac-gate.ts` (`runChildAdvisorGate`). Tests in `scripts/lib/ac-gate.test.ts` pin behavior. If the prose below drifts from the function, the function wins — open an issue against the prose.
+
+#### Step-by-step
+
+```
+ralph-loop (max 3 iters, completion-promise AC_VERIFIED):
+  iter 1..3:
+    /tdd <N> [--prior-attempt-failed-because "<prior failure>"]
+      iter 1: no hint
+      iter 2/3: hint = last RED reason OR last advisor verdict reason
+    if RED: log, save reason as next-iter hint, continue
+    if GREEN:
+      classify child via CLI (no inline regex):
+        bun run "$CLAUDE_PLUGIN_ROOT/scripts/ac-coverage-cli.ts" classify <N>
+      → "pure-component": emit AC_VERIFIED, break (NO advisor call — cost-optimized)
+      → "live-ac":
+          advisor()  # see Advisor prompt template below
+          parse verdict (substring search):
+            "AC met" present → emit AC_VERIFIED, break
+            "AC not met: <reason>" → log, save reason, continue
+            ambiguous → treat as not met (escalate sooner)
+  loop end
+  if not AC_VERIFIED:
+    gh issue edit <N> -R <tracker-repo> --remove-label owner:bot --add-label owner:human
+    bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/transition-status.sh" <N> --to ready
+    bun run "$CLAUDE_PLUGIN_ROOT/scripts/ac-coverage-cli.ts" handoff-comment "<last failure>" "<last verdict>" \
+      | gh issue comment <N> -R <tracker-repo> --body-file -
+    record counters (see "Per-child result file" below)
+    exit 0   # NOT 1 — orchestrator treats unclosed issue + dead worker as failure
+```
+
+The transitioner ordering matches `§ How spawned workers behave` (owner-first, then status) — a mid-sequence failure leaves the issue `owner:human + status:in-progress` which is invisible to `/impl auto`'s `owner:bot + status:ready` pick filter.
+
+#### Advisor prompt template
+
+When invoking `advisor()` after a GREEN /tdd on a live-AC child, prime the advisor with:
+
+```
+The just-completed /tdd cycle for child issue #<N> produced GREEN. Verify whether
+the implementation actually satisfies the parent acceptance bullets the child
+declared in its `## Covers AC` section.
+
+Child issue: gh issue view <N>
+Parent issue: gh issue view <parent-N>
+Diff: git diff HEAD~1 HEAD (or staged diff if not yet committed)
+Test output: <inline /tdd transcript>
+
+Live-AC criteria the child claims to satisfy:
+  <list each AC#N from child Covers AC + the corresponding bullet from parent ## Acceptance>
+
+Verdict format: respond with EITHER:
+  "AC met. <one-line evidence summary>"  OR
+  "AC not met: <one-line reason>"
+
+Be skeptical of test fixtures that mock external systems the parent AC text
+demands run live (markers per references/ac-coverage-spec.md § 6.1: "runs against",
+"live", "pass-rate", "log appended", "osascript", etc.). A test that mocks the
+live integration when AC text says "runs against" is "AC not met".
+```
+
+#### Per-child result file
+
+Before exit, write counters so `/impl story`'s orchestrator can aggregate them into the impl-story.log row (spec § 5):
+
+```bash
+bun run "$CLAUDE_PLUGIN_ROOT/scripts/ac-coverage-cli.ts" record-result \
+  <parent-N> <N> <verified:true|false> <tdd-run-count> \
+  <advisor-calls> <advisor-rejections> \
+  "<last-failure-or-empty>" "<last-verdict-or-empty>"
+```
+
+The CLI writes JSON to `~/.local/state/impl-story/<parent>-child-<N>.result`. Missing files at orchestrator run-end are tolerated (counted as zero counters + a warning log line) — a worker that crashed before writing the file is already accounted for via the existing `WORKER DEAD → relabelHuman` path in `runStory`.
+
+If `<parent-N>` is unknown to prose, resolve it via:
+
+```bash
+PARENT_N=$(bun run "$CLAUDE_PLUGIN_ROOT/scripts/ac-coverage-cli.ts" parent <N>)
+```
+
+#### When the wrapper does NOT apply
+
+- `/impl <N>` invoked by hand on a leaf issue with no `## Parent` section. The CLI's `parent` subcommand exits 1; treat the child as pure-component (no advisor call) and run a single /tdd → ship pass.
+- The child has no `## Covers AC` section at all. Treated identically to `## Covers AC` empty → pure-component.
 
 ### When to invoke `issue` mode
 
@@ -257,12 +345,13 @@ The orchestrator writes a heartbeat status JSON to `~/.local/state/impl-story/<p
 3. Initial ready queue: children with all dependency issues already CLOSED.
 4. **Greedy DAG drainer loop** (sleep 30s between polls):
    - Top up parallel pool: HITL children spawn anytime (notify-only, no worker), AFK children spawn within `-p` cap (default 3, hard max 5).
-   - AFK spawn = `claude -w "story-<P>-issue-<M>" --dangerously-skip-permissions -p "/impl <M>"` in background.
+   - AFK spawn = `claude -w "story-<P>-issue-<M>" --dangerously-skip-permissions -p "/impl <M>"` in background. Each worker runs `/impl <M>` (issue mode) which internally wraps /tdd in the child-level ralph + advisor wrapper (see § Workflow — `issue` mode → "Child-level ralph + advisor wrapper").
    - HITL spawn = osascript notify `"HITL: #M needs human. Run: cr /pickup M"` — user resolves manually.
    - Poll each watched child via `gh issue view <M> --json state` — on CLOSED: tick parent body checklist (`sed - [ ] #M → - [x] #M`, `gh issue edit --body`), promote any newly-unblocked waiters to ready queue.
 5. When ready queue + watching set both empty: close parent via `bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/close-issue.sh" <P>` (strips status:* labels first).
-6. Final macOS notification: `"Story #<P> complete. Log: ~/.local/state/impl-story/<P>.log"`.
-7. All steps logged to `~/.local/state/impl-story/<parent-N>.log`.
+6. **AC#10 instrumentation**: aggregate per-child result files (`~/.local/state/impl-story/<P>-child-<N>.result`, written by each /impl worker) and append one TSV row to `{vault}/daily/skill-outcomes/impl-story.log`. Schema and column order: `references/ac-coverage-spec.md` § 5. Missing per-child files are tolerated (counted as zero, with a warn line in the log) so a crashed worker doesn't suppress the parent-level row.
+7. Final macOS notification: `"Story #<P> complete. Log: ~/.local/state/impl-story/<P>.log"`.
+8. All steps logged to `~/.local/state/impl-story/<parent-N>.log`.
 
 ### Exit codes
 
