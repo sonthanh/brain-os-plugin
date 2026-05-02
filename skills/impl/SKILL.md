@@ -251,6 +251,7 @@ The orchestrator writes a heartbeat status JSON to `~/.local/state/impl-story/<p
 
 ### What the script does
 
+0. **Gate B pre-check** (`runPreCheck()`, runs BEFORE the main drainer loop): parses parent `## Acceptance` bullets via the SSOT regex (`references/ac-coverage-spec.md` § 3.1) and each child's `## Covers AC` section (§ 1, § 3.2). If any parent AC has zero covering child → posts a gh comment on the parent (`AC mapping missing — add ## Covers AC to children before resuming. Uncovered: AC#2, AC#5`) and exits with code 4 without entering the main loop. Skipped entirely on legacy parents with no `## Acceptance` bullets (grandfathered). Distinct exit code so `/impl auto` and external callers can latch on AC-mapping failure without conflating it with generic crashes (exit 1).
 1. Reads parent issue body, parses `- [ ] #M` / `- [x] #M` checklist → child issue numbers.
 2. For each child: fetches body + labels, parses `## Blocked by\n- ai-brain#X` → adjacency map. Detects `owner:bot` vs `owner:human`.
 3. Initial ready queue: children with all dependency issues already CLOSED.
@@ -262,6 +263,14 @@ The orchestrator writes a heartbeat status JSON to `~/.local/state/impl-story/<p
 5. When ready queue + watching set both empty: close parent via `bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/close-issue.sh" <P>` (strips status:* labels first).
 6. Final macOS notification: `"Story #<P> complete. Log: ~/.local/state/impl-story/<P>.log"`.
 7. All steps logged to `~/.local/state/impl-story/<parent-N>.log`.
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Drain completed (parent CLOSED or left OPEN with logged failures) |
+| 1 | Fatal orchestrator error (spawn failure, area resolution, gh fault) |
+| 4 | Gate B pre-check blocked — parent has `## Acceptance` bullets but children lack `## Covers AC` coverage. Comment posted on parent. |
 
 ### Parallel cap rationale
 

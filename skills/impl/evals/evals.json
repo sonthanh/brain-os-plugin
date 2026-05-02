@@ -301,6 +301,31 @@
         "Description summarizes once / issue / issue-list / story / auto modes",
         "Description does NOT contain the phrase 'Agent-tool subagents'"
       ]
+    },
+    {
+      "id": 26,
+      "prompt": "What is the Gate B pre-check that runs before `/impl story` enters its DAG-drainer loop, and what happens when it fails?",
+      "expected_output": "Gate B is `runPreCheck()` inside `scripts/run-story.ts`. It runs as step 0 of `/impl story` — BEFORE the main DAG-drainer loop. It parses the parent's `## Acceptance` bullets (regex SSOT: `references/ac-coverage-spec.md` § 3.1) and each child's `## Covers AC` section (§ 1, § 3.2), then asks: does every parent AC bullet have at least one covering child? On failure (any AC#N has zero coverage), the script posts a gh comment on the parent — text exactly `AC mapping missing — add \\`## Covers AC\\` to children before resuming. Uncovered: AC#<a>, AC#<b>` listing concrete uncovered IDs (not generic) — and exits with code 4 without spawning any worker. Legacy parents with no `## Acceptance` bullets are grandfathered and skip the pre-check entirely. The point: enforce the parent acceptance gate at /impl story start-time so stories can't ship 'fake-done' (origin bug from prior story #179).",
+      "expectations": [
+        "Names runPreCheck() in scripts/run-story.ts as Gate B",
+        "Says it runs BEFORE the main DAG-drainer loop",
+        "References references/ac-coverage-spec.md for the SSOT regex",
+        "Says it posts a gh comment with concrete uncovered AC IDs (not generic)",
+        "Says it exits with code 4 on block",
+        "Says legacy parents (no ## Acceptance) are skipped/grandfathered",
+        "Mentions origin bug / fake-done as the motivation"
+      ]
+    },
+    {
+      "id": 27,
+      "prompt": "What are the exit codes for `scripts/run-story.ts`, and why does Gate B use a distinct code from generic crashes?",
+      "expected_output": "Three exit codes: 0 — drain completed (parent CLOSED or left OPEN with logged failures); 1 — fatal orchestrator error (spawn failure, area resolution, gh fault); 4 — Gate B pre-check blocked (parent has `## Acceptance` bullets but children lack `## Covers AC` coverage; comment posted on parent). Gate B uses 4 instead of 1 so callers (`/impl auto`, manual replay drivers, external watchers) can latch on AC-mapping failure without conflating it with generic crashes — same reason custom HTTP status codes exist. The distinct code lets a follow-up retry script handle 'fix the AC mapping' (a filer/operator action) differently from 'something exploded' (an infrastructure action).",
+      "expectations": [
+        "Lists exit codes 0, 1, and 4 with their meanings",
+        "Says 4 is for Gate B pre-check block (AC mapping missing)",
+        "Says 1 is for generic fatal orchestrator errors",
+        "Explains the distinction enables callers to handle AC-mapping failure separately from crashes"
+      ]
     }
   ]
 }
