@@ -19,6 +19,14 @@ import {
   PreCheckBlockedError,
   runPreCheck,
   writeImplStoryLogRow,
+  parseParentCommentEvidence,
+  findMissingEvidence,
+  extractAreaName,
+  formatEvidenceChildTitle,
+  formatEvidenceChildBody,
+  formatHitlComment,
+  formatHitlNotification,
+  runCloseGate,
   type Issue,
   type SpawnClient,
   type Logger,
@@ -27,6 +35,8 @@ import {
   type State,
   type ChildResultReader,
   type ImplStoryLogWriter,
+  type CloseGateDeps,
+  type CreateIssueOpts,
 } from "./run-story.ts";
 import type { ChildResultRecord } from "./lib/ac-coverage.ts";
 
@@ -371,6 +381,13 @@ describe("runStory — type:plan assertion", () => {
         editBody: async () => {},
         closeIssue: async () => {},
         relabelHuman: async () => {},
+        listIssues: async () => [],
+        claim: async () => {},
+        addComment: async () => {},
+        viewComments: async () => [],
+        createIssue: async () => {
+          throw new Error("createIssue must not be called");
+        },
       },
       spawn: {
         spawnWorker: () => {
@@ -416,6 +433,13 @@ describe("runStory — type:plan assertion", () => {
         editBody: async () => {},
         closeIssue: async () => {},
         relabelHuman: async () => {},
+        listIssues: async () => [],
+        claim: async () => {},
+        addComment: async () => {},
+        viewComments: async () => [],
+        createIssue: async () => {
+          throw new Error("createIssue must not be called");
+        },
       },
       spawn: {
         spawnWorker: () => {
@@ -604,6 +628,10 @@ function makeGh(bodies: Record<number, { body: string; labels?: string[]; state?
     claim: async () => {},
     addComment: async (n, body) => {
       comments.push({ n, body });
+    },
+    viewComments: async () => [],
+    createIssue: async () => {
+      throw new Error("createIssue must not be called in this test");
     },
   };
   return { gh, comments };
@@ -949,6 +977,551 @@ describe("writeImplStoryLogRow", () => {
 });
 
 // =========================================================================
+// Gate C (runCloseGate) — references/ac-coverage-spec.md § 4
+// =========================================================================
+
+describe("parseParentCommentEvidence", () => {
+  test("matches single-line evidence per spec § 3.4.3 S1", () => {
+    const c =
+      "Acceptance verified: AC#1 — replayed prior story grill-to-children, /slice ABORT'd at AC#1 zero-coverage; pasted output in commit abc1234";
+    expect(parseParentCommentEvidence(c)).toEqual([1]);
+  });
+
+  test("matches multiple AC verifications in same comment body", () => {
+    const c = [
+      "Comment header — anything goes here.",
+      "",
+      "Acceptance verified: AC#1 — first evidence here",
+      "Acceptance verified: AC#9 — live integration ran against `appXXXXXXXX`",
+    ].join("\n");
+    expect(parseParentCommentEvidence(c).sort((a, b) => a - b)).toEqual([1, 9]);
+  });
+
+  test("rejects malformed prefix per spec § 3.4.3 S3", () => {
+    const c = "AC#1 verified — looks good to me";
+    expect(parseParentCommentEvidence(c)).toEqual([]);
+  });
+
+  test("rejects ASCII hyphen in place of em-dash", () => {
+    const c = "Acceptance verified: AC#1 - hyphen not em-dash";
+    expect(parseParentCommentEvidence(c)).toEqual([]);
+  });
+
+  test("returns empty for unrelated comment text", () => {
+    expect(parseParentCommentEvidence("LGTM, please merge")).toEqual([]);
+  });
+});
+
+describe("findMissingEvidence", () => {
+  test("returns empty when every AC is covered by closed-child evidence", () => {
+    const closed = new Map<number, Set<number>>([
+      [201, new Set([1])],
+      [202, new Set([2, 3])],
+    ]);
+    expect(findMissingEvidence([1, 2, 3], closed, [])).toEqual([]);
+  });
+
+  test("returns empty when every AC is covered by parent-comment evidence", () => {
+    expect(
+      findMissingEvidence(
+        [1, 2],
+        new Map(),
+        ["Acceptance verified: AC#1 — replay\nAcceptance verified: AC#2 — inspection"],
+      ),
+    ).toEqual([]);
+  });
+
+  test("mixes form (i) and form (ii) evidence", () => {
+    const closed = new Map<number, Set<number>>([[201, new Set([1])]]);
+    const comments = ["Acceptance verified: AC#2 — manual replay"];
+    expect(findMissingEvidence([1, 2, 3], closed, comments)).toEqual([3]);
+  });
+
+  test("returns missing IDs sorted ascending", () => {
+    expect(findMissingEvidence([5, 1, 3, 2], new Map(), [])).toEqual([1, 2, 3, 5]);
+  });
+
+  test("ignores closed-child entries that don't cover anything (pure-component)", () => {
+    const closed = new Map<number, Set<number>>([
+      [201, new Set()],
+      [202, new Set([1])],
+    ]);
+    expect(findMissingEvidence([1, 2], closed, [])).toEqual([2]);
+  });
+});
+
+describe("extractAreaName", () => {
+  test("returns area suffix for first area:* label", () => {
+    expect(extractAreaName(["status:ready", "area:plugin-brain-os", "owner:bot"])).toBe(
+      "plugin-brain-os",
+    );
+  });
+
+  test("returns null when no area:* label present", () => {
+    expect(extractAreaName(["status:ready", "owner:bot"])).toBeNull();
+  });
+
+  test("returns first match when multiple area:* labels (filing bug)", () => {
+    expect(extractAreaName(["area:vault", "area:plugin-brain-os"])).toBe("vault");
+  });
+});
+
+describe("formatEvidenceChildTitle / Body", () => {
+  test("title shape: 'Evidence: AC#N for parent #P'", () => {
+    expect(formatEvidenceChildTitle(196, 10)).toBe("Evidence: AC#10 for parent #196");
+  });
+
+  test("body has Parent, Covers AC (single ID), AC quote, and Blocked-by None sections", () => {
+    const body = formatEvidenceChildBody(196, 10, "Performance instrumentation: append a row.");
+    expect(body).toContain("## Parent\n\n- ai-brain#196");
+    expect(body).toContain("## Covers AC\n\n- AC#10");
+    expect(body).toContain("Performance instrumentation: append a row.");
+    expect(body).toContain("- [ ] Live evidence captured (output pasted in this issue) for AC#10");
+    expect(body).toContain("## Blocked by\n\nNone — can start immediately.");
+  });
+
+  test("body's Covers AC section is parseable by the existing parseCoversAc parser", () => {
+    const body = formatEvidenceChildBody(196, 4, "Some AC text.");
+    expect([...parseCoversAc(body)]).toEqual([4]);
+  });
+});
+
+describe("formatHitlComment / Notification", () => {
+  test("HITL comment format includes ralph-iter count + missing AC IDs + remediation hint", () => {
+    expect(formatHitlComment([10, 4])).toBe(
+      "Acceptance gate failed after 3 ralph iters. Missing evidence: AC#10, AC#4. Post 'Acceptance verified: AC#N — <evidence>' comments OR file new covering child to resolve.",
+    );
+  });
+
+  test("HITL notification mentions parent number + AC IDs", () => {
+    expect(formatHitlNotification(196, [10])).toBe(
+      "Parent #196 has unverified AC: AC#10 — see issue",
+    );
+  });
+});
+
+// formatImplStoryLogRow tests live in scripts/lib/ac-coverage.test.ts (the
+// row format moved to lib/ac-coverage.ts in #203 — single home for the SSOT
+// format coverage).
+
+// runCloseGate integration mock — supports state mutation between polls so
+// Phase 2 tests can simulate "spawned child closes; evidence comment lands".
+function makeCloseGateGh(initial: Record<number, { body: string; labels?: string[]; state?: State; comments?: string[] }>) {
+  const bodies = { ...initial };
+  const events: string[] = [];
+  const createdIssues: Array<{ n: number; opts: CreateIssueOpts }> = [];
+  let nextIssueNum = 9000;
+  const gh: GhClient = {
+    viewBody: async (n) => bodies[n]?.body ?? "",
+    viewFull: async (n) => {
+      const e = bodies[n];
+      if (!e) throw new Error(`unmocked viewFull(${n})`);
+      return {
+        title: `mock #${n}`,
+        body: e.body,
+        labels: e.labels ?? [],
+        state: e.state ?? "OPEN",
+      };
+    },
+    viewState: async (n) => bodies[n]?.state ?? "OPEN",
+    editBody: async (n, body) => {
+      if (bodies[n]) bodies[n].body = body;
+    },
+    closeIssue: async () => {},
+    relabelHuman: async () => {},
+    listIssues: async () => [],
+    claim: async () => {},
+    addComment: async (n, body) => {
+      bodies[n] = bodies[n] ?? { body: "" };
+      bodies[n].comments = [...(bodies[n].comments ?? []), body];
+      events.push(`addComment(${n})`);
+    },
+    viewComments: async (n) => bodies[n]?.comments ?? [],
+    createIssue: async (opts) => {
+      const n = nextIssueNum++;
+      bodies[n] = { body: opts.body, labels: [`area:${opts.area}`, `owner:${opts.owner}`], state: "OPEN" };
+      createdIssues.push({ n, opts });
+      events.push(`createIssue(${n})`);
+      return n;
+    },
+  };
+  return { gh, bodies, events, createdIssues };
+}
+
+function makeCloseGateDeps(
+  ghBundle: ReturnType<typeof makeCloseGateGh>,
+  overrides: Partial<CloseGateDeps> = {},
+): {
+  deps: CloseGateDeps;
+  spawnCalls: Array<{ name: string; prompt: string; cwd: string; pid: number }>;
+  cleanupCalls: Array<{ name: string; cwd: string }>;
+  notifications: string[];
+  logs: string[];
+  pidsAlive: Set<number>;
+} {
+  const spawnCalls: Array<{ name: string; prompt: string; cwd: string; pid: number }> = [];
+  const cleanupCalls: Array<{ name: string; cwd: string }> = [];
+  const notifications: string[] = [];
+  const logs: string[] = [];
+  const pidsAlive = new Set<number>();
+  let nextPid = 30000;
+  const deps: CloseGateDeps = {
+    gh: ghBundle.gh,
+    spawn: {
+      spawnWorker: (name, prompt, _logPath, cwd) => {
+        const pid = nextPid++;
+        pidsAlive.add(pid);
+        spawnCalls.push({ name, prompt, cwd, pid });
+        return { pid };
+      },
+      cleanupWorktree: (name, cwd) => {
+        cleanupCalls.push({ name, cwd });
+      },
+    },
+    proc: { isAlive: (pid) => pidsAlive.has(pid) },
+    notify: { notify: (m) => notifications.push(m) },
+    logger: { log: (m) => logs.push(m) },
+    pollIntervalMs: 1,
+    workerLogDir: "/tmp/close-gate-test",
+    areaMap: defaultAreaMap("/Users/test"),
+    ...overrides,
+  };
+  return { deps, spawnCalls, cleanupCalls, notifications, logs, pidsAlive };
+}
+
+describe("runCloseGate — Phase 1 (deterministic check)", () => {
+  test("legacy parent without ## Acceptance bullets → blocked: false (skip)", async () => {
+    const ghBundle = makeCloseGateGh({
+      500: {
+        body: "## User Story\n\nLegacy parent — no AC section.",
+        labels: ["type:plan", "area:plugin-brain-os"],
+      },
+    });
+    const { deps, spawnCalls, notifications } = makeCloseGateDeps(ghBundle);
+    const result = await runCloseGate(500, deps);
+    expect(result.blocked).toBe(false);
+    expect(result.iterations).toBe(0);
+    expect(spawnCalls).toHaveLength(0);
+    expect(notifications).toHaveLength(0);
+  });
+
+  test("all AC have form (i) closed-child evidence → blocked: false", async () => {
+    const ghBundle = makeCloseGateGh({
+      600: {
+        body: [
+          "## Sub-issues",
+          "- [x] #601",
+          "- [x] #602",
+          "",
+          "## Acceptance",
+          "",
+          "- [ ] **AC#1** — first.",
+          "- [ ] **AC#2** — second.",
+        ].join("\n"),
+        labels: ["type:plan", "area:plugin-brain-os"],
+      },
+      601: {
+        body: "## Covers AC\n\n- AC#1\n\n## What to build",
+        state: "CLOSED",
+      },
+      602: {
+        body: "## Covers AC\n\n- AC#2\n\n## What to build",
+        state: "CLOSED",
+      },
+    });
+    const { deps, spawnCalls, notifications } = makeCloseGateDeps(ghBundle);
+    const result = await runCloseGate(600, deps);
+    expect(result).toEqual({ blocked: false, missing: [], iterations: 0, spawnedChildren: [] });
+    expect(spawnCalls).toHaveLength(0);
+    expect(notifications).toHaveLength(0);
+  });
+
+  test("AC covered only by parent-comment evidence (form ii) → blocked: false", async () => {
+    const ghBundle = makeCloseGateGh({
+      650: {
+        body: [
+          "## Sub-issues",
+          "- [x] #651",
+          "",
+          "## Acceptance",
+          "",
+          "- [ ] **AC#1** — first.",
+          "- [ ] **AC#2** — by-comment only.",
+        ].join("\n"),
+        labels: ["type:plan", "area:plugin-brain-os"],
+        comments: ["Acceptance verified: AC#2 — manual replay 2026-05-08, log at vault path"],
+      },
+      651: {
+        body: "## Covers AC\n\n- AC#1\n\n## What to build",
+        state: "CLOSED",
+      },
+    });
+    const { deps } = makeCloseGateDeps(ghBundle);
+    const result = await runCloseGate(650, deps);
+    expect(result.blocked).toBe(false);
+  });
+
+  test("OPEN child with Covers AC does NOT count as form (i) evidence (Phase 1 sees AC missing)", async () => {
+    // Child claims to cover AC#1 but is still OPEN — must NOT satisfy the gate.
+    // Override spawn to no-op (PID stays "alive" forever) so Phase 2 starts
+    // and we can assert Phase 1's missing list propagated into Phase 2 spawning.
+    const ghBundle = makeCloseGateGh({
+      660: {
+        body: [
+          "## Sub-issues",
+          "- [ ] #661",
+          "",
+          "## Acceptance",
+          "",
+          "- [ ] **AC#1** — first.",
+        ].join("\n"),
+        labels: ["type:plan", "area:plugin-brain-os"],
+      },
+      661: {
+        body: "## Covers AC\n\n- AC#1\n\n## What to build",
+        state: "OPEN", // OPEN so form (i) must reject
+      },
+    });
+    const bundle = makeCloseGateDeps(ghBundle);
+    // Hook: every spawned worker auto-closes its own filed child WITHOUT
+    // adding any Covers AC body content — so AC#1 stays missing, but at least
+    // we don't hang on the poll. We assert Phase 1 saw AC#1 as missing by
+    // observing that Phase 2 actually spawned a worker for AC#1.
+    bundle.deps.spawn = {
+      spawnWorker: (name, prompt, _logPath, cwd) => {
+        const pid = 40000 + bundle.spawnCalls.length;
+        bundle.pidsAlive.add(pid);
+        bundle.spawnCalls.push({ name, prompt, cwd, pid });
+        const m = prompt.match(/\/impl (\d+)/);
+        if (m) {
+          const child = Number(m[1]);
+          ghBundle.bodies[child].state = "CLOSED";
+          ghBundle.bodies[child].body = "## What to build\n\n(no Covers AC)";
+          bundle.pidsAlive.delete(pid);
+        }
+        return { pid };
+      },
+      cleanupWorktree: () => {},
+    };
+    const result = await runCloseGate(660, bundle.deps);
+    // AC#1 remained missing → Phase 2 fired → Phase 3 fallback (since spawned
+    // children never produced evidence). Confirms OPEN child #661 was rejected.
+    expect(result.blocked).toBe(true);
+    expect(result.missing).toEqual([1]);
+    expect(bundle.spawnCalls.length).toBeGreaterThanOrEqual(1);
+    // Each spawn corresponds to AC#1 (only one missing AC).
+    expect(bundle.spawnCalls[0].prompt).toMatch(/^\/impl \d+$/);
+  });
+});
+
+describe("runCloseGate — Phase 2 (ralph auto-fill)", () => {
+  test("missing AC → file evidence-gathering child + spawn /impl with parent's area cwd; child closes with form-(i) covers-ac evidence → blocked: false on iter 1", async () => {
+    const ghBundle = makeCloseGateGh({
+      700: {
+        body: [
+          "## Sub-issues",
+          "- [ ] #701",
+          "",
+          "## Acceptance",
+          "",
+          "- [ ] **AC#10** — Performance instrumentation: live row.",
+        ].join("\n"),
+        labels: ["type:plan", "area:plugin-brain-os"],
+      },
+      701: {
+        body: "## Covers AC\n\n## What to build",
+        state: "CLOSED", // pure-component, doesn't cover AC#10
+      },
+    });
+    // Hook: when worker spawned, simulate the worker closing the spawned child
+    // synchronously via the alive-set so the gate's poll loop sees CLOSED on
+    // its first iteration. The newly-filed child (next issue #) flips CLOSED.
+    const bundle = makeCloseGateDeps(ghBundle);
+    // Override spawnWorker to also flip the just-filed child to CLOSED
+    bundle.deps.spawn = {
+      spawnWorker: (name, prompt, _logPath, cwd) => {
+        const pid = 50000 + bundle.spawnCalls.length;
+        bundle.pidsAlive.add(pid);
+        bundle.spawnCalls.push({ name, prompt, cwd, pid });
+        // Extract child number from prompt "/impl <N>"
+        const m = prompt.match(/\/impl (\d+)/);
+        if (m) {
+          const child = Number(m[1]);
+          // Mark CLOSED so first poll cycle sees CLOSED.
+          ghBundle.bodies[child].state = "CLOSED";
+          // PID dies as well (worker cleanly exits) — alive=false gives "closed"
+          // anyway because viewState=CLOSED takes precedence per decideWorkerAction.
+          bundle.pidsAlive.delete(pid);
+        }
+        return { pid };
+      },
+      cleanupWorktree: (name, cwd) => {
+        bundle.cleanupCalls.push({ name, cwd });
+      },
+    };
+    const result = await runCloseGate(700, bundle.deps);
+    expect(result.blocked).toBe(false);
+    expect(bundle.spawnCalls).toHaveLength(1);
+    expect(bundle.spawnCalls[0].prompt).toMatch(/^\/impl \d+$/);
+    expect(bundle.spawnCalls[0].cwd).toBe("/Users/test/work/brain-os-plugin");
+    expect(bundle.spawnCalls[0].name).toMatch(/^story-700-evidence-/);
+    expect(ghBundle.createdIssues).toHaveLength(1);
+    expect(ghBundle.createdIssues[0].opts.title).toBe("Evidence: AC#10 for parent #700");
+    expect(ghBundle.createdIssues[0].opts.area).toBe("plugin-brain-os");
+    expect(ghBundle.createdIssues[0].opts.owner).toBe("human");
+    expect(ghBundle.createdIssues[0].opts.priority).toBe("p1");
+    expect(ghBundle.createdIssues[0].opts.weight).toBe("heavy");
+    expect(ghBundle.createdIssues[0].opts.status).toBe("ready");
+  });
+
+  test("missing AC → spawned child closes WITHOUT evidence comment OR Covers AC ID → still missing → goes to Phase 3 after 3 iters", async () => {
+    const ghBundle = makeCloseGateGh({
+      710: {
+        body: [
+          "## Sub-issues",
+          "",
+          "## Acceptance",
+          "",
+          "- [ ] **AC#1** — never gets evidence.",
+        ].join("\n"),
+        labels: ["type:plan", "area:plugin-brain-os"],
+      },
+    });
+    const bundle = makeCloseGateDeps(ghBundle);
+    bundle.deps.spawn = {
+      spawnWorker: (name, prompt, _logPath, cwd) => {
+        const pid = 60000 + bundle.spawnCalls.length;
+        bundle.pidsAlive.add(pid);
+        bundle.spawnCalls.push({ name, prompt, cwd, pid });
+        const m = prompt.match(/\/impl (\d+)/);
+        if (m) {
+          const child = Number(m[1]);
+          // Mark CLOSED but DROP the Covers AC content so Phase 1 still sees missing.
+          ghBundle.bodies[child].state = "CLOSED";
+          ghBundle.bodies[child].body = "## What to build\n\n(no Covers AC)";
+          bundle.pidsAlive.delete(pid);
+        }
+        return { pid };
+      },
+      cleanupWorktree: () => {},
+    };
+    const result = await runCloseGate(710, bundle.deps);
+    expect(result.blocked).toBe(true);
+    expect(result.missing).toEqual([1]);
+    expect(result.iterations).toBe(3);
+    // Three iters × one missing AC = 3 spawns
+    expect(bundle.spawnCalls).toHaveLength(3);
+    expect(bundle.notifications.some((m) => m.includes("Parent #710") && m.includes("AC#1"))).toBe(
+      true,
+    );
+    // HITL comment posted to parent (the gate's terminal side effect — the
+    // impl-story.log row is written by writeImplStoryLogRow at runStory level,
+    // tested in the "runStory — Gate C wiring" suite).
+    expect(ghBundle.bodies[710].comments?.some((c) => c.includes("Acceptance gate failed"))).toBe(
+      true,
+    );
+  });
+});
+
+describe("runCloseGate — parent-area edge cases", () => {
+  test("parent without area:* label → skip Phase 2, jump to Phase 3", async () => {
+    const ghBundle = makeCloseGateGh({
+      730: {
+        body: ["## Sub-issues", "", "## Acceptance", "", "- [ ] **AC#1** — first."].join("\n"),
+        labels: ["type:plan"], // no area
+      },
+    });
+    const bundle = makeCloseGateDeps(ghBundle);
+    const result = await runCloseGate(730, bundle.deps);
+    expect(result.blocked).toBe(true);
+    expect(bundle.spawnCalls).toHaveLength(0);
+    expect(ghBundle.createdIssues).toHaveLength(0);
+    // HITL still fires
+    expect(bundle.notifications.some((m) => m.includes("Parent #730"))).toBe(true);
+  });
+
+  test("parent with unknown area:* → skip Phase 2, jump to Phase 3", async () => {
+    const ghBundle = makeCloseGateGh({
+      740: {
+        body: ["## Sub-issues", "", "## Acceptance", "", "- [ ] **AC#1** — first."].join("\n"),
+        labels: ["type:plan", "area:zzz-not-mapped"],
+      },
+    });
+    const bundle = makeCloseGateDeps(ghBundle);
+    const result = await runCloseGate(740, bundle.deps);
+    expect(result.blocked).toBe(true);
+    expect(bundle.spawnCalls).toHaveLength(0);
+  });
+});
+
+describe("runCloseGate — partial recovery across iters", () => {
+  test("iter 1 closes one of two missing ACs; iter 2 resolves the second → blocked: false", async () => {
+    // Fixture: parent missing AC#1 + AC#2.
+    // Spawn handler: closes filed children. First filed child gets a Covers AC
+    // matching its target. Second filed child (created in same iter for AC#2)
+    // intentionally omits Covers AC, so AC#2 is still missing after iter 1.
+    // Iter 2's filed child for AC#2 includes Covers AC → both resolved.
+    const ghBundle = makeCloseGateGh({
+      800: {
+        body: [
+          "## Sub-issues",
+          "",
+          "## Acceptance",
+          "",
+          "- [ ] **AC#1** — first.",
+          "- [ ] **AC#2** — second.",
+        ].join("\n"),
+        labels: ["type:plan", "area:plugin-brain-os"],
+      },
+    });
+    const bundle = makeCloseGateDeps(ghBundle);
+    let iterCount = 0;
+    bundle.deps.spawn = {
+      spawnWorker: (name, prompt, _logPath, cwd) => {
+        const pid = 80000 + bundle.spawnCalls.length;
+        bundle.pidsAlive.add(pid);
+        bundle.spawnCalls.push({ name, prompt, cwd, pid });
+        const m = prompt.match(/\/impl (\d+)/);
+        if (m) {
+          const child = Number(m[1]);
+          // The body filed for this child is in ghBundle.bodies[child].body —
+          // contains "## Covers AC\n\n- AC#N". When we close, *keep* the body
+          // intact so form (i) evidence works for AC#N. For iter 1's AC#2
+          // child only (second spawn this batch), strip the Covers AC.
+          if (iterCount === 0 && bundle.spawnCalls.length === 2) {
+            ghBundle.bodies[child].body = "## What to build\n\n(no Covers AC)";
+          }
+          ghBundle.bodies[child].state = "CLOSED";
+          bundle.pidsAlive.delete(pid);
+        }
+        return { pid };
+      },
+      cleanupWorktree: () => {},
+    };
+    // Hook re-check: after iter 1's poll loop, bump iterCount so iter 2's
+    // child for AC#2 keeps Covers AC intact.
+    const origViewFull = bundle.deps.gh.viewFull.bind(bundle.deps.gh);
+    let parentFetchCount = 0;
+    bundle.deps.gh = {
+      ...bundle.deps.gh,
+      viewFull: async (n) => {
+        if (n === 800) {
+          parentFetchCount++;
+          // recheck() is called once at start, then once after each iter's
+          // poll loop. After recheck #2 (start of iter 2), advance iterCount.
+          if (parentFetchCount === 2) iterCount = 1;
+        }
+        return origViewFull(n);
+      },
+    };
+    const result = await runCloseGate(800, bundle.deps);
+    expect(result.blocked).toBe(false);
+    // 2 spawns iter 1 + 1 spawn iter 2 (only AC#2 still missing) = 3
+    expect(bundle.spawnCalls).toHaveLength(3);
+  });
+});
+
+// =========================================================================
 // End-to-end replay — live-AC child whose worker exits with verified:false
 // after 3 advisor rejections.  Demonstrates the full wiring: orchestrator
 // flags worker DEAD, reads per-child result file, emits hitl-fallback row.
@@ -1063,5 +1636,165 @@ describe("runStory — replay: live-AC child + advisor 3x reject → hitl-fallba
     expect(cols[4]).toBe("3");                  // advisor_calls
     expect(cols[5]).toBe("3");                  // advisor_rejections
     expect(cols[7]).toBe("hitl-fallback");      // result enum
+  });
+});
+
+// =========================================================================
+// runStory + Gate C wiring — issue #202 AC#3
+// =========================================================================
+
+describe("runStory — Gate C wiring", () => {
+  test("close-gate blocked → closeIssue NOT called, parent left OPEN, log row=hitl-fallback", async () => {
+    let closeIssueCalls = 0;
+    const notifications: string[] = [];
+    const logs: string[] = [];
+    const lines: string[] = [];
+
+    // Parent has one already-CLOSED child (so drainer immediately reaches
+    // close-decision branch with no failures), but no AC evidence at all
+    // for the lone AC#1 — Gate C must block.
+    const parentBody = [
+      "## Sub-issues",
+      "- [x] #1100",
+      "",
+      "## Acceptance",
+      "",
+      "- [ ] **AC#1** — never satisfied.",
+    ].join("\n");
+
+    const deps: OrchestratorDeps = {
+      gh: {
+        viewBody: async () => parentBody,
+        viewFull: async (n) => {
+          if (n === 1099) {
+            return {
+              title: "Story parent",
+              labels: ["type:plan", "owner:bot", "area:plugin-brain-os"],
+              body: parentBody,
+              state: "OPEN",
+            };
+          }
+          if (n === 1100) {
+            return {
+              title: "child",
+              labels: ["area:plugin-brain-os", "owner:bot"],
+              body: "## Covers AC\n\n## What to build",
+              state: "CLOSED",
+            };
+          }
+          throw new Error(`unmocked viewFull(${n})`);
+        },
+        viewState: async () => "OPEN",
+        editBody: async () => {},
+        closeIssue: async () => {
+          closeIssueCalls++;
+        },
+        relabelHuman: async () => {},
+        listIssues: async () => [],
+        claim: async () => {},
+        addComment: async () => {},
+        viewComments: async () => [],
+        // Phase 2 spawn fails to file → gate jumps straight to Phase 3.
+        createIssue: async () => {
+          throw new Error("createIssue intentionally throws so Phase 2 short-circuits to Phase 3");
+        },
+      },
+      spawn: {
+        spawnWorker: () => ({ pid: 1 }),
+        cleanupWorktree: () => {},
+      },
+      proc: { isAlive: () => true },
+      notify: { notify: (m) => notifications.push(m) },
+      logger: { log: (m) => logs.push(m) },
+      status: { write: () => {} },
+      pollIntervalMs: 1,
+      workerLogDir: "/tmp/run-story-test",
+      areaMap: defaultAreaMap("/Users/test"),
+      childResults: { read: async () => null },
+      implStoryLog: { append: async (line) => { lines.push(line); } },
+    };
+
+    const result = await runStory(1099, 3, deps);
+
+    expect(closeIssueCalls).toBe(0);
+    expect(result.failed).toEqual([]);
+    expect(notifications.some((m) => m.includes("Parent #1099") && m.includes("AC#1"))).toBe(true);
+    expect(logs.some((l) => l.includes("close gate BLOCKED"))).toBe(true);
+    // impl-story.log row written via deriveResult → hitl-fallback (gateBlocked path)
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain("hitl-fallback");
+  });
+
+  test("close-gate satisfied → closeIssue called, success notify fired, log row=pass", async () => {
+    let closeIssueCalls = 0;
+    const notifications: string[] = [];
+    const lines: string[] = [];
+
+    const parentBody = [
+      "## Sub-issues",
+      "- [x] #1200",
+      "",
+      "## Acceptance",
+      "",
+      "- [ ] **AC#1** — covered by #1200.",
+    ].join("\n");
+
+    const deps: OrchestratorDeps = {
+      gh: {
+        viewBody: async () => parentBody,
+        viewFull: async (n) => {
+          if (n === 1199) {
+            return {
+              title: "Story parent",
+              labels: ["type:plan", "owner:bot", "area:plugin-brain-os"],
+              body: parentBody,
+              state: "OPEN",
+            };
+          }
+          if (n === 1200) {
+            return {
+              title: "covering child",
+              labels: ["area:plugin-brain-os", "owner:bot"],
+              body: "## Covers AC\n\n- AC#1\n\n## What to build",
+              state: "CLOSED",
+            };
+          }
+          throw new Error(`unmocked viewFull(${n})`);
+        },
+        viewState: async (n) => (n === 1199 ? "OPEN" : "CLOSED"),
+        editBody: async () => {},
+        closeIssue: async () => {
+          closeIssueCalls++;
+        },
+        relabelHuman: async () => {},
+        listIssues: async () => [],
+        claim: async () => {},
+        addComment: async () => {},
+        viewComments: async () => [],
+        createIssue: async () => {
+          throw new Error("createIssue must not be called when gate passes");
+        },
+      },
+      spawn: {
+        spawnWorker: () => ({ pid: 1 }),
+        cleanupWorktree: () => {},
+      },
+      proc: { isAlive: () => true },
+      notify: { notify: (m) => notifications.push(m) },
+      logger: { log: () => {} },
+      status: { write: () => {} },
+      pollIntervalMs: 1,
+      workerLogDir: "/tmp/run-story-test",
+      areaMap: defaultAreaMap("/Users/test"),
+      childResults: { read: async () => null },
+      implStoryLog: { append: async (line) => { lines.push(line); } },
+    };
+
+    await runStory(1199, 3, deps);
+
+    expect(closeIssueCalls).toBe(1);
+    expect(notifications.some((m) => m.includes("Story #1199 complete"))).toBe(true);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain("pass");
   });
 });

@@ -360,6 +360,19 @@ describe("deriveResult", () => {
   test("failures + parent closed (manual override) → partial", () => {
     expect(deriveResult([5], true)).toBe("partial");
   });
+
+  test("gateBlocked=true → hitl-fallback (overrides default !closed → fail path)", () => {
+    expect(deriveResult([], false, true)).toBe("hitl-fallback");
+  });
+
+  test("gateBlocked=true takes precedence over child failures too", () => {
+    expect(deriveResult([5], false, true)).toBe("hitl-fallback");
+  });
+
+  test("gateBlocked=false (default) preserves existing matrix", () => {
+    expect(deriveResult([], true, false)).toBe("pass");
+    expect(deriveResult([5], true, false)).toBe("partial");
+  });
 });
 
 describe("summarizeRun", () => {

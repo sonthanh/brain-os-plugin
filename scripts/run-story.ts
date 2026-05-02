@@ -140,6 +140,153 @@ export function formatUncoveredComment(uncovered: number[]): string {
   return `AC mapping missing — add \`## Covers AC\` to children before resuming. Uncovered: ${ids}`;
 }
 
+// =========================================================================
+// Gate C helpers — references/ac-coverage-spec.md § 3.3, § 4, § 5
+// =========================================================================
+
+// Section heading the gate appends auto-filed evidence-gathering children
+// under. Parent body must list these for spec § 4.1 form (i) evidence to fire
+// — bare `gh issue create` doesn't link the new child into the parent's
+// sub-issue checklist on its own.
+export const GATE_C_AUTO_FILED_HEADING =
+  "## Auto-filed evidence-gathering children (Gate C)";
+
+// Append a `- [ ] #<child>` checkbox under the auto-filed-children section,
+// creating the section if absent. Result is checklist-parser-readable, so
+// recheck() finds the new child via parseChecklist on the next iter.
+export function appendAutoFiledChild(body: string, child: number): string {
+  const line = `- [ ] #${child}`;
+  if (body.includes(GATE_C_AUTO_FILED_HEADING)) {
+    // Insert at end of section: find heading line, walk forward to next H2 or
+    // EOF, insert checkbox immediately before that boundary.
+    const lines = body.split("\n");
+    let inSection = false;
+    let insertAt = lines.length;
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].startsWith(GATE_C_AUTO_FILED_HEADING)) {
+        inSection = true;
+        continue;
+      }
+      if (inSection && /^## /.test(lines[i])) {
+        insertAt = i;
+        break;
+      }
+    }
+    // Trim trailing blanks before insertAt so we don't accumulate empty lines.
+    let trimAt = insertAt;
+    while (trimAt > 0 && lines[trimAt - 1].trim() === "") trimAt--;
+    lines.splice(trimAt, insertAt - trimAt, line, "");
+    return lines.join("\n");
+  }
+  // No section yet — append heading + checkbox at end.
+  const sep = body.endsWith("\n") ? "" : "\n";
+  return `${body}${sep}\n${GATE_C_AUTO_FILED_HEADING}\n\n${line}\n`;
+}
+
+// Parent-comment evidence regex per spec § 3.3. Em-dash literal is U+2014.
+// Applied per-line within a comment body — the regex is line-anchored so the
+// caller MUST split on \n and match each line individually. matchAll-on-block
+// won't work even with /m because `.+` would greedily eat across lines.
+const PARENT_COMMENT_EVIDENCE_RE = /^Acceptance verified: AC#(\d+) — (.+)$/;
+
+export function parseParentCommentEvidence(commentBody: string): number[] {
+  const ids: number[] = [];
+  for (const line of commentBody.split("\n")) {
+    const m = line.match(PARENT_COMMENT_EVIDENCE_RE);
+    if (m) ids.push(Number(m[1]));
+  }
+  return ids;
+}
+
+// Form (i) + (ii) evidence union per spec § 4. Returns AC IDs with NEITHER
+// closed-child evidence nor parent-comment evidence, sorted ascending.
+// `closedChildCovers` MUST be pre-filtered to CLOSED children only — caller
+// owns the state filter; this helper is pure.
+export function findMissingEvidence(
+  parentAcIds: Iterable<number>,
+  closedChildCovers: Map<number, Set<number>>,
+  parentComments: string[],
+): number[] {
+  const evidence = new Set<number>();
+  for (const ids of closedChildCovers.values()) {
+    for (const id of ids) evidence.add(id);
+  }
+  for (const c of parentComments) {
+    for (const id of parseParentCommentEvidence(c)) evidence.add(id);
+  }
+  const missing: number[] = [];
+  for (const id of parentAcIds) {
+    if (!evidence.has(id)) missing.push(id);
+  }
+  return missing.sort((a, b) => a - b);
+}
+
+// First `area:*` label, with `area:` prefix stripped. Used to copy the parent's
+// area onto evidence-gathering children filed during Phase 2 (so Bun.spawn lands
+// the worker in the correct repo via inferRepoFromIssueArea).
+export function extractAreaName(labels: string[]): string | null {
+  for (const l of labels) {
+    if (l.startsWith("area:")) return l.slice("area:".length);
+  }
+  return null;
+}
+
+export function formatEvidenceChildTitle(parent: number, ac: number): string {
+  return `Evidence: AC#${ac} for parent #${parent}`;
+}
+
+export function formatEvidenceChildBody(
+  parent: number,
+  ac: number,
+  acText: string,
+): string {
+  return [
+    "## Parent",
+    "",
+    `- ai-brain#${parent}`,
+    "",
+    "## Covers AC",
+    "",
+    `- AC#${ac}`,
+    "",
+    "## What to build",
+    "",
+    acText,
+    "",
+    "## Acceptance",
+    "",
+    `- [ ] Live evidence captured (output pasted in this issue) for AC#${ac}`,
+    "",
+    "## Files",
+    "",
+    "(per AC text)",
+    "",
+    "## Observable",
+    "",
+    "(per AC text)",
+    "",
+    "## Blocked by",
+    "",
+    "None — can start immediately.",
+    "",
+  ].join("\n");
+}
+
+export function formatHitlComment(missing: number[]): string {
+  const ids = missing.map((n) => `AC#${n}`).join(", ");
+  return `Acceptance gate failed after 3 ralph iters. Missing evidence: ${ids}. Post 'Acceptance verified: AC#N — <evidence>' comments OR file new covering child to resolve.`;
+}
+
+export function formatHitlNotification(parent: number, missing: number[]): string {
+  const ids = missing.map((n) => `AC#${n}`).join(", ");
+  return `Parent #${parent} has unverified AC: ${ids} — see issue`;
+}
+
+// impl-story.log row write is owned by #203's writeImplStoryLogRow + the
+// ImplStoryResult enum + formatImplStoryLogRow lives in lib/ac-coverage.ts.
+// Gate C signals `gateBlocked` to that path so deriveResult maps a blocked
+// parent to `hitl-fallback` per spec § 5; no row write happens inside Gate C.
+
 export function parseBlockers(body: string): number[] {
   // Find the "## Blocked by" section, capture lines until next H2.
   const lines = body.split("\n");
@@ -261,6 +408,28 @@ export interface GhClient {
    * gaps on the parent before /impl story enters the main drainer loop.
    */
   addComment(n: number, body: string): Promise<void>;
+  /**
+   * Fetch all comment bodies on an issue. Used by Gate C form (ii) check
+   * (`Acceptance verified: AC#N — <evidence>` regex per spec § 3.3 / § 4.2).
+   */
+  viewComments(n: number): Promise<string[]>;
+  /**
+   * File a new tracker issue via gh-tasks/create-task-issue.sh (canonical
+   * label-set assembly). Returns the new issue number. Used by Gate C
+   * Phase 2 to file evidence-gathering children.
+   */
+  createIssue(opts: CreateIssueOpts): Promise<number>;
+}
+
+export interface CreateIssueOpts {
+  title: string;
+  body: string;
+  area: string;
+  owner: "bot" | "human";
+  priority: "p1" | "p2" | "p3";
+  weight: "quick" | "heavy";
+  status: "ready" | "blocked" | "backlog";
+  type?: "handover" | "plan";
 }
 
 export interface SpawnClient {
@@ -460,6 +629,64 @@ export class RealGh implements GhClient {
     await Bun.write(tmpFile, body);
     await this.run(["issue", "comment", String(n), "-R", this.repo, "--body-file", tmpFile]);
   }
+
+  async viewComments(n: number): Promise<string[]> {
+    const json = await this.run([
+      "issue",
+      "view",
+      String(n),
+      "-R",
+      this.repo,
+      "--json",
+      "comments",
+    ]);
+    const data = JSON.parse(json) as { comments: Array<{ body: string }> };
+    return data.comments.map((c) => c.body);
+  }
+
+  async createIssue(opts: CreateIssueOpts): Promise<number> {
+    // Shell out to create-task-issue.sh — canonical label-set assembly.
+    // Body is written via --body-file (helper accepts --body string only,
+    // so we pre-build a file and inline-read it; backticks/newlines survive
+    // env passing more reliably than argv quoting on some shells).
+    const helper = `${import.meta.dir}/gh-tasks/create-task-issue.sh`;
+    const args = [
+      "bash",
+      helper,
+      "--title",
+      opts.title,
+      "--body",
+      opts.body,
+      "--area",
+      opts.area,
+      "--owner",
+      opts.owner,
+      "--priority",
+      opts.priority,
+      "--weight",
+      opts.weight,
+      "--status",
+      opts.status,
+    ];
+    if (opts.type) {
+      args.push("--type", opts.type);
+    }
+    const proc = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" });
+    const out = await new Response(proc.stdout).text();
+    const code = await proc.exited;
+    if (code !== 0) {
+      const err = await new Response(proc.stderr).text();
+      throw new Error(`create-task-issue.sh exited ${code}: ${err}`);
+    }
+    // Helper writes the new issue URL on stdout (last non-empty line). Extract
+    // the trailing /<N>.
+    const trimmed = out.trim().split("\n").filter((l) => l.length > 0).pop() ?? "";
+    const m = trimmed.match(/\/(\d+)$/);
+    if (!m) {
+      throw new Error(`create-task-issue.sh stdout does not match URL pattern: ${trimmed}`);
+    }
+    return Number(m[1]);
+  }
 }
 
 export class RealSpawn implements SpawnClient {
@@ -610,6 +837,9 @@ export interface WriteImplStoryLogArgs {
   parentBody: string;
   failed: number[];
   parentClosed: boolean;
+  // Gate C blocked the close per references/ac-coverage-spec.md § 4. Defaults
+  // to false so existing callers don't need to thread it.
+  gateBlocked?: boolean;
   wallTimeSec: number;
   childResults?: ChildResultReader;
   implStoryLog?: ImplStoryLogWriter;
@@ -652,6 +882,7 @@ export async function writeImplStoryLogRow(args: WriteImplStoryLogArgs): Promise
       failedChildren: args.failed,
     },
     args.parentClosed,
+    args.gateBlocked ?? false,
   );
   await args.implStoryLog.append(formatImplStoryLogRow(row));
   args.logger.log(
@@ -718,6 +949,259 @@ export async function runPreCheck(
   );
   await gh.addComment(parent, comment);
   throw new PreCheckBlockedError(uncovered);
+}
+
+// =========================================================================
+// Close gate (Gate C per references/ac-coverage-spec.md § 4)
+// =========================================================================
+
+export interface CloseGateDeps {
+  gh: GhClient;
+  spawn: SpawnClient;
+  proc: ProcessChecker;
+  notify: Notifier;
+  logger: Logger;
+  pollIntervalMs: number;
+  workerLogDir: string;
+  areaMap: Record<string, string>;
+}
+
+export interface CloseGateResult {
+  blocked: boolean;
+  missing: number[];
+  iterations: number;
+  spawnedChildren: number[];
+}
+
+const CLOSE_GATE_MAX_ITERS = 3;
+
+/**
+ * Gate C — refuses to close parent if any AC#N lacks evidence form (i) or (ii)
+ * per references/ac-coverage-spec.md § 4. Three phases:
+ *
+ * 1. Deterministic check: parse parent body's `## Acceptance` bullets; for each
+ *    AC#N look for either (i) a CLOSED child whose `## Covers AC` includes N,
+ *    or (ii) a parent comment line matching `Acceptance verified: AC#N — …`.
+ *    No gaps → return `{ blocked: false }` and let main loop close parent.
+ * 2. Ralph auto-fill: up to 3 iters, each iter files one evidence-gathering
+ *    child per still-missing AC + spawns `/impl <child-N>` (worker session
+ *    handles its own /tdd + commit + close). Polls children, recompiles
+ *    evidence on each cycle. NOT child-level ralph — that's #203's scope.
+ * 3. HITL fallback: if 3 iters don't resolve, osascript-notify the operator,
+ *    post a follow-up comment on the parent, append a `partial`-result row
+ *    to impl-story.log, return `{ blocked: true }`. Main loop must NOT close
+ *    parent.
+ *
+ * Spec § 5 col 8 enum is `pass | partial | fail`. The issue body's literal
+ * `result=hitl-fallback` was reconciled to `partial` per the spec's "this doc
+ * wins" clause.
+ */
+export async function runCloseGate(
+  parent: number,
+  deps: CloseGateDeps,
+): Promise<CloseGateResult> {
+  const { gh, logger, pollIntervalMs, areaMap } = deps;
+
+  // Phase 1
+  const recheck = async () => {
+    const parentFull = await gh.viewFull(parent);
+    const parentAc = parseAcceptance(parentFull.body);
+    if (parentAc.size === 0) return { missing: [], childCount: 0, parentFull, parentAc };
+    const parentAcIds = [...parentAc.keys()].sort((a, b) => a - b);
+    const childNums = parseChecklist(parentFull.body);
+    const closedCovers = new Map<number, Set<number>>();
+    for (const n of childNums) {
+      const c = await gh.viewFull(n);
+      if (c.state !== "CLOSED") continue;
+      closedCovers.set(n, parseCoversAc(c.body));
+    }
+    const comments = await gh.viewComments(parent);
+    return {
+      missing: findMissingEvidence(parentAcIds, closedCovers, comments),
+      childCount: childNums.length,
+      parentFull,
+      parentAc,
+    };
+  };
+
+  let { missing, childCount, parentFull, parentAc } = await recheck();
+  logger.log(
+    `close-gate: parent #${parent} childCount=${childCount} initial missing=[${missing.join(",")}]`,
+  );
+
+  // No AC bullets at all → grandfathered legacy parent; let close proceed.
+  if (parentAc.size === 0) {
+    logger.log(`close-gate: parent #${parent} has no ## Acceptance bullets — skipping (legacy)`);
+    return { blocked: false, missing: [], iterations: 0, spawnedChildren: [] };
+  }
+  if (missing.length === 0) {
+    logger.log(`close-gate: all ${parentAc.size} AC have evidence — proceed to close`);
+    return { blocked: false, missing: [], iterations: 0, spawnedChildren: [] };
+  }
+
+  // Phase 2 prep — derive parent's area + cwd. Without these the orchestrator
+  // can't file/spawn evidence-gathering children, so jump straight to Phase 3.
+  const parentArea = extractAreaName(parentFull.labels);
+  let parentCwd: string | null = null;
+  if (parentArea) {
+    try {
+      parentCwd = inferRepoFromIssueArea(parentFull.labels, areaMap);
+    } catch (err) {
+      logger.log(
+        `close-gate: cannot resolve cwd for parent #${parent}: ${(err as Error).message} — skipping Phase 2`,
+      );
+    }
+  } else {
+    logger.log(
+      `close-gate: parent #${parent} has no area:* label — skipping Phase 2`,
+    );
+  }
+
+  const allSpawned: number[] = [];
+
+  if (parentArea && parentCwd) {
+    for (let iter = 1; iter <= CLOSE_GATE_MAX_ITERS; iter++) {
+      if (missing.length === 0) break;
+      logger.log(`close-gate: iter ${iter}/${CLOSE_GATE_MAX_ITERS} — missing=[${missing.join(",")}]`);
+
+      const spawnedThisIter: { child: number; ac: number; pid: number }[] = [];
+      for (const ac of missing) {
+        const acText = parentAc.get(ac) ?? "(AC text unavailable in parent body)";
+        const title = formatEvidenceChildTitle(parent, ac);
+        const body = formatEvidenceChildBody(parent, ac, acText);
+        let newChild: number;
+        try {
+          newChild = await gh.createIssue({
+            title,
+            body,
+            area: parentArea,
+            owner: "human",
+            priority: "p1",
+            weight: "heavy",
+            status: "ready",
+          });
+        } catch (err) {
+          logger.log(
+            `close-gate: iter ${iter}: failed to file evidence child for AC#${ac}: ${(err as Error).message}`,
+          );
+          continue;
+        }
+        logger.log(`close-gate: iter ${iter}: filed evidence child #${newChild} for AC#${ac}`);
+        allSpawned.push(newChild);
+
+        // Link the new child into parent body's sub-issue checklist (spec
+        // § 4.1 requires the child to be "in the parent's sub-issue list" for
+        // form (i) evidence). Without this, recheck() won't see the closed
+        // child even though it carries the right Covers AC.
+        try {
+          const currentParentBody = await gh.viewBody(parent);
+          const updatedBody = appendAutoFiledChild(currentParentBody, newChild);
+          if (updatedBody !== currentParentBody) {
+            await gh.editBody(parent, updatedBody);
+          }
+        } catch (err) {
+          logger.log(
+            `close-gate: iter ${iter}: failed to link #${newChild} into parent #${parent} body: ${(err as Error).message}`,
+          );
+        }
+
+        const workerLog = `${deps.workerLogDir}/${parent}-evidence-${newChild}.log`;
+        let pid: number;
+        try {
+          ({ pid } = deps.spawn.spawnWorker(
+            `story-${parent}-evidence-${newChild}`,
+            `/impl ${newChild}`,
+            workerLog,
+            parentCwd,
+          ));
+        } catch (err) {
+          logger.log(
+            `close-gate: iter ${iter}: spawn failed for #${newChild}: ${(err as Error).message}`,
+          );
+          continue;
+        }
+        logger.log(`close-gate: iter ${iter}: spawned /impl ${newChild} (pid=${pid})`);
+        spawnedThisIter.push({ child: newChild, ac, pid });
+      }
+
+      if (spawnedThisIter.length === 0) {
+        logger.log(`close-gate: iter ${iter}: no children spawned — bailing to Phase 3`);
+        break;
+      }
+
+      const watching = new Map(spawnedThisIter.map((s) => [s.child, s] as const));
+      while (watching.size > 0) {
+        await Bun.sleep(pollIntervalMs);
+        for (const [child, s] of [...watching.entries()]) {
+          let state: State;
+          try {
+            state = await gh.viewState(child);
+          } catch (err) {
+            logger.log(
+              `close-gate: viewState(#${child}) errored: ${(err as Error).message} — retry next cycle`,
+            );
+            continue;
+          }
+          const action = decideWorkerAction(deps.proc.isAlive(s.pid), state);
+          if (action === "running") continue;
+          if (action === "closed") {
+            logger.log(`close-gate: iter ${iter}: child #${child} closed`);
+          } else {
+            logger.log(
+              `close-gate: iter ${iter}: child #${child} worker died (PID gone, issue OPEN) — abandoning`,
+            );
+          }
+          watching.delete(child);
+        }
+      }
+
+      const before = new Set(missing);
+      const next = await recheck();
+      missing = next.missing;
+      parentAc = next.parentAc;
+      parentFull = next.parentFull;
+      // AC#4 mentions <promise>AC_EVIDENCE_FOUND</promise> — there's no outer
+      // ralph wrapping the gate, so we just log the resolution to keep the
+      // audit trail aligned with the AC text.
+      for (const ac of before) {
+        if (!missing.includes(ac)) {
+          logger.log(
+            `close-gate: AC#${ac} evidence found — promise AC_EVIDENCE_FOUND`,
+          );
+        }
+      }
+      logger.log(`close-gate: iter ${iter}: post-recheck missing=[${missing.join(",")}]`);
+    }
+  }
+
+  if (missing.length === 0) {
+    logger.log(`close-gate: all AC verified after Phase 2 — proceed to close`);
+    return {
+      blocked: false,
+      missing: [],
+      iterations: CLOSE_GATE_MAX_ITERS,
+      spawnedChildren: allSpawned,
+    };
+  }
+
+  // Phase 3 — HITL fallback. Log row is written by writeImplStoryLogRow at
+  // the end of runStory (using gateBlocked → deriveResult = "hitl-fallback");
+  // the gate just notifies + comments on the parent and returns blocked.
+  logger.log(
+    `close-gate: HITL fallback — missing=[${missing.join(",")}] after ${CLOSE_GATE_MAX_ITERS} iters`,
+  );
+  deps.notify.notify(formatHitlNotification(parent, missing));
+  try {
+    await gh.addComment(parent, formatHitlComment(missing));
+  } catch (err) {
+    logger.log(`close-gate: failed to post HITL comment: ${(err as Error).message}`);
+  }
+  return {
+    blocked: true,
+    missing,
+    iterations: CLOSE_GATE_MAX_ITERS,
+    spawnedChildren: allSpawned,
+  };
 }
 
 // =========================================================================
@@ -941,19 +1425,41 @@ export async function runStory(
   // Close parent only if no failures
   const parentState = await gh.viewState(parent);
   let parentClosed = parentState === "CLOSED";
+  let gateBlocked = false;
   if (failed.length > 0) {
     logger.log(`drain finished with ${failed.length} failures: [${failed.join(",")}] — leaving parent #${parent} OPEN`);
     notify.notify(`Story #${parent} drained with ${failed.length} failed children. Run: cr /pickup <N> to resolve.`);
   } else {
-    if (!parentClosed) {
-      await gh.closeIssue(parent);
-      parentClosed = true;
-      logger.log(`closed parent #${parent}`);
+    // Gate C — refuse close if any AC#N lacks evidence (form (i) closed-child or
+    // form (ii) parent-comment per references/ac-coverage-spec.md § 4).
+    const gateResult = await runCloseGate(parent, {
+      gh,
+      spawn,
+      proc,
+      notify,
+      logger,
+      pollIntervalMs,
+      workerLogDir,
+      areaMap,
+    });
+    if (gateResult.blocked) {
+      gateBlocked = true;
+      logger.log(
+        `parent #${parent} left OPEN — close gate BLOCKED (missing AC=[${gateResult.missing.join(",")}] after ${gateResult.iterations} iters)`,
+      );
+    } else {
+      if (!parentClosed) {
+        await gh.closeIssue(parent);
+        parentClosed = true;
+        logger.log(`closed parent #${parent}`);
+      }
+      notify.notify(`Story #${parent} complete. Log: ~/.local/state/impl-story/${parent}.log`);
     }
-    notify.notify(`Story #${parent} complete. Log: ~/.local/state/impl-story/${parent}.log`);
   }
 
   // AC#10 instrumentation: read per-child counters, summarize, append impl-story.log row.
+  // gateBlocked threads through deriveResult so Gate-C-blocked runs map to
+  // `hitl-fallback` (parent OPEN despite no failed children).
   await writeImplStoryLogRow(
     {
       parent,
@@ -961,6 +1467,7 @@ export async function runStory(
       parentBody: parentFull.body,
       failed,
       parentClosed,
+      gateBlocked,
       wallTimeSec: Math.max(0, Math.round((now() - startMs) / 1000)),
       childResults: deps.childResults,
       implStoryLog: deps.implStoryLog,
@@ -1016,14 +1523,18 @@ async function main() {
   const home = process.env.HOME!;
   const configPath = `${home}/.brain-os/brain-os.config.md`;
   let repo = "sonthanh/ai-brain";
+  let vaultPath = `${home}/work/brain`;
   try {
     const fs = await import("fs");
     const conf = fs.readFileSync(configPath, "utf-8");
-    const m = conf.match(/^gh_task_repo:\s*(\S+)/m);
-    if (m) repo = m[1];
+    const repoMatch = conf.match(/^gh_task_repo:\s*(\S+)/m);
+    if (repoMatch) repo = repoMatch[1];
+    const vaultMatch = conf.match(/^vault_path:\s*(.+?)\s*$/m);
+    if (vaultMatch) vaultPath = vaultMatch[1].replace(/^~(?=$|\/)/, home);
   } catch {
-    // fall through to default
+    // fall through to defaults
   }
+  const implStoryLogPath = `${vaultPath}/daily/skill-outcomes/impl-story.log`;
 
   // Build areaMap: defaults + optional augmentation from ${home}/.brain-os/areas.json.
   // Private deployments register their own area:* labels there without touching
@@ -1045,17 +1556,6 @@ async function main() {
   fs.mkdirSync(logDir, { recursive: true });
   const logPath = `${logDir}/${parent}.log`;
   const statusPath = `${logDir}/${parent}.status`;
-
-  // Resolve vault path for impl-story.log (AC#10 instrumentation).
-  let vaultPath = `${home}/work/brain`;
-  try {
-    const conf = fs.readFileSync(configPath, "utf-8");
-    const m = conf.match(/^vault_path:\s*(\S+)/m);
-    if (m) vaultPath = m[1];
-  } catch {
-    // fall through to default
-  }
-  const implStoryLogPath = `${vaultPath}/daily/skill-outcomes/impl-story.log`;
 
   const logger = new FileLogger(logPath);
   const status = new FileStatusWriter(statusPath);

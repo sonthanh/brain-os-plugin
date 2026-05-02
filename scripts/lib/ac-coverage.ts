@@ -213,7 +213,14 @@ export function computeLiveAcChildCount(
 export function deriveResult(
   failedChildren: number[],
   parentClosed: boolean,
+  gateBlocked: boolean = false,
 ): ImplStoryResult {
+  // Gate-C-blocked runs are a deliberate stop on missing AC evidence — map to
+  // the same hitl-fallback bucket as a child-failure-induced stop. A blocked
+  // parent is by definition not closed, so this branch wins over the default
+  // !closed → fail path that would otherwise misclassify the run as orchestrator
+  // crash.
+  if (gateBlocked) return "hitl-fallback";
   if (failedChildren.length > 0 && parentClosed) return "partial";
   if (failedChildren.length > 0) return "hitl-fallback";
   if (parentClosed) return "pass";
@@ -223,6 +230,7 @@ export function deriveResult(
 export function summarizeRun(
   args: SummarizeArgs,
   parentClosed: boolean,
+  gateBlocked: boolean = false,
 ): ImplStoryRow {
   const date = args.date ?? new Date().toISOString().slice(0, 10);
   return {
@@ -233,6 +241,6 @@ export function summarizeRun(
     advisorCalls: args.counters.advisorCalls,
     advisorRejections: args.counters.advisorRejections,
     wallTimeSec: args.wallTimeSec,
-    result: deriveResult(args.failedChildren, parentClosed),
+    result: deriveResult(args.failedChildren, parentClosed, gateBlocked),
   };
 }
