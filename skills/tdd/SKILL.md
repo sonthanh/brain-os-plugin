@@ -7,6 +7,11 @@ description: "Test-driven development for brain-os artifacts via red-green-refac
 
 Adapted from [@mattpocockuk/skills/tdd](https://github.com/mattpocock/skills/tree/main/tdd). Discipline harness: write ONE test → make it pass → repeat. Replaces `/develop`'s 7-phase ceremony with vertical-slice loops sized to brain-os artifacts.
 
+## Invocation
+
+- `/tdd <artifact>` — start a TDD cycle on the artifact (skill name, file path, GitHub child issue number, etc.).
+- `/tdd --prior-attempt-failed-because "<hint>" <artifact>` — same as above, but BEFORE writing the first test (during Planning), inject `Previous attempt failed because: <hint>. Try a different angle.` into the planning context. The hint is passed verbatim by `/impl`'s child-level ralph wrapper on retry iterations 2 + 3 (carrying forward the previous iteration's failure summary). `/tdd` itself does NOT decide when to use the arg — it is consumed only when present.
+
 ## Philosophy
 
 **Core principle**: Tests should verify behavior through public interfaces, not implementation details. Code can change entirely; tests shouldn't.
@@ -59,12 +64,32 @@ Pick the row matching what you're changing. The test command runs in every RED a
 
 If your artifact isn't listed, name the verifier explicitly in the Planning phase before writing the first test.
 
+## Live-AC SKIPPED rejection
+
+Default behavior across artifact types: a runner report containing SKIPPED cases counts as GREEN provided no test failed. The exception below tightens that contract; it applies ONLY when `/tdd` is invoked on a GitHub child issue whose body carries `## Parent` and a `## Covers AC` H2 section (the structured shape filed by `/slice`). Generic-artifact invocations — direct `/tdd` on a bash script, plist, vault doc, or skill with no enclosing GitHub issue — are unaffected.
+
+Detection (single source of truth — do NOT re-derive parser shape, regex, or the live-AC marker list here; cite by section number):
+
+1. Parse the working child issue body for `## Covers AC` per `references/ac-coverage-spec.md` § 1 (Covers AC parser regex). Collect the integer ID set. Empty set → pure-component child → standard GREEN, rule does not fire.
+2. Read the parent issue (named in the child's `## Parent` section) and parse `## Acceptance` per spec § 2.
+3. Apply the live-AC detection rule from `references/ac-coverage-spec.md` § 6 to each parent AC bullet — yields the parent's live-AC ID set.
+4. The child is a **live-AC child** iff its Covers-AC ID set intersects the parent's live-AC ID set (per spec § 1.2 intersection rule).
+
+Rule: when the child is a live-AC child AND the test runner output reports any SKIPPED test case, `/tdd` refuses GREEN and emits RED with the exact message:
+
+```
+Live-AC child has SKIPPED tests — make them run or remove their skip gate.
+```
+
+The child must either remove the skip gate (env-var, `.skip()` modifier, conditional `describe.skip`) or actually run the previously-skipped path. Pure-component children (empty `## Covers AC` ID set, or a set whose every ID maps to a non-live parent AC) keep the previous behavior — SKIPPED cases pass through GREEN unchanged.
+
 ## Workflow
 
 ### 1. Planning
 
 Before writing any code:
 
+- [ ] If invoked with `--prior-attempt-failed-because "<hint>"`: inject `Previous attempt failed because: <hint>. Try a different angle.` into the planning context as the FIRST line, before any other planning step. This anchors the rest of the plan against the prior failure.
 - [ ] Confirm with the user what **behavior** changes (not just "what code")
 - [ ] Pick the artifact type from the table above — record the test command in the plan
 - [ ] List 3–7 behaviors to test (not implementation steps)

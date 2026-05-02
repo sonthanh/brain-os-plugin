@@ -75,6 +75,36 @@
         "Says no / never refactor while red",
         "Says get to green first"
       ]
+    },
+    {
+      "id": 9,
+      "prompt": "/tdd is invoked on a GitHub child issue whose body has `## Parent` plus `## Covers AC` listing `- AC#1`. The parent issue's `## Acceptance` section contains AC#1 with description 'Verified by runs against operator integration base'. The runner output reports `> tests/integration.test.ts:42 (skip)` plus 100 passing tests and 0 failures. What does /tdd do?",
+      "expected_output": "Refuses GREEN; emits RED with the exact message 'Live-AC child has SKIPPED tests — make them run or remove their skip gate.' The child's Covers-AC ID set {1} intersects the parent's live-AC ID set (AC#1 carries the 'runs against' marker per references/ac-coverage-spec.md § 6), so the SKIPPED-rejection rule fires.",
+      "expectations": [
+        "Live-AC child has SKIPPED tests — make them run or remove their skip gate.",
+        "references/ac-coverage-spec.md",
+        "live-AC"
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "/tdd is invoked on a GitHub child issue whose body has `## Parent` plus `## Covers AC` (section present but empty — pure-component child). The runner output reports 1 SKIPPED case plus 100 passing tests and 0 failures. What does /tdd do?",
+      "expected_output": "GREEN — behavior unchanged from before this rule. The Covers-AC ID set is empty, so the child is a pure-component child (not a live-AC child); the SKIPPED-rejection rule does not fire and SKIPPED counts as green provided no test failed.",
+      "expectations": [
+        "Pure-component children",
+        "SKIPPED cases pass through GREEN unchanged",
+        "Empty"
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "/tdd is invoked as `/tdd --prior-attempt-failed-because \"wrong file path\" <child>`. Where does the hint go in /tdd's workflow, who passes this arg, and does /tdd decide when to use it?",
+      "expected_output": "Before writing the first test, /tdd injects 'Previous attempt failed because: <hint>. Try a different angle.' into the planning context as the FIRST line of Planning. The arg is passed verbatim by /impl's child-level ralph wrapper on retry iterations 2 + 3; /tdd itself does NOT decide when to use it — it is consumed only when present.",
+      "expectations": [
+        "Previous attempt failed because: <hint>. Try a different angle.",
+        "BEFORE writing the first test",
+        "/impl's child-level ralph wrapper on retry iterations 2 + 3"
+      ]
     }
   ]
 }
