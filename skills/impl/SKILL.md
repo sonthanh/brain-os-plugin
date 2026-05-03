@@ -140,9 +140,14 @@ bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/close-issue.sh" <N>
 
 `git pull --rebase` is mandatory before push because the CI auto-release pipeline runs on each push and may have bumped `plugin.json`.
 
-### 6. Post-close: parent evidence emission + parent close-trigger
+### 6. Post-close: AC evidence emission (self + parent) + parent close-trigger
 
-After `close-issue.sh` succeeds (issue CLOSED, `status:*` labels stripped) and BEFORE the outcome-log row in step 7, run two GraphQL-driven sub-steps. Both no-op silently for orphan issues (no native parent) and for pure-component children (empty or absent `## Covers AC`); they only fire when the just-closed child has a native parent AND claims at least one parent AC.
+After `close-issue.sh` succeeds (issue CLOSED, `status:*` labels stripped) and BEFORE the outcome-log row in step 7, run three sub-steps that together close the AC-evidence loop:
+
+- **§§ 6.1–6.3 (parent path)** — fire only when the just-closed issue has a native parent AND its body declares `## Covers AC`. Posts evidence comments on the parent and ticks the parent body. Skipped silently for orphans and pure-component children.
+- **§ 6.5 (self path)** — fires unconditionally for every closed issue whose body has `## Acceptance`. Posts self-evidence comments on the just-closed issue itself and ticks its own body. This path catches orphan leaves (issues filed without `/slice` that lack a native parent link, e.g. ad-hoc bug fixes filed via raw `gh issue create`) — their AC checkboxes used to never be ticked because §§ 6.1–6.4 short-circuited.
+
+Run §§ 6.1–6.4 first (parent path), then § 6.5 (self path). Both paths are idempotent; ordering only matters for log readability.
 
 Wire-level constants used below:
 
@@ -212,9 +217,68 @@ total=$(jq -r '.data.repository.issue.subIssuesSummary.total' <<<"$summary_json"
 
 Race note: two siblings closing near-simultaneously can both observe `completed == total` and both spawn `/impl story`. The race is benign — `run-story.ts` exits cleanly on an already-CLOSED parent and the second `nohup` instance does no work. No spawn-deduplication needed.
 
-#### 6.4. Skip-on-orphan idempotence
+#### 6.4. Skip-on-orphan idempotence (parent path only)
 
-If § 6.1 returned no parent, §§ 6.2 + 6.3 do not run. No comment posts, no spawn — `/impl <N>` exit is byte-identical to pre-Phase-2 behavior. This is the contract for legacy issues filed before native sub-issue links AND for one-off issues with no parent story.
+If § 6.1 returned no parent, §§ 6.2 + 6.3 do not run. No parent-comment posts, no `/impl story` spawn. § 6.5 still runs — orphan issues with their own `## Acceptance` get self-tick coverage even when there's no parent to walk up to. The "byte-identical to pre-Phase-2" contract applied before § 6.5 shipped; post-§ 6.5, the only delta on orphan issues is the self-evidence comments + body ticks on the orphan itself.
+
+#### 6.5. Self-AC evidence emission (unconditional)
+
+Independent of §§ 6.1–6.4: tick the just-closed issue's OWN `## Acceptance` bullets with self-evidence. Runs for every closed issue regardless of parent linkage — orphan leaves, parent-linked children, and standalone bug fixes all flow through this path. Without § 6.5, issues filed without `/slice` (e.g. ad-hoc `gh issue create` for bugs surfaced mid-session) close with all AC checkboxes still `[ ]` because no other actor mutates the leaf body.
+
+**Why separate from § 6.2:** § 6.2 ticks the *parent* body based on the child's `## Covers AC` declaration (form (ii) per `references/ac-coverage-spec.md` § 4.2). § 6.5 ticks the *just-closed issue's own* body based on per-AC self-assessment of the /tdd output + diff. The leaf's `## Acceptance` is its own contract.
+
+**Steps:**
+
+1. Read just-closed issue body. Parse `## Acceptance` per `references/ac-coverage-spec.md` § 3.1 regex.
+2. If the section is absent or the parsed AC set is empty, skip § 6.5 silently. Issues without their own `## Acceptance` (e.g. handover stubs, plan docs, pure-component children) leave no self-tick trail.
+3. For each AC#N parsed, compose a per-AC verdict by self-assessing the just-completed /tdd cycle:
+   - **met** — code change covers AC#N. Evidence: test names + pass/fail counts, file paths verified, grep counts, commit SHA.
+   - **out-of-scope** — AC#N is deferred / orthogonal / live-ops-only (e.g. "replay v6 against active base" requires running on a live system, not a code change). Reason: one-line explanation.
+   - **not-met** — AC#N was in scope but the change does not cover it. Reason: one-line gap description. The unticked checkbox is the audit trail; do not lie about coverage to make the issue look done.
+4. Per-AC actions (use the same `<tracker-repo>` + heredoc-with-interpolation pattern as § 6.2; em-dash is U+2014):
+
+```bash
+# For each met AC#${m}:
+gh issue comment <N-just-closed> -R <tracker-repo> --body-file - <<EOF
+Self acceptance verified: AC#${m} — ${evidence}
+EOF
+bun run "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/tick-parent-ac.ts" <N-just-closed> "${m}"
+
+# For each out-of-scope AC#${m}:
+gh issue comment <N-just-closed> -R <tracker-repo> --body-file - <<EOF
+Self acceptance deferred: AC#${m} — ${reason}
+EOF
+# (no tick — checkbox stays [ ] because the AC was not actually verified)
+
+# For each not-met AC#${m}: stderr WARN, no comment, no tick. The unticked checkbox is the audit trail.
+```
+
+`tick-parent-ac.ts` is named for its original parent-tick role but accepts any issue number — calling it with the leaf's own number ticks the leaf's body. No new CLI is required; the same idempotent regex (`tickAcceptance` from `scripts/run-story.ts`) applies.
+
+**Evidence form regexes (canonical SSOT in `references/ac-coverage-spec.md` § 3.5):**
+
+- `^Self acceptance verified: AC#(\d+) — (.+)$` — met
+- `^Self acceptance deferred: AC#(\d+) — (.+)$` — out-of-scope
+
+Both use a `Self acceptance` prefix distinct from § 3.3's `Acceptance verified` (parent-pointing) so backfill scripts and audits can distinguish self-evidence from parent-evidence on a single issue's comment thread.
+
+**Idempotence:**
+
+- `tick-parent-ac.ts` already idempotent: already-ticked AC is a silent no-op.
+- `gh issue comment` has no dedup primitive — re-running § 6.5 will duplicate comments. Backfill operators should grep existing comments for `Self acceptance verified: AC#${m}` before re-posting.
+
+**Failure handling:** mirror § 6.2 — if `gh issue comment` or `tick-parent-ac.ts` fails (network blip, rate limit, permission fault), log the failure and continue with remaining AC#N. Do not abort post-close; partial self-tick is recoverable via the backfill recipe below.
+
+**Backfill recipe for issues closed before § 6.5 shipped:**
+
+```bash
+# For an issue #N closed without § 6.5 evidence:
+# 1. gh issue view <N> --json body,comments  → read body ## Acceptance + any prior context
+# 2. Inspect commit history (git log --all --grep "#${N}") + /tdd output if available
+# 3. Per AC, decide met/deferred/not-met
+# 4. Run the gh issue comment + tick-parent-ac.ts pair from step 4 above
+# 5. Verify: gh issue view <N>  → expected ACs ticked, comments visible
+```
 
 ### 7. Outcome log
 

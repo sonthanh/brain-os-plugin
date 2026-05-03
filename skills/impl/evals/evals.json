@@ -379,12 +379,28 @@
     {
       "id": 33,
       "prompt": "What does /impl do when the just-closed issue has no native parent (orphan issue / leaf issue with no parent story)?",
-      "expected_output": "Step 6.1 (Resolve parent) issues a `gh api graphql` query for `repository.issue.parent.number` with the `// empty` jq fallback collapsing `null` to `\"\"`. If `parent_n` is empty, /impl skips §§ 6.2 and 6.3 entirely — no comment posts on any parent, no `subIssuesSummary` query, no `/impl story` spawn. The exit path is byte-identical to pre-Phase-2 behavior. This is the contract for legacy issues filed before native sub-issue links were introduced (Phase 2 #219) AND for one-off issues with no parent story. Step 6.4 (Skip-on-orphan idempotence) codifies this contract so the next reader of SKILL.md sees the legacy-compatibility guarantee without inferring it from the absence of action.",
+      "expected_output": "Step 6.1 (Resolve parent) issues a `gh api graphql` query for `repository.issue.parent.number` with the `// empty` jq fallback collapsing `null` to `\"\"`. If `parent_n` is empty, /impl skips §§ 6.2 and 6.3 entirely — no parent-comment posts, no `subIssuesSummary` query, no `/impl story` spawn. Step 6.4 (Skip-on-orphan idempotence) codifies this contract so the next reader of SKILL.md sees the parent-path legacy-compatibility guarantee without inferring it from the absence of action. Note: § 6.5 (Self-AC evidence emission) STILL runs on orphan issues — the only delta versus pre-Phase-2 behavior is the self-evidence comments and body ticks on the orphan itself. The 'byte-identical to pre-Phase-2' contract applied before § 6.5 shipped; post-§ 6.5, only §§ 6.2/6.3 short-circuit on orphans.",
       "expectations": [
         "Says step 6.1 returns empty `parent_n` for orphan / leaf issues via `// empty` jq fallback",
         "Says §§ 6.2 (evidence emission) and 6.3 (close-trigger) are skipped silently",
-        "No comment posts and no /impl story spawn happen for orphan issues",
-        "Mentions the byte-identical pre-Phase-2 exit path / legacy-compatibility contract"
+        "Says no PARENT-comment posts and no /impl story spawn happen for orphan issues",
+        "Says § 6.5 self-AC tick still runs unconditionally on orphans (the delta vs pre-Phase-2 behavior)"
+      ]
+    },
+    {
+      "id": 35,
+      "prompt": "What does /impl do for the just-closed issue's OWN `## Acceptance` checkboxes — independent of whether it has a native parent?",
+      "expected_output": "Step 6.5 (Self-AC evidence emission) runs unconditionally for every closed issue, parsing the just-closed issue's own `## Acceptance` per the parent-AC regex `^- \\[[ x]\\] \\*\\*AC#(\\d+)\\*\\* — (.+)$` from `references/ac-coverage-spec.md` § 3.1. If the section is absent or the AC set is empty, § 6.5 skips silently (issues without their own ## Acceptance — handover stubs, plan docs, pure-component children — leave no self-tick trail). Otherwise per AC#N the worker self-assesses /tdd output + diff into one of three verdicts: met (code change covers AC#N — evidence: test names + pass counts, file paths, grep counts, commit SHA), out-of-scope (deferred / orthogonal / live-ops-only — reason text), or not-met (in scope but not covered — gap description). Per-AC actions: met → `gh issue comment <N-just-closed> -R <tracker-repo> --body-file -` with unquoted heredoc emitting `Self acceptance verified: AC#${m} — ${evidence}` (em-dash U+2014; matches `references/ac-coverage-spec.md` § 3.5 regex), then `bun run \"$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/tick-parent-ac.ts\" <N-just-closed> \"${m}\"` ticks the leaf body bullet (the CLI accepts ANY issue number, no new CLI required). out-of-scope → emit `Self acceptance deferred: AC#${m} — ${reason}` comment with NO tick (checkbox stays `[ ]`). not-met → stderr WARN, no comment, no tick (the unticked checkbox is the audit trail; do not lie about coverage). Idempotence: tick-parent-ac.ts already idempotent on already-ticked AC; gh has no comment-dedup primitive so backfill operators should grep existing comments for `Self acceptance verified: AC#${m}` before re-posting. Failure handling mirrors § 6.2 — log + continue with remaining AC#N; partial self-tick is recoverable via the backfill recipe.",
+      "expectations": [
+        "Says step 6.5 runs UNCONDITIONALLY (independent of parent linkage)",
+        "Says it parses the just-closed issue's own `## Acceptance` (not the parent's)",
+        "Names the three per-AC verdicts: met / out-of-scope / not-met",
+        "Says met posts `Self acceptance verified: AC#N — <evidence>` AND ticks via tick-parent-ac.ts (works on any issue number)",
+        "Says out-of-scope posts `Self acceptance deferred: AC#N — <reason>` and does NOT tick",
+        "Says not-met logs stderr WARN with no comment and no tick (unticked checkbox is the audit trail)",
+        "Cites ac-coverage-spec.md § 3.5 (self-acceptance regex) and/or § 4.6 (form (iii)) as SSOT",
+        "Says em-dash is U+2014 literal",
+        "Says skip silently when `## Acceptance` absent or empty"
       ]
     }
   ]

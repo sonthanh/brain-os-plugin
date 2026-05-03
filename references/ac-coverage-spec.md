@@ -193,6 +193,42 @@ Results:
 | S2 | MATCH | `9` | the entire text starting with `live integration ran against` and ending with `<skill>.log:42` (literal backticks preserved) |
 | S3 | NO MATCH | — | rejected: missing `Acceptance verified: ` prefix |
 
+### 3.5. Self-acceptance evidence regexes
+
+Posted on the just-closed issue ITSELF (not the parent) by `/impl` § 6.5 to record that the issue's own `## Acceptance` bullets were self-assessed. Two regexes — one for met, one for out-of-scope. Both anchor at line start; comment may have other lines.
+
+```regex
+^Self acceptance verified: AC#(\d+) — (.+)$
+^Self acceptance deferred: AC#(\d+) — (.+)$
+```
+
+- Group 1: AC bullet ID (integer).
+- Group 2: free-form evidence text (test counts, commit SHA, grep counts) for `verified`; reason for `deferred`.
+- Em-dash `—` (U+2014) is literal.
+- The `Self acceptance` prefix is the discriminator from § 3.3's `Acceptance verified`. A backfill or audit script reading an issue's comments can tell self-evidence (this issue's own AC) from parent-evidence (a child issue verifying its parent's AC) by the prefix.
+
+`verified` triggers a body tick on the same issue (`tickAcceptance(body, acId)` from `scripts/run-story.ts`); `deferred` leaves the checkbox `[ ]` because the AC was not actually satisfied — only acknowledged as out-of-scope for this code change.
+
+#### 3.5.1. Self-acceptance regex tests
+
+Samples (each is a single line in the issue's own comment body):
+
+```
+S1: Self acceptance verified: AC#1 — bun test scripts/run-story.test.ts: 47 pass; commit abc1234 — 1 file changed +120/-3
+S2: Self acceptance deferred: AC#4 — replay v6 requires running on the active operator base; not a code change.
+S3: Self acceptance verified: AC#10 — log file at {vault}/daily/skill-outcomes/impl.log appended on every /impl run (verified by inspection: 12 rows added since fix)
+S4: self acceptance verified: AC#1 — lowercase prefix
+S5: Self acceptance verified: AC#1 - hyphen instead of em-dash
+```
+
+| Sample | Result | Group 1 | Group 2 (text) |
+|--------|--------|---------|-----------------|
+| S1 | MATCH (verified) | `1` | `bun test scripts/run-story.test.ts: 47 pass; commit abc1234 — 1 file changed +120/-3` |
+| S2 | MATCH (deferred) | `4` | `replay v6 requires running on the active operator base; not a code change.` |
+| S3 | MATCH (verified) | `10` | `log file at {vault}/daily/skill-outcomes/impl.log appended on every /impl run (verified by inspection: 12 rows added since fix)` |
+| S4 | NO MATCH | — | rejected: regex demands `Self acceptance` (capital S, capital A); lowercase is a filing bug |
+| S5 | NO MATCH | — | rejected: regex demands em-dash U+2014; ASCII hyphen found |
+
 ---
 
 ## 4. Evidence forms (Gate C — parent close)
@@ -258,6 +294,39 @@ Acceptance verified: AC#1 — manual replay of grill-to-children flow; /slice AB
 If AC#N has no form (ii) evidence, Gate C refuses parent close. The orchestrator (`run-story.ts`) escalates per the parent story's settled Q9 (ralph 3 iters auto-filing evidence-gathering children, then HITL `osascript` notify).
 
 **Phase 2 (#219 C3) note:** form (i) closed-child implicit evidence is no longer accepted (§ 4.1). A parent whose AC bullets only have closed-child coverage but no `Acceptance verified: AC#N — …` comment is treated as missing evidence and triggers the same Gate C escalation as a fully bare AC. Use the migration path in § 4.1 to backfill comments for in-flight stories.
+
+### 4.6. Form (iii) — self-acceptance evidence (CANONICAL for leaf AC)
+
+A comment on the just-closed issue ITSELF contains a line matching the self-acceptance regex (§ 3.5) with capture group 1 = N. Posted by `/impl` § 6.5 immediately after `close-issue.sh` succeeds and the leaf's `## Acceptance` is parsed. Two variants — `verified` triggers a body tick; `deferred` leaves the checkbox `[ ]` and records why.
+
+**Why a separate form for self-AC:** form (ii) covers child→parent acceptance evidence — a child issue verifying its parent story's AC. Form (iii) covers an issue verifying its OWN AC. Until form (iii) shipped (`/impl` § 6.5), leaf issues' `## Acceptance` checkboxes had no actor: orphan leaves filed without `/slice` (raw `gh issue create` for ad-hoc bugs) closed with all AC unticked because §§ 6.1–6.4 short-circuit on missing native parent. Form (iii) is the per-leaf mirror of form (ii).
+
+**Algorithm:**
+
+1. `gh issue view <leaf_id> --json comments` (the leaf is the just-closed issue, NOT a parent).
+2. Per comment, split body on `\n`, apply both § 3.5 regexes per line:
+   - `^Self acceptance verified: AC#(\d+) — (.+)$` → `(ac_id, evidence)`, intent: tick body.
+   - `^Self acceptance deferred: AC#(\d+) — (.+)$` → `(ac_id, reason)`, intent: leave checkbox unticked, record reason.
+3. AC#N has form (iii) `verified` evidence iff any comment yielded a `verified` match for `ac_id == N`.
+4. AC#N has form (iii) `deferred` evidence iff any comment yielded a `deferred` match for `ac_id == N` AND no `verified` match exists for the same ID. (`verified` wins over `deferred` when both are present — operator may post `deferred`, then later verify and tick.)
+
+Form (iii) is unrelated to Gate C — Gate C only fires for parent stories at close-time, and parent close uses form (ii) on parent comments. Form (iii) is the per-leaf evidence trail and the body-tick driver, with no parent-close coupling.
+
+### 4.7. Form (iii) example
+
+Issue #234 (a leaf bug fix) closes with 4 AC bullets in its body. `/impl` § 6.5 self-assesses:
+
+```
+Self acceptance verified: AC#1 — extractSlice runs reverse-lookup unconditionally; commit 8b84577
+Self acceptance verified: AC#2 — source_url built deterministically (extract-slice.mts:912-914)
+Self acceptance verified: AC#3 — SliceRejectedError thrown on no-match; escalation.md written
+Self acceptance deferred: AC#4 — replay v6 against operator's active base requires live ops, not a code change
+```
+
+After § 6.5 completes:
+- `gh issue view 234` body shows AC#1, #2, #3 ticked `[x]`; AC#4 stays `[ ]`.
+- Comment thread on #234 contains 4 form-(iii) lines (3 verified, 1 deferred).
+- Audit: anyone reading #234 sees both the body state AND the comment trail explaining each verdict.
 
 ---
 
@@ -445,8 +514,9 @@ Optional H2 section in the parent body that asserts a manual verification gate b
 |-------|--------------|---------|------------------------|
 | Phase 1 | **#196** — Story: Parent acceptance gate for /impl story (no fake-done) | 2026-05-02 | § 1 (`## Covers AC` shape), § 2 (parent `## Acceptance` shape), § 3 (parser regex set), § 4 originally (both forms accepted), § 5 (`impl-story.log` instrumentation), § 6 (live-AC detection rule). Source: three-gate doctrine A/B/C established. |
 | Phase 2 | **#219** — Story: Story-parent state ownership — AC tick + native sub-issues + form-(ii) canonical | 2026-05-03 | § 4 update (form (i) DEPRECATED + migration note), § 7 (parent body format: Sub-issues list-only + AC evidence-link annotation + `## Verification (post-merge, manual)` section). Source: child-level `/impl` close-trigger + form-(ii) canonical decision. |
+| Phase 2.1 | hot-fix (no story — direct fix per user) | 2026-05-03 | § 3.5 (self-acceptance regexes), § 4.6 (form (iii) self-acceptance evidence), § 4.7 (form (iii) example using #234). Source: orphan-leaf gap surfaced by ad-hoc-filed issues #234 + #235 closing with all AC unticked because §§ 6.1–6.4 short-circuit on missing native parent. |
 
-Phase 2 supersedes Phase 1 § 4's two-form acceptance; otherwise Phase 1 sections (§ 1–§ 3, § 5, § 6) carry forward unchanged.
+Phase 2 supersedes Phase 1 § 4's two-form acceptance; otherwise Phase 1 sections (§ 1–§ 3, § 5, § 6) carry forward unchanged. Phase 2.1 adds form (iii) without superseding any prior form — leaf self-AC was previously unaddressed.
 
 ### Vault context
 
