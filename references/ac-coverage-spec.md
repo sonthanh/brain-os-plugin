@@ -197,20 +197,32 @@ Results:
 
 ## 4. Evidence forms (Gate C — parent close)
 
-For each AC#N parsed from parent `## Acceptance`, Gate C accepts ONE of two evidence forms. Both are deterministic (regex + `gh issue` API only — no LLM). HITL ack collapses into form (ii).
+**Phase 2 update (post-#219):** Form (ii) — parent-comment evidence — is the canonical and only accepted form. Form (i) — closed-child implicit evidence — is **DEPRECATED**; Gate C no longer accepts it. See § 4.1 for the migration path that backfills explicit comments for in-flight stories that previously relied on form (i).
 
-### 4.1. Form (i) — closed child evidence
+For each AC#N parsed from parent `## Acceptance`, Gate C accepts evidence only via form (ii). Both forms are documented below; form (i) is retained for historical context and to define the migration path, but the Gate C close path no longer ticks AC bullets on form-(i) match alone.
+
+### 4.1. Form (i) — closed child evidence (DEPRECATED — Phase 2 #219 C3)
+
+> **DEPRECATED 2026-05-03 (Phase 2 #219 C3).** Gate C no longer accepts this form. AC bullets tick `[x]` only when form (ii) (§ 4.2) matches. The deprecation is enforced in `scripts/run-story.ts` (covered by #221).
+>
+> **Why deprecated:** form (i) made AC verification opaque — "AC#N is satisfied because child #M is CLOSED and lists AC#N in its `## Covers AC`" required code archaeology to answer "what evidence proves AC#N actually ran live?". Stories like #207 + #196 closed children via per-child `/impl` without ever surfacing evidence on the parent, and the parent stayed OPEN because Gate C only fired through `/impl story` orchestrator. Phase 2 makes evidence explicit at the parent surface (form (ii) only) and triggers Gate C from per-child `/impl` close (#220).
+>
+> **Migration path for in-flight stories that relied on form (i):**
+>
+> - Stories drained via `/impl <child-N>` per-child after #220 ships: `/impl` posts `Acceptance verified: AC#N — <evidence>` comments on the parent automatically at child-close, satisfying form (ii). No operator action required.
+> - Stories that already closed children before #220 shipped (e.g. #207, #196): operator (or `/impl story` ralph fallback) manually posts `Acceptance verified: AC#N — <evidence>` comments on the parent retroactively. Once posted, re-run `/impl story <P>` to re-trigger Gate C; AC ticks + parent closes.
+> - Stories whose children are closed by `gh CLI` or the GitHub web UI (not via `/impl`): manual `Acceptance verified` posts are the only path — the per-child auto-emission path in #220 only runs through `/impl <N>`.
 
 A child issue exists in the parent's sub-issue list, is in CLOSED state, and its body's `## Covers AC` ID set contains N.
 
-**Algorithm:**
+**Algorithm (historical, no longer wired into Gate C):**
 
 1. Parent body: parse sub-issue checklist (`- [x] #<id>` lines). Collect `child_id` set.
 2. For each `child_id`: `gh issue view <child_id> --json state,body`. Filter to `state == "CLOSED"`.
 3. Apply child Covers-AC regex (§ 3.2) inside `## Covers AC` section. Collect `covered_ac_set`.
 4. AC#N has form (i) evidence iff `N ∈ covered_ac_set` of any closed child.
 
-### 4.2. Form (ii) — parent-comment evidence
+### 4.2. Form (ii) — parent-comment evidence (CANONICAL)
 
 A comment on the parent issue contains a line matching the parent-comment evidence regex (§ 3.3) with capture group 1 = N.
 
@@ -243,7 +255,9 @@ Acceptance verified: AC#1 — manual replay of grill-to-children flow; /slice AB
 
 ### 4.5. Failure mode
 
-If AC#N has neither (i) nor (ii) evidence, Gate C refuses parent close. The orchestrator (`run-story.ts`) escalates per the parent story's settled Q9 (ralph 3 iters auto-filing evidence-gathering children, then HITL `osascript` notify).
+If AC#N has no form (ii) evidence, Gate C refuses parent close. The orchestrator (`run-story.ts`) escalates per the parent story's settled Q9 (ralph 3 iters auto-filing evidence-gathering children, then HITL `osascript` notify).
+
+**Phase 2 (#219 C3) note:** form (i) closed-child implicit evidence is no longer accepted (§ 4.1). A parent whose AC bullets only have closed-child coverage but no `Acceptance verified: AC#N — …` comment is treated as missing evidence and triggers the same Gate C escalation as a fully bare AC. Use the migration path in § 4.1 to backfill comments for in-flight stories.
 
 ---
 
@@ -352,9 +366,92 @@ Refinement deferred until measured `impl-story.log` data shows the rule misclass
 
 ---
 
+## 7. Parent body format (Phase 2 — post-#219)
+
+This section defines the parent story body shape introduced by Phase 2 (#219). Three sections of the parent body are formalized here: the `## Sub-issues` list, the `## Acceptance` bullet evidence-link annotation, and the optional `## Verification (post-merge, manual)` section. The `/slice` skill emits this format when filing parent stories (covered by #222); `scripts/run-story.ts` reads this format at Gate C close-time (covered by #221).
+
+### 7.1. Sub-issues section format (list-only, no checkbox)
+
+```markdown
+## Sub-issues
+
+- #<child-N> — <title>
+- #<child-M> — <title>
+```
+
+- Bare same-repo `#N` reference, no checkbox prefix.
+- One child per bullet line; child title trails the em-dash for offline-readable index.
+- Em-dash separator is U+2014 `—` (consistent with § 2's AC bullet format).
+- Cross-repo references (`<repo>#N`) are NOT supported here — sub-issues live in the same repo as the parent (GitHub's native sub-issue mechanism is single-repo).
+
+**Why no checkbox:** GitHub's native sub-issue panel renders a progress bar + status badges from the sub-issue link graph established via the `addSubIssue` GraphQL mutation. Parent body checkboxes for sub-issues would duplicate that signal and drift out of sync (closing a child via `gh CLI` does not auto-tick a body checkbox). Phase 2 shifts sub-issue status UX entirely to the native panel; the body section is a stable text anchor + offline-readable index only.
+
+**Cross-reference:** `/slice` Step 6 calls the `addSubIssue` GraphQL mutation per child filed and Step 7 emits the Sub-issues section in this format — covered by #222.
+
+### 7.2. Acceptance bullet evidence-link annotation
+
+The Phase 2 form of an AC bullet appends a Markdown evidence-link annotation to the description:
+
+```markdown
+- [ ] **AC#<N>** — <requirement> — [evidence ↗](#issuecomment-<comment-id>)
+```
+
+- `<comment-id>` is the GitHub numeric ID of the parent comment matching the form (ii) regex (§ 3.3) for AC#N.
+- `[evidence ↗](url)` Markdown reads as a clickable arrow that jumps the reader to the comment that proves the AC.
+- The annotation is APPENDED to the description; it does NOT replace the `Verified by …` clause used by the live-AC detection rule (§ 6).
+- The em-dash before `[evidence ↗]` is the same U+2014 separator pattern used elsewhere.
+
+**Compatibility with the parent-AC regex (§ 3.1):** the existing regex `^- \[[ x]\] \*\*AC#(\d+)\*\* — (.+)$` continues to match — Group 2 captures the entire description including the trailing `— [evidence ↗](url)` annotation. No regex change required for Phase 2.
+
+**Filing-time placeholder:** when `/slice` files the parent body, the comment ID does not yet exist (no comments posted until child-close runs `/impl` per #220). `/slice` emits the placeholder annotation `— [evidence ↗](#issuecomment-PLACEHOLDER)`; `scripts/run-story.ts` rewrites the placeholder to the real comment URL when ticking the AC at Gate C (covered by #221's `tickAcceptance(body, acId)` function).
+
+**Multi-child AC coverage:** when more than one child covers the same AC#N, the annotation links to the FIRST evidence comment (lowest comment ID matching form (ii) for that AC) and notes additional coverers inline:
+
+```markdown
+- [ ] **AC#3** — <requirement> — [evidence ↗](#issuecomment-12345) (also covered by #M, #K)
+```
+
+**Cross-reference:** `/slice` Step 7 emits the bullet AC + evidence-link annotation; the placeholder is rewritten by `tickAcceptance(body, acId)` at Gate C close-time — covered by #222 and #221.
+
+### 7.3. `## Verification (post-merge, manual)` section
+
+Optional H2 section in the parent body that asserts a manual verification gate beyond Gate C's deterministic AC evidence check. Used for stories where child completion + AC tick do NOT constitute end-to-end story success (e.g. parent #207 needed Day-20 next-FB-post live validation before declaring the writing-style split actually shipped).
+
+**Detection regex:**
+
+```regex
+^## Verification \(post-merge, manual\)$
+```
+
+- Anchored to a single line; matches the H2 header literally with escaped parens.
+- Apply per-line over the parent body after splitting on `\n`; first match in the body suffices.
+- Section content is free-form prose (the manual verification checklist or instructions); the parser only checks for the header presence.
+
+**Gate C behavior when present:** instead of closing the parent on AC evidence pass, `scripts/run-story.ts` posts a parent comment with the literal text `Gate C passed; manual verification pending — parent left OPEN` and skips the `gh issue close` call. AC bullets are still ticked `[x]` per `tickAcceptance(body, acId)` so the evidence trail is preserved on the parent body. The parent issue remains OPEN until the operator manually closes it after performing the verification checklist.
+
+**Gate C behavior when absent:** the existing Gate C close path runs unchanged — tick AC bullets, then `gh issue close`.
+
+**Why per-parent opt-in vs global default:** most stories' AC bullets fully capture end-to-end success (Phase 1 #196's design assumption). Stories with manual post-merge gates are the exception; making it default-on would force every operator to add an explicit `Verification: NONE` line on the typical case. Opt-in via section presence keeps the typical case zero-config and surfaces the exception as visible body text.
+
+**Cross-reference:** the section detection + Gate C behavior live in `scripts/run-story.ts` Gate C close path — covered by #221.
+
+---
+
 ## Cross-references
 
-- **Design context (private vault):** `{vault}/daily/grill-sessions/2026-04-30-impl-story-parent-acceptance-gate.md` (settled 2026-05-02)
+### Phase lineage (decisions encoded in this spec)
+
+| Phase | Parent issue | Settled | Decisions encoded here |
+|-------|--------------|---------|------------------------|
+| Phase 1 | **#196** — Story: Parent acceptance gate for /impl story (no fake-done) | 2026-05-02 | § 1 (`## Covers AC` shape), § 2 (parent `## Acceptance` shape), § 3 (parser regex set), § 4 originally (both forms accepted), § 5 (`impl-story.log` instrumentation), § 6 (live-AC detection rule). Source: three-gate doctrine A/B/C established. |
+| Phase 2 | **#219** — Story: Story-parent state ownership — AC tick + native sub-issues + form-(ii) canonical | 2026-05-03 | § 4 update (form (i) DEPRECATED + migration note), § 7 (parent body format: Sub-issues list-only + AC evidence-link annotation + `## Verification (post-merge, manual)` section). Source: child-level `/impl` close-trigger + form-(ii) canonical decision. |
+
+Phase 2 supersedes Phase 1 § 4's two-form acceptance; otherwise Phase 1 sections (§ 1–§ 3, § 5, § 6) carry forward unchanged.
+
+### Vault context
+
+- **Phase 1 design context (private vault):** `{vault}/daily/grill-sessions/2026-04-30-impl-story-parent-acceptance-gate.md` (settled 2026-05-02)
+- **Phase 2 design context (private vault):** `{vault}/daily/grill-sessions/2026-05-03-story-parent-state-ownership.md` (settled 2026-05-03)
 - **Aha pattern reference:** `{vault}/thinking/aha/2026-04-17-phase-boundary-blind-spot.md` (handoff between /grill → /slice → /impl)
 - **Prior gate doctrine:** `{vault}/daily/grill-sessions/2026-04-27-slice-audit-gate-p1-p2.md` (deterministic gate at file-time pattern)
 - **Tracer-bullet doctrine:** `{vault}/daily/grill-sessions/2026-04-25-skill-process-pocock-adoption.md` (component vs vertical-slice children)
