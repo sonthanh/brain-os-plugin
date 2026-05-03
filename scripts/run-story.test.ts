@@ -4,6 +4,8 @@ import {
   parseBlockers,
   parseOwner,
   tickChecklist,
+  tickAcceptance,
+  hasManualVerificationSection,
   clampParallel,
   computeReady,
   promoteWaiters,
@@ -178,6 +180,84 @@ describe("tickChecklist", () => {
     ].join("\n");
     expect(tickChecklist(body, 220)).toBe(body);
     expect(tickChecklist(body, 221)).toBe(body);
+  });
+});
+
+describe("tickAcceptance", () => {
+  test("ticks the matching AC bullet by ID", () => {
+    const body = [
+      "- [ ] **AC#3** — first criterion text.",
+      "- [ ] **AC#4** — second criterion text.",
+    ].join("\n");
+    const result = tickAcceptance(body, 3);
+    expect(result).toContain("- [x] **AC#3** — first criterion text.");
+    expect(result).toContain("- [ ] **AC#4** — second criterion text.");
+  });
+
+  test("idempotent on already-ticked AC bullet", () => {
+    const body = "- [x] **AC#3** — already done.";
+    expect(tickAcceptance(body, 3)).toBe(body);
+  });
+
+  test("does not affect different AC IDs that share a numeric prefix", () => {
+    // tickAcceptance(body, 3) must NOT match `**AC#30**` or `**AC#33**`.
+    const body = [
+      "- [ ] **AC#3** — target.",
+      "- [ ] **AC#30** — sibling with same prefix.",
+      "- [ ] **AC#33** — sibling with same prefix.",
+    ].join("\n");
+    const result = tickAcceptance(body, 3);
+    expect(result).toContain("- [x] **AC#3** — target.");
+    expect(result).toContain("- [ ] **AC#30** — sibling with same prefix.");
+    expect(result).toContain("- [ ] **AC#33** — sibling with same prefix.");
+  });
+
+  test("returns body unchanged when AC ID not present", () => {
+    const body = "- [ ] **AC#3** — only AC.";
+    expect(tickAcceptance(body, 99)).toBe(body);
+  });
+
+  test("requires em-dash (U+2014) — does not match ASCII hyphen variant", () => {
+    // Defensive against accidental hyphen filings; spec § 3.1 mandates em-dash.
+    const body = "- [ ] **AC#3** - hyphen instead of em-dash";
+    expect(tickAcceptance(body, 3)).toBe(body);
+  });
+});
+
+describe("hasManualVerificationSection", () => {
+  test("detects ## Verification (post-merge, manual) H2 line", () => {
+    const body = [
+      "## Acceptance",
+      "- [ ] **AC#1** — criterion.",
+      "",
+      "## Verification (post-merge, manual)",
+      "",
+      "Manual replay required after merge.",
+    ].join("\n");
+    expect(hasManualVerificationSection(body)).toBe(true);
+  });
+
+  test("returns false when H2 absent", () => {
+    const body = [
+      "## Acceptance",
+      "- [ ] **AC#1** — criterion.",
+    ].join("\n");
+    expect(hasManualVerificationSection(body)).toBe(false);
+  });
+
+  test("does not match a different H2 heading containing 'Verification'", () => {
+    const body = "## Verification\n\nNot the manual gate.";
+    expect(hasManualVerificationSection(body)).toBe(false);
+  });
+
+  test("does not match the heading at H3 (### Verification ...)", () => {
+    const body = "### Verification (post-merge, manual)\n\nWrong level.";
+    expect(hasManualVerificationSection(body)).toBe(false);
+  });
+
+  test("tolerates trailing whitespace on the H2 line", () => {
+    const body = "## Verification (post-merge, manual)   \n\nbody";
+    expect(hasManualVerificationSection(body)).toBe(true);
   });
 });
 
@@ -1161,41 +1241,40 @@ describe("parseParentCommentEvidence", () => {
   });
 });
 
-describe("findMissingEvidence", () => {
-  test("returns empty when every AC is covered by closed-child evidence", () => {
-    const closed = new Map<number, Set<number>>([
-      [201, new Set([1])],
-      [202, new Set([2, 3])],
-    ]);
-    expect(findMissingEvidence([1, 2, 3], closed, [])).toEqual([]);
-  });
-
-  test("returns empty when every AC is covered by parent-comment evidence", () => {
+describe("findMissingEvidence — form-(ii) only (#221 dropped form-(i))", () => {
+  test("returns empty when every AC has a matching parent-comment evidence line", () => {
     expect(
       findMissingEvidence(
         [1, 2],
-        new Map(),
         ["Acceptance verified: AC#1 — replay\nAcceptance verified: AC#2 — inspection"],
       ),
     ).toEqual([]);
   });
 
-  test("mixes form (i) and form (ii) evidence", () => {
-    const closed = new Map<number, Set<number>>([[201, new Set([1])]]);
+  test("returns missing IDs sorted ascending when no comments cover them", () => {
+    expect(findMissingEvidence([5, 1, 3, 2], [])).toEqual([1, 2, 3, 5]);
+  });
+
+  test("returns the AC IDs not appearing in any comment (partial coverage)", () => {
     const comments = ["Acceptance verified: AC#2 — manual replay"];
-    expect(findMissingEvidence([1, 2, 3], closed, comments)).toEqual([3]);
+    expect(findMissingEvidence([1, 2, 3], comments)).toEqual([1, 3]);
   });
 
-  test("returns missing IDs sorted ascending", () => {
-    expect(findMissingEvidence([5, 1, 3, 2], new Map(), [])).toEqual([1, 2, 3, 5]);
+  test("closed-child Covers AC IS NOT evidence on its own (form-(i) deprecated)", () => {
+    // Even if some downstream caller still has a closed-child covers-set lying
+    // around, the helper now only reads parent comments. Passing zero comments
+    // ⇒ everything is missing.
+    expect(findMissingEvidence([1, 2], [])).toEqual([1, 2]);
   });
 
-  test("ignores closed-child entries that don't cover anything (pure-component)", () => {
-    const closed = new Map<number, Set<number>>([
-      [201, new Set()],
-      [202, new Set([1])],
-    ]);
-    expect(findMissingEvidence([1, 2], closed, [])).toEqual([2]);
+  test("multi-line comment with multiple verifications counts each AC", () => {
+    const c = [
+      "Replay run 2026-05-08, all green.",
+      "",
+      "Acceptance verified: AC#3 — unit test added; bun test scripts/run-story.test.ts → all green",
+      "Acceptance verified: AC#4 — integration fixtures A/B/C all green",
+    ].join("\n");
+    expect(findMissingEvidence([3, 4, 5], [c])).toEqual([5]);
   });
 });
 
@@ -1355,7 +1434,12 @@ describe("runCloseGate — Phase 1 (deterministic check)", () => {
     expect(notifications).toHaveLength(0);
   });
 
-  test("all AC have form (i) closed-child evidence → blocked: false", async () => {
+  test("closed-child Covers AC alone (form-(i) only, no comments) NO LONGER satisfies — blocks per #221", async () => {
+    // Pre-#221 this gate accepted form-(i) closed-child implicit evidence.
+    // #221 deprecated form-(i): only form-(ii) parent-comment evidence ticks.
+    // Migration path is /impl per-child (#220) backfilling explicit comments.
+    // Override createIssue to throw so Phase 2 short-circuits to Phase 3 cleanly
+    // (the test cares about the deprecation, not Phase 2's auto-fill loop).
     const ghBundle = makeCloseGateGh({
       600: {
         body: [
@@ -1379,14 +1463,16 @@ describe("runCloseGate — Phase 1 (deterministic check)", () => {
         state: "CLOSED",
       },
     });
-    const { deps, spawnCalls, notifications } = makeCloseGateDeps(ghBundle);
+    ghBundle.gh.createIssue = async () => {
+      throw new Error("createIssue intentionally throws — Phase 2 short-circuits to Phase 3");
+    };
+    const { deps } = makeCloseGateDeps(ghBundle);
     const result = await runCloseGate(600, deps);
-    expect(result).toEqual({ blocked: false, missing: [], iterations: 0, spawnedChildren: [] });
-    expect(spawnCalls).toHaveLength(0);
-    expect(notifications).toHaveLength(0);
+    expect(result.blocked).toBe(true);
+    expect(result.missing).toEqual([1, 2]);
   });
 
-  test("AC covered only by parent-comment evidence (form ii) → blocked: false", async () => {
+  test("all AC covered by form-(ii) parent-comment evidence → blocked: false", async () => {
     const ghBundle = makeCloseGateGh({
       650: {
         body: [
@@ -1396,10 +1482,13 @@ describe("runCloseGate — Phase 1 (deterministic check)", () => {
           "## Acceptance",
           "",
           "- [ ] **AC#1** — first.",
-          "- [ ] **AC#2** — by-comment only.",
+          "- [ ] **AC#2** — second.",
         ].join("\n"),
         labels: ["type:plan", "area:plugin-brain-os"],
-        comments: ["Acceptance verified: AC#2 — manual replay 2026-05-08, log at vault path"],
+        comments: [
+          "Acceptance verified: AC#1 — replay 2026-05-08 commit a1b2c3d4",
+          "Acceptance verified: AC#2 — manual replay 2026-05-08, log at vault path",
+        ],
       },
       651: {
         body: "## Covers AC\n\n- AC#1\n\n## What to build",
@@ -1465,7 +1554,11 @@ describe("runCloseGate — Phase 1 (deterministic check)", () => {
 });
 
 describe("runCloseGate — Phase 2 (ralph auto-fill)", () => {
-  test("missing AC → file evidence-gathering child + spawn /impl with parent's area cwd; child closes with form-(i) covers-ac evidence → blocked: false on iter 1", async () => {
+  test("missing AC → file evidence-gathering child + spawn /impl with parent's area cwd; spawned worker posts form-(ii) comment → blocked: false on iter 1", async () => {
+    // Phase 2 spawns `/impl <evidence-child>` workers. Per #220, those workers
+    // post `Acceptance verified: AC#N — …` comments on the parent at child-close.
+    // The spawn hook here mocks that worker behavior: closes the filed child
+    // AND posts the form-(ii) comment via gh.addComment(parent, …).
     const ghBundle = makeCloseGateGh({
       700: {
         body: [
@@ -1483,24 +1576,22 @@ describe("runCloseGate — Phase 2 (ralph auto-fill)", () => {
         state: "CLOSED", // pure-component, doesn't cover AC#10
       },
     });
-    // Hook: when worker spawned, simulate the worker closing the spawned child
-    // synchronously via the alive-set so the gate's poll loop sees CLOSED on
-    // its first iteration. The newly-filed child (next issue #) flips CLOSED.
     const bundle = makeCloseGateDeps(ghBundle);
-    // Override spawnWorker to also flip the just-filed child to CLOSED
     bundle.deps.spawn = {
       spawnWorker: (name, prompt, _logPath, cwd) => {
         const pid = 50000 + bundle.spawnCalls.length;
         bundle.pidsAlive.add(pid);
         bundle.spawnCalls.push({ name, prompt, cwd, pid });
-        // Extract child number from prompt "/impl <N>"
         const m = prompt.match(/\/impl (\d+)/);
         if (m) {
           const child = Number(m[1]);
-          // Mark CLOSED so first poll cycle sees CLOSED.
           ghBundle.bodies[child].state = "CLOSED";
-          // PID dies as well (worker cleanly exits) — alive=false gives "closed"
-          // anyway because viewState=CLOSED takes precedence per decideWorkerAction.
+          // Worker posts form-(ii) evidence comment on parent (mocks #220).
+          // Parent of all evidence-gathering children is 700 in this fixture.
+          ghBundle.bodies[700].comments = [
+            ...(ghBundle.bodies[700].comments ?? []),
+            "Acceptance verified: AC#10 — live row appended; bun run scripts/run-story.ts replay logged at vault path",
+          ];
           bundle.pidsAlive.delete(pid);
         }
         return { pid };
@@ -1524,7 +1615,7 @@ describe("runCloseGate — Phase 2 (ralph auto-fill)", () => {
     expect(ghBundle.createdIssues[0].opts.status).toBe("ready");
   });
 
-  test("missing AC → spawned child closes WITHOUT evidence comment OR Covers AC ID → still missing → goes to Phase 3 after 3 iters", async () => {
+  test("missing AC → spawned child closes WITHOUT posting form-(ii) comment → still missing → goes to Phase 3 after 3 iters", async () => {
     const ghBundle = makeCloseGateGh({
       710: {
         body: [
@@ -1546,9 +1637,8 @@ describe("runCloseGate — Phase 2 (ralph auto-fill)", () => {
         const m = prompt.match(/\/impl (\d+)/);
         if (m) {
           const child = Number(m[1]);
-          // Mark CLOSED but DROP the Covers AC content so Phase 1 still sees missing.
+          // Worker closes child but does NOT post form-(ii) comment → AC stays missing.
           ghBundle.bodies[child].state = "CLOSED";
-          ghBundle.bodies[child].body = "## What to build\n\n(no Covers AC)";
           bundle.pidsAlive.delete(pid);
         }
         return { pid };
@@ -1559,14 +1649,10 @@ describe("runCloseGate — Phase 2 (ralph auto-fill)", () => {
     expect(result.blocked).toBe(true);
     expect(result.missing).toEqual([1]);
     expect(result.iterations).toBe(3);
-    // Three iters × one missing AC = 3 spawns
     expect(bundle.spawnCalls).toHaveLength(3);
     expect(bundle.notifications.some((m) => m.includes("Parent #710") && m.includes("AC#1"))).toBe(
       true,
     );
-    // HITL comment posted to parent (the gate's terminal side effect — the
-    // impl-story.log row is written by writeImplStoryLogRow at runStory level,
-    // tested in the "runStory — Gate C wiring" suite).
     expect(ghBundle.bodies[710].comments?.some((c) => c.includes("Acceptance gate failed"))).toBe(
       true,
     );
@@ -1605,12 +1691,12 @@ describe("runCloseGate — parent-area edge cases", () => {
 });
 
 describe("runCloseGate — partial recovery across iters", () => {
-  test("iter 1 closes one of two missing ACs; iter 2 resolves the second → blocked: false", async () => {
+  test("iter 1 resolves one of two missing ACs; iter 2 resolves the second → blocked: false", async () => {
     // Fixture: parent missing AC#1 + AC#2.
-    // Spawn handler: closes filed children. First filed child gets a Covers AC
-    // matching its target. Second filed child (created in same iter for AC#2)
-    // intentionally omits Covers AC, so AC#2 is still missing after iter 1.
-    // Iter 2's filed child for AC#2 includes Covers AC → both resolved.
+    // Spawn handler: closes filed children + posts form-(ii) comments.
+    // Iter 1: spawn for AC#1 posts a form-(ii) comment for AC#1; spawn for AC#2
+    //         omits its comment so AC#2 remains missing.
+    // Iter 2: spawn for AC#2 posts a form-(ii) comment → both resolved.
     const ghBundle = makeCloseGateGh({
       800: {
         body: [
@@ -1634,22 +1720,29 @@ describe("runCloseGate — partial recovery across iters", () => {
         const m = prompt.match(/\/impl (\d+)/);
         if (m) {
           const child = Number(m[1]);
-          // The body filed for this child is in ghBundle.bodies[child].body —
-          // contains "## Covers AC\n\n- AC#N". When we close, *keep* the body
-          // intact so form (i) evidence works for AC#N. For iter 1's AC#2
-          // child only (second spawn this batch), strip the Covers AC.
-          if (iterCount === 0 && bundle.spawnCalls.length === 2) {
-            ghBundle.bodies[child].body = "## What to build\n\n(no Covers AC)";
-          }
           ghBundle.bodies[child].state = "CLOSED";
+          // Recover the AC ID this child was filed to evidence by re-parsing
+          // the filed body's `## Covers AC` section (set by createIssue with
+          // the formatEvidenceChildBody payload). One AC per evidence child.
+          const acIds = [...parseCoversAc(ghBundle.bodies[child].body)];
+          if (acIds.length === 1) {
+            const acId = acIds[0];
+            // Iter 1's AC#2 spawn (second spawn this batch) intentionally
+            // skips posting → AC#2 stays missing. All other spawns post.
+            const skipPost = iterCount === 0 && acId === 2;
+            if (!skipPost) {
+              ghBundle.bodies[800].comments = [
+                ...(ghBundle.bodies[800].comments ?? []),
+                `Acceptance verified: AC#${acId} — replay output pasted in commit deadbeef`,
+              ];
+            }
+          }
           bundle.pidsAlive.delete(pid);
         }
         return { pid };
       },
       cleanupWorktree: () => {},
     };
-    // Hook re-check: after iter 1's poll loop, bump iterCount so iter 2's
-    // child for AC#2 keeps Covers AC intact.
     const origViewFull = bundle.deps.gh.viewFull.bind(bundle.deps.gh);
     let parentFetchCount = 0;
     bundle.deps.gh = {
@@ -1657,8 +1750,8 @@ describe("runCloseGate — partial recovery across iters", () => {
       viewFull: async (n) => {
         if (n === 800) {
           parentFetchCount++;
-          // recheck() is called once at start, then once after each iter's
-          // poll loop. After recheck #2 (start of iter 2), advance iterCount.
+          // recheck() runs once at start, then once after each iter's poll loop.
+          // After recheck #2 (start of iter 2) advance iterCount → AC#2 spawn posts.
           if (parentFetchCount === 2) iterCount = 1;
         }
         return origViewFull(n);
@@ -1666,7 +1759,6 @@ describe("runCloseGate — partial recovery across iters", () => {
     };
     const result = await runCloseGate(800, bundle.deps);
     expect(result.blocked).toBe(false);
-    // 2 spawns iter 1 + 1 spawn iter 2 (only AC#2 still missing) = 3
     expect(bundle.spawnCalls).toHaveLength(3);
   });
 });
@@ -1877,12 +1969,15 @@ describe("runStory — Gate C wiring", () => {
     expect(lines[0]).toContain("hitl-fallback");
   });
 
-  test("close-gate satisfied → closeIssue called, success notify fired, log row=pass", async () => {
+  test("close-gate satisfied via form-(ii) comment → AC ticked + closeIssue called + success notify + log row=pass", async () => {
+    // Fixture A: parent has form-(ii) comment for the lone AC + no Verification
+    // section → Gate C ticks the AC bullet, closes parent, writes pass row.
     let closeIssueCalls = 0;
+    let lastEditedBody: string | null = null;
     const notifications: string[] = [];
     const lines: string[] = [];
 
-    const parentBody = [
+    const initialParentBody = [
       "## Sub-issues",
       "- [x] #1200",
       "",
@@ -1890,6 +1985,7 @@ describe("runStory — Gate C wiring", () => {
       "",
       "- [ ] **AC#1** — covered by #1200.",
     ].join("\n");
+    let parentBody = initialParentBody;
 
     const deps: OrchestratorDeps = {
       gh: {
@@ -1914,7 +2010,12 @@ describe("runStory — Gate C wiring", () => {
           throw new Error(`unmocked viewFull(${n})`);
         },
         viewState: async (n) => (n === 1199 ? "OPEN" : "CLOSED"),
-        editBody: async () => {},
+        editBody: async (n, body) => {
+          if (n === 1199) {
+            parentBody = body;
+            lastEditedBody = body;
+          }
+        },
         closeIssue: async () => {
           closeIssueCalls++;
         },
@@ -1922,7 +2023,9 @@ describe("runStory — Gate C wiring", () => {
         listIssues: async () => [],
         claim: async () => {},
         addComment: async () => {},
-        viewComments: async () => [],
+        viewComments: async () => [
+          "Acceptance verified: AC#1 — replay output pasted in commit deadbeef",
+        ],
         createIssue: async () => {
           throw new Error("createIssue must not be called when gate passes");
         },
@@ -1949,5 +2052,119 @@ describe("runStory — Gate C wiring", () => {
     expect(notifications.some((m) => m.includes("Story #1199 complete"))).toBe(true);
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain("pass");
+    // AC bullet flipped to [x] before close.
+    expect(lastEditedBody).not.toBeNull();
+    expect(lastEditedBody!).toContain("- [x] **AC#1** — covered by #1200.");
+  });
+
+  test("Fixture C: form-(ii) covered + ## Verification (post-merge, manual) section → AC ticked + comment posted + parent left OPEN", async () => {
+    // Per #221: when parent body has a `## Verification (post-merge, manual)`
+    // H2 line, Gate C still ticks AC bullets but defers the close. It posts
+    // a "Gate C passed; manual verification pending — parent left OPEN" comment
+    // and returns without calling closeIssue.
+    let closeIssueCalls = 0;
+    let lastEditedBody: string | null = null;
+    const postedComments: Array<{ n: number; body: string }> = [];
+    const notifications: string[] = [];
+    const lines: string[] = [];
+
+    const initialParentBody = [
+      "## Sub-issues",
+      "- [x] #1300",
+      "",
+      "## Acceptance",
+      "",
+      "- [ ] **AC#1** — covered by #1300.",
+      "",
+      "## Verification (post-merge, manual)",
+      "",
+      "Run replay X manually after merge.",
+    ].join("\n");
+    let parentBody = initialParentBody;
+
+    const deps: OrchestratorDeps = {
+      gh: {
+        viewBody: async () => parentBody,
+        viewFull: async (n) => {
+          if (n === 1299) {
+            return {
+              title: "Story parent with manual gate",
+              labels: ["type:plan", "owner:bot", "area:plugin-brain-os"],
+              body: parentBody,
+              state: "OPEN",
+            };
+          }
+          if (n === 1300) {
+            return {
+              title: "covering child",
+              labels: ["area:plugin-brain-os", "owner:bot"],
+              body: "## Covers AC\n\n- AC#1\n\n## What to build",
+              state: "CLOSED",
+            };
+          }
+          throw new Error(`unmocked viewFull(${n})`);
+        },
+        viewState: async (n) => (n === 1299 ? "OPEN" : "CLOSED"),
+        editBody: async (n, body) => {
+          if (n === 1299) {
+            parentBody = body;
+            lastEditedBody = body;
+          }
+        },
+        closeIssue: async () => {
+          closeIssueCalls++;
+        },
+        relabelHuman: async () => {},
+        listIssues: async () => [],
+        claim: async () => {},
+        addComment: async (n, body) => {
+          postedComments.push({ n, body });
+        },
+        viewComments: async () => [
+          "Acceptance verified: AC#1 — replay output pasted in commit cafef00d",
+        ],
+        createIssue: async () => {
+          throw new Error("createIssue must not be called when gate passes");
+        },
+        viewSubIssues: async () => [],
+      },
+      spawn: {
+        spawnWorker: () => ({ pid: 1 }),
+        cleanupWorktree: () => {},
+      },
+      proc: { isAlive: () => true },
+      notify: { notify: (m) => notifications.push(m) },
+      logger: { log: () => {} },
+      status: { write: () => {} },
+      pollIntervalMs: 1,
+      workerLogDir: "/tmp/run-story-test",
+      areaMap: defaultAreaMap("/Users/test"),
+      childResults: { read: async () => null },
+      implStoryLog: { append: async (line) => { lines.push(line); } },
+    };
+
+    await runStory(1299, 3, deps);
+
+    // Parent stays OPEN — closeIssue must NOT be called.
+    expect(closeIssueCalls).toBe(0);
+    // AC bullet still ticked before the verification gate defers close.
+    expect(lastEditedBody).not.toBeNull();
+    expect(lastEditedBody!).toContain("- [x] **AC#1** — covered by #1300.");
+    // Manual-verification-pending comment posted on the parent — exact text
+    // per #221 issue body to keep the operator-facing string stable.
+    const manualGateComments = postedComments.filter((c) => c.n === 1299);
+    expect(manualGateComments).toHaveLength(1);
+    expect(manualGateComments[0].body).toBe(
+      "Gate C passed; manual verification pending — parent left OPEN",
+    );
+    // Log row still written. Result column lands on `fail` because deriveResult
+    // currently has no enum bucket for "successful close gate, parent left OPEN
+    // for manual verification" — `parentClosed=false + gateBlocked=false +
+    // failed=[]` falls through to the default `fail` branch (lib/ac-coverage.ts
+    // deriveResult). Asserting it here so the imprecision is visible: a future
+    // PR can introduce e.g. `manual-pending` and update the assertion together.
+    expect(lines).toHaveLength(1);
+    const cols = lines[0].split("\t");
+    expect(cols[7]).toBe("fail");
   });
 });

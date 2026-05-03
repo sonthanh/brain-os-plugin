@@ -228,19 +228,18 @@ export function parseParentCommentEvidence(commentBody: string): number[] {
   return ids;
 }
 
-// Form (i) + (ii) evidence union per spec § 4. Returns AC IDs with NEITHER
-// closed-child evidence nor parent-comment evidence, sorted ascending.
-// `closedChildCovers` MUST be pre-filtered to CLOSED children only — caller
-// owns the state filter; this helper is pure.
+// Form (ii) evidence-only — returns AC IDs lacking a parent-comment evidence
+// match, sorted ascending. Phase 2 (#221) deprecated form (i) closed-child
+// implicit evidence; Gate C now ticks AC#N only when `PARENT_COMMENT_EVIDENCE_RE`
+// matches in some parent comment. Migration of in-flight stories that relied on
+// form-(i) is via /impl per-child (#220) backfilling explicit `Acceptance
+// verified: AC#N — …` posts. Spec § 4 still lists both forms during the
+// migration window; #223 reconciles the spec.
 export function findMissingEvidence(
   parentAcIds: Iterable<number>,
-  closedChildCovers: Map<number, Set<number>>,
   parentComments: string[],
 ): number[] {
   const evidence = new Set<number>();
-  for (const ids of closedChildCovers.values()) {
-    for (const id of ids) evidence.add(id);
-  }
   for (const c of parentComments) {
     for (const id of parseParentCommentEvidence(c)) evidence.add(id);
   }
@@ -373,6 +372,27 @@ export function inferRepoFromIssueArea(
 export function tickChecklist(body: string, child: number): string {
   const re = new RegExp(`^- \\[ \\] #${child}\\b`, "gm");
   return body.replace(re, (m) => m.replace("[ ]", "[x]"));
+}
+
+// Tick the parent `## Acceptance` bullet for AC#<acId>: `- [ ] **AC#N** — …` →
+// `- [x] **AC#N** — …`. Mirrors tickChecklist shape but anchors on the bold
+// AC tag from the SSOT regex (references/ac-coverage-spec.md § 3.1, U+2014
+// em-dash literal). `\\*\\*` escapes the markdown bold markers; the trailing
+// ` — ` (space + em-dash + space) prevents partial matches like `**AC#3**`
+// matching `**AC#30**`. Idempotent — the regex only catches `[ ]`, not `[x]`,
+// so re-applying on an already-ticked body returns it unchanged.
+export function tickAcceptance(body: string, acId: number): string {
+  const re = new RegExp(`^- \\[ \\] \\*\\*AC#${acId}\\*\\* — `, "gm");
+  return body.replace(re, (m) => m.replace("[ ]", "[x]"));
+}
+
+// Detect the user-imposed manual gate that defers automated parent-close.
+// Matches `## Verification (post-merge, manual)` as a standalone H2 line
+// (line-anchored, trailing whitespace tolerated). Used by Gate C: when
+// present, the gate posts a "manual verification pending" comment and
+// leaves the parent OPEN instead of auto-closing.
+export function hasManualVerificationSection(body: string): boolean {
+  return /^## Verification \(post-merge, manual\)\s*$/m.test(body);
 }
 
 export function clampParallel(p: number, hardCap: number): number {
@@ -1061,22 +1081,18 @@ export async function runCloseGate(
 ): Promise<CloseGateResult> {
   const { gh, logger, pollIntervalMs, areaMap } = deps;
 
-  // Phase 1
+  // Phase 1 — form-(ii) parent-comment evidence only (#221 dropped form-(i)
+  // closed-child implicit evidence). childCount is still tracked for logging
+  // even though it no longer drives the missing computation.
   const recheck = async () => {
     const parentFull = await gh.viewFull(parent);
     const parentAc = parseAcceptance(parentFull.body);
     if (parentAc.size === 0) return { missing: [], childCount: 0, parentFull, parentAc };
     const parentAcIds = [...parentAc.keys()].sort((a, b) => a - b);
     const childNums = await getChildIssues(parent, gh, parentFull.body);
-    const closedCovers = new Map<number, Set<number>>();
-    for (const n of childNums) {
-      const c = await gh.viewFull(n);
-      if (c.state !== "CLOSED") continue;
-      closedCovers.set(n, parseCoversAc(c.body));
-    }
     const comments = await gh.viewComments(parent);
     return {
-      missing: findMissingEvidence(parentAcIds, closedCovers, comments),
+      missing: findMissingEvidence(parentAcIds, comments),
       childCount: childNums.length,
       parentFull,
       parentAc,
@@ -1507,12 +1523,47 @@ export async function runStory(
         `parent #${parent} left OPEN — close gate BLOCKED (missing AC=[${gateResult.missing.join(",")}] after ${gateResult.iterations} iters)`,
       );
     } else {
-      if (!parentClosed) {
-        await gh.closeIssue(parent);
-        parentClosed = true;
-        logger.log(`closed parent #${parent}`);
+      // Gate C passed → tick parent AC bullets to [x] before close (#221 AC#3).
+      // Gate guarantees every parent AC has form-(ii) evidence; we tick all of
+      // them in one editBody pass.
+      const currentBody = await gh.viewBody(parent);
+      const parentAcIds = [...parseAcceptance(currentBody).keys()];
+      let updatedBody = currentBody;
+      for (const acId of parentAcIds) {
+        updatedBody = tickAcceptance(updatedBody, acId);
       }
-      notify.notify(`Story #${parent} complete. Log: ~/.local/state/impl-story/${parent}.log`);
+      if (updatedBody !== currentBody) {
+        await gh.editBody(parent, updatedBody);
+        logger.log(`ticked AC bullets in parent #${parent}: [${parentAcIds.join(",")}]`);
+      }
+
+      // #221 AC#4 — operator-imposed manual gate: if parent body declares a
+      // `## Verification (post-merge, manual)` section, defer the close.
+      if (hasManualVerificationSection(updatedBody)) {
+        try {
+          await gh.addComment(
+            parent,
+            "Gate C passed; manual verification pending — parent left OPEN",
+          );
+        } catch (err) {
+          logger.log(
+            `failed to post manual-verification-pending comment on #${parent}: ${(err as Error).message}`,
+          );
+        }
+        logger.log(
+          `parent #${parent} has ## Verification (post-merge, manual) — leaving OPEN, manual replay required`,
+        );
+        notify.notify(
+          `Story #${parent} ready: AC ticked, manual verification pending. See issue.`,
+        );
+      } else {
+        if (!parentClosed) {
+          await gh.closeIssue(parent);
+          parentClosed = true;
+          logger.log(`closed parent #${parent}`);
+        }
+        notify.notify(`Story #${parent} complete. Log: ~/.local/state/impl-story/${parent}.log`);
+      }
     }
   }
 
