@@ -500,6 +500,7 @@ export interface ProcessChecker {
 
 export interface Notifier {
   notify(message: string): void;
+  notifyInfo(message: string): void;
 }
 
 export interface Logger {
@@ -854,11 +855,17 @@ export class RealNotifier implements Notifier {
     } catch {
       // sp binary missing or threw — fall through to osascript
     }
+    this.osascriptBanner(message);
+  }
+  notifyInfo(message: string): void {
+    this.osascriptBanner(message);
+  }
+  private osascriptBanner(message: string): void {
     const osaEscaped = message.replace(/"/g, '\\"');
     Bun.spawn([
       "osascript",
       "-e",
-      `display notification "${osaEscaped}" with title "${title}" sound name "Glass"`,
+      `display notification "${osaEscaped}" with title "${this.title}" sound name "Glass"`,
     ]);
   }
 }
@@ -1328,7 +1335,7 @@ export async function runStory(
     failed: [],
     hb,
   });
-  notify.notify(`Orchestrator started for #${parent} (PID ${process.pid}, cap ${cap})`);
+  notify.notifyInfo(`Orchestrator started for #${parent} (PID ${process.pid}, cap ${cap})`);
 
   const parentFull = await gh.viewFull(parent);
   if (!parentFull.labels.includes("type:plan")) {

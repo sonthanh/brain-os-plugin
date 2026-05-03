@@ -201,6 +201,9 @@ function makeMocks(opts: {
     notify: (msg) => {
       state.notifications.push(msg);
     },
+    notifyInfo: (msg) => {
+      state.notifications.push(msg);
+    },
   };
 
   const logger: Logger = {

@@ -222,7 +222,7 @@ export async function runParallel(
     failed: [],
     hb,
   });
-  notify.notify(`Parallel batch ${batchId} started (PID ${process.pid}, cap ${cap}, ${issueNumbers.length} issues)`);
+  notify.notifyInfo(`Parallel batch ${batchId} started (PID ${process.pid}, cap ${cap}, ${issueNumbers.length} issues)`);
 
   // --- Prepare issues: detect already-CLOSED, claim OPEN, infer cwd ---
   const closed = new Set<number>();
