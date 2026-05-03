@@ -33,8 +33,12 @@ describe("ARCHIVE_REGEX", () => {
     expect(ARCHIVE_REGEX.test("Old Archive")).toBe(true);
   });
   test("matches 'archived 2024 quarter'", () => {
-    // Per SSOT regex: 'archive[d]?\s+\d{4}' branch hits "archived 2024..."
+    // Per SSOT regex: 'archived?\s+\d{4}' branch hits "archived 2024..."
     expect(ARCHIVE_REGEX.test("archived 2024 quarter")).toBe(true);
+  });
+  test("matches 'Archived Projects' (no year suffix)", () => {
+    // Per SSOT regex: '\barchived?\b' branch — fixes prior bug where bare 'archived' didn't hit
+    expect(ARCHIVE_REGEX.test("Archived Projects")).toBe(true);
   });
   test("does not match 'Architecture Plans'", () => {
     expect(ARCHIVE_REGEX.test("Architecture Plans")).toBe(false);

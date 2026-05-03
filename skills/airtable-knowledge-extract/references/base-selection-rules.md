@@ -17,7 +17,7 @@ Applied AFTER the inclusion rule. A base is dropped if it matches any of:
 
 ### 1. Archived
 
-Name matches case-insensitive regex `archive\b|^archive\s|\barchive$|archive[d]?\s+\d{4}|^.*Archive (\d{4})`.
+Name matches case-insensitive regex `\barchived?\b|archived?\s+\d{4}|^.*Archive (\d{4})`.
 
 ### 2. Copy / Imported / Duplicate
 

@@ -8,7 +8,7 @@ import { listBases, type AirtableBase } from "./list-bases.mts";
 // Mirror references/base-selection-rules.md verbatim. Keep in lockstep with that SSOT.
 
 export const ARCHIVE_REGEX =
-  /archive\b|^archive\s|\barchive$|archive[d]?\s+\d{4}|^.*Archive (\d{4})/i;
+  /\barchived?\b|archived?\s+\d{4}|^.*Archive (\d{4})/i;
 export const COPY_REGEX =
   /\b(copy|imported|duplicate|backup|clone)\b|^Imported Base$|^Grid view$/i;
 export const TEST_REGEX =
