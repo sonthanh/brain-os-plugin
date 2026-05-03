@@ -25,9 +25,51 @@ Rules every variant follows:
 - One entity per logical thing (person, meeting, decision, etc.). One Airtable record may map to one entity; one entity may aggregate multiple records (rare).
 - `slug` is unique within `type`. Use kebab-case. Avoid timestamps unless the entity is time-anchored (meetings, decisions).
 - `body` is markdown. Use `[[other-slug]]` to reference any other entity in the same subgraph — preserves Airtable record-link relationships in vault form.
-- `source_record_ids` MUST cover every Airtable record that contributed to the entity. The runtime uses these for dedup and for the `sources:` frontmatter field.
-- Every record in the subgraph MUST appear as `source_record_ids` on at least one entity.
+- `source_record_ids` is the single most important field for traceability. It MUST list ONLY the Airtable record IDs (`recXXX`) that THIS specific entity is built from. Each record ID MUST come from the subgraph above — invented IDs will be dropped by the runtime and a warning logged. The runtime stamps per-entity `source_record_id`, `source_url`, AI-field text, and attachment counts from this list, so a wrong list silently corrupts every entity downstream.
+- Every record in the subgraph MUST appear in `source_record_ids` on at least one entity.
+- Do NOT share `source_record_ids` across entities. Two entities with the same `source_record_ids` is wrong unless they truly aggregate the same records (rare). The seed record ID is NOT a default — only include it on the entity that actually represents that record.
 - Do NOT invent fields. If the Airtable record doesn't have a piece of info, omit the frontmatter key.
+
+Concrete example (3 records → 3 entities, each with its OWN `source_record_ids`):
+
+Subgraph:
+
+```
+### Payments (tblPay)
+- record recPay001
+  - Reference: "BT-001"
+  - Payer: "Acme Corp"
+- record recPay002
+  - Reference: "BT-002"
+  - Payer: "Globex Inc"
+### Cashflows (tblCash)
+- record recCash100
+  - Name: "August 2025 inflow"
+```
+
+Correct output:
+
+```json
+{
+  "entities": [
+    { "type": "payment", "slug": "bt-001", "body": "Payment BT-001 from Acme.", "source_record_ids": ["recPay001"] },
+    { "type": "payment", "slug": "bt-002", "body": "Payment BT-002 from Globex.", "source_record_ids": ["recPay002"] },
+    { "type": "cashflow", "slug": "august-2025-inflow", "body": "August inflow.", "source_record_ids": ["recCash100"] }
+  ]
+}
+```
+
+Anti-pattern (DO NOT do this — every entity stamped with the seed):
+
+```json
+{
+  "entities": [
+    { "type": "payment", "slug": "bt-001", "body": "...", "source_record_ids": ["recCash100"] },
+    { "type": "payment", "slug": "bt-002", "body": "...", "source_record_ids": ["recCash100"] },
+    { "type": "cashflow", "slug": "august-2025-inflow", "body": "...", "source_record_ids": ["recCash100"] }
+  ]
+}
+```
 
 ## crm
 

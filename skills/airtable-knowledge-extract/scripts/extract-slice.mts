@@ -96,6 +96,7 @@ export interface ExtractSliceDeps {
   promptsPath?: string;
   clusterContextBudget?: number;
   now?: () => string;
+  warn?: (msg: string) => void;
 }
 
 export interface ExtractSliceResult {
@@ -365,6 +366,83 @@ export function findRelatedWikilinks(
     }
   }
   return out;
+}
+
+export type ReverseLookupReason = "match" | "no-match" | "ambiguous";
+
+export interface ReverseLookupResult {
+  recordId: string | null;
+  reason: ReverseLookupReason;
+  candidates?: string[];
+}
+
+export function findSourceRecordByEntity(
+  entity: ExtractedEntity,
+  recordsById: Map<string, AirtableRecord>,
+  recordToTable: Map<string, string>,
+  tablesById: Map<string, AirtableTable>,
+): ReverseLookupResult {
+  const slug = entity.slug;
+  const matches: string[] = [];
+  for (const [recId, rec] of recordsById) {
+    const tableId = recordToTable.get(recId);
+    if (!tableId) continue;
+    const table = tablesById.get(tableId);
+    if (!table) continue;
+    const candidateFields = new Set<string>();
+    const primary = table.fields[0]?.name;
+    if (primary) candidateFields.add(primary);
+    candidateFields.add("Name");
+    let matched = false;
+    for (const fname of candidateFields) {
+      const v = rec.fields[fname];
+      if (typeof v !== "string") continue;
+      if (slugify(v) === slug) {
+        matched = true;
+        break;
+      }
+    }
+    if (matched) matches.push(recId);
+  }
+  if (matches.length === 0) return { recordId: null, reason: "no-match" };
+  if (matches.length > 1) {
+    return { recordId: null, reason: "ambiguous", candidates: matches };
+  }
+  return { recordId: matches[0], reason: "match" };
+}
+
+export function resolveEntitySourceIds(
+  entity: ExtractedEntity,
+  recordsById: Map<string, AirtableRecord>,
+  recordToTable: Map<string, string>,
+  tablesById: Map<string, AirtableTable>,
+  seedRecordId: string,
+  warn: (msg: string) => void,
+): string[] {
+  const valid = entity.source_record_ids.filter((id) => recordsById.has(id));
+  const dropped = entity.source_record_ids.filter((id) => !recordsById.has(id));
+  if (dropped.length > 0) {
+    warn(
+      `extract-slice: entity '${entity.slug}' had hallucinated source IDs ${JSON.stringify(dropped)} — dropped`,
+    );
+  }
+  if (valid.length > 0) return valid;
+
+  const lookup = findSourceRecordByEntity(entity, recordsById, recordToTable, tablesById);
+  if (lookup.reason === "match" && lookup.recordId) {
+    return [lookup.recordId];
+  }
+
+  if (lookup.reason === "ambiguous") {
+    warn(
+      `extract-slice: entity '${entity.slug}' ambiguous reverse-lookup — multiple records ${JSON.stringify(lookup.candidates)} share the slugified primary; falling back to seed ${seedRecordId}`,
+    );
+  } else {
+    warn(
+      `extract-slice: entity '${entity.slug}' matched no records by primary-field slug; falling back to seed ${seedRecordId}`,
+    );
+  }
+  return [seedRecordId];
 }
 
 export function buildSubgraphContext(
@@ -792,10 +870,16 @@ export async function extractSlice(
 
   const sonnetResp = await runSonnet(prompt, DEFAULT_MODEL);
   const entities = parseSonnetEntityResponse(sonnetResp.rawText);
+  const warn = opts.warn ?? ((msg: string) => process.stderr.write(`${msg}\n`));
   for (const e of entities) {
-    if (e.source_record_ids.length === 0) {
-      e.source_record_ids = [input.seedRecordId];
-    }
+    e.source_record_ids = resolveEntitySourceIds(
+      e,
+      recordsById,
+      recordToTable,
+      tablesById,
+      input.seedRecordId,
+      warn,
+    );
   }
 
   mkdirSync(runDir, { recursive: true });
