@@ -46,6 +46,20 @@
         "Two consecutive fail-after-retry outcomes escalate the rung",
         "Escalation kills workers (SIGTERM) and notifies the user"
       ]
+    },
+    {
+      "id": 5,
+      "prompt": "How does /airtable-knowledge-extract decide which Airtable bases to process?",
+      "expected_output": "scripts/active-bases.mts wraps list-bases.mts and applies the rules from references/base-selection-rules.md: inclusion via the operator allowlist at ~/.brain-os/airtable-premium-bases.txt (plain ID, ~regex on name, !override force-include, # comments), then 4 exclusions — archive / copy / test name regexes, and an inactive probe that drops bases with no record createdTime ≥ <current-year>-01-01. Trace JSON at ~/.claude/airtable-extract-cache/<run-id>/active-bases.json captures every raw base + verdict. Stdout (or --ids flag) feeds the per-base loop in SKILL.md ## Run.",
+      "expectations": [
+        "Names scripts/active-bases.mts as the entry point that decides the set",
+        "Mentions the allowlist file at ~/.brain-os/airtable-premium-bases.txt",
+        "Mentions the !-prefix override that force-includes a base",
+        "Mentions the four exclusion rules (archive, copy, test, inactive)",
+        "Mentions the activity cutoff of <current-year>-01-01 (with AIRTABLE_ACTIVITY_CUTOFF override)",
+        "Mentions the trace JSON at ~/.claude/airtable-extract-cache/<run-id>/active-bases.json",
+        "Mentions that re-running the same run-id reads the cached trace and skips API probes"
+      ]
     }
   ]
 }

@@ -1,6 +1,6 @@
 # Base selection rules — `/airtable-knowledge-extract`
 
-Single source of truth for which Airtable bases the skill imports from. Consumed by `scripts/list-bases.mts` (now), `scripts/active-bases.mts` (planned), and `scripts/run.mts` per-base loop. Rules added 2026-05-02 per operator clarification.
+Single source of truth for which Airtable bases the skill imports from. Implemented by `scripts/active-bases.mts` (which wraps `scripts/list-bases.mts`); consumed by `scripts/run.mts` per-base loop via the SKILL.md `## Run` template. Regex constants are exported from `scripts/active-bases.mts` (`ARCHIVE_REGEX`, `COPY_REGEX`, `TEST_REGEX`) — keep this doc and the source code in lockstep. Rules added 2026-05-02 per operator clarification.
 
 ## Inclusion rule
 
@@ -63,10 +63,13 @@ Lines starting with `!` bypass exclusion rules but still respect inclusion (must
 
 ## Outputs
 
-`scripts/active-bases.mts <run-id>` writes:
+`AIRTABLE_RUN_ID=<run-id> bun run scripts/active-bases.mts` writes:
 
-- `~/.claude/airtable-extract-cache/<run-id>/active-bases.json` — full filter trace per base: `{id, name, included: bool, excluded_by: "archive"|"copy"|"test"|"inactive"|null, last_activity: ISO8601|null}`
-- stdout: just the active base IDs as JSON array, suitable for shell substitution.
+- `~/.claude/airtable-extract-cache/<run-id>/active-bases.json` — full filter trace per base: `{id, name, included: bool, excluded_by: "archive"|"copy"|"test"|"inactive"|null, last_activity: ISO8601|null, table_count: int|null}`. Includes EVERY raw base from `list-bases.mts`, even allowlist-rejected ones (those have `included: false, excluded_by: null` — the `included` flag carries the inclusion-rule signal).
+- stdout (default): JSON array of active base IDs, suitable for `JSON.parse` or `jq -r '.[]'`.
+- stdout with `--ids` flag: newline-separated active base IDs, suitable for `for BASE_ID in $(... --ids)` shell loops.
+
+The script also reuses `~/.claude/airtable-extract-cache/<run-id>/bases.json` (written by the wrapped `list-bases.mts`). Re-running the same run-id reads the cached trace and returns immediately — no re-probing.
 
 ## Activity cutoff configuration
 
