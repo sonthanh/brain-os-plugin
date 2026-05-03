@@ -142,8 +142,8 @@ PARENT_URL=$(bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/create-task-issue.sh" \
 
 ## Acceptance
 
-- [ ] <story-level done criterion 1>
-- [ ] <story-level done criterion 2>
+- [ ] **AC#1** — <story-level done criterion 1> — [evidence ↗](#issuecomment-PLACEHOLDER)
+- [ ] **AC#2** — <story-level done criterion 2> — [evidence ↗](#issuecomment-PLACEHOLDER)
 
 ## Out of Scope
 
@@ -163,9 +163,16 @@ EOF
 
 PARENT_N="${PARENT_URL##*/}"
 bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/transition-status.sh" "$PARENT_N" --to in-progress
+
+# Capture parent GraphQL node ID once — Step 6's addSubIssue mutation needs it
+# as the issueId input for every child filed. One extra `gh issue view` here
+# avoids re-fetching per child.
+PARENT_NODE_ID=$(gh issue view "$PARENT_N" -R sonthanh/ai-brain --json id --jq .id)
 ```
 
-Capture the returned parent URL + issue number — needed for both Step 2.7 (surface to user) and Step 6 (child `## Parent` references).
+Capture the returned parent URL + issue number AND `PARENT_NODE_ID` — needed for Step 2.7 (surface to user), Step 6 (child `## Parent` references AND `addSubIssue` mutation parent input), and Step 7 (parent body amend).
+
+Acceptance bullets are emitted in the canonical bullet-AC + evidence-link format (`- [ ] **AC#N** — <criterion> — [evidence ↗](#issuecomment-PLACEHOLDER)`). The `#issuecomment-PLACEHOLDER` anchor stays in place until `/impl <N>` per-child posts the `Acceptance verified: AC#N — <evidence>` comment and Gate C in `scripts/run-story.ts` rewrites the URL. Format aligns with `references/ac-coverage-spec.md` § 3.1 — same regex (`ACCEPTANCE_AC_RE`) drives Step 2.6 coverage gate, Gate B/C parsing, and `tickAcceptance`.
 
 ### 2.6. AC coverage gate [deterministic]
 
@@ -315,36 +322,67 @@ EOF
 
 After each call, capture the returned child issue number from `CHILD_URL` (e.g. `CHILD_N="${CHILD_URL##*/}"`). Subsequent children that reference this one in `## Blocked by` get the real number substituted in. `priority:p4` was retired — drop low-urgency children to `status:backlog` instead of inventing a new priority axis.
 
-The `## Parent` reference is what makes the child reachable from the parent's checklist (which `/impl story` reads to drive DAG drainage). The `## Blocked by` section encodes topological order so `/impl story` can identify which children are AFK-ready right now versus waiting for siblings.
+Then link the child to the parent via the `addSubIssue` GraphQL mutation. This populates GitHub's native sub-issues panel on the parent (progress bar + per-child status badges visible in the GitHub UI) AND provides the canonical discovery channel for `scripts/run-story.ts viewSubIssues()` (`gh api graphql` query, `subIssues(first:50){nodes{number}}`, run-story.ts:734). The parent node ID was captured once at Step 2.5; fetch each child's node ID inline:
 
-### 7. Edit parent body — fill the children checklist [deterministic]
+```bash
+CHILD_N="${CHILD_URL##*/}"
+CHILD_NODE_ID=$(gh issue view "$CHILD_N" -R sonthanh/ai-brain --json id --jq .id)
+gh api graphql \
+  -f query='mutation($parent:ID!,$child:ID!){addSubIssue(input:{issueId:$parent,subIssueId:$child}){issue{number}}}' \
+  -F parent="$PARENT_NODE_ID" \
+  -F child="$CHILD_NODE_ID"
+```
 
-Once every child has been filed and you have the full ordered list of child numbers + titles, replace the placeholder Sub-issues section in the parent body:
+The `## Parent` body reference is the offline-readable text anchor that survives if the native sub-issue link is ever broken (manual edit, GraphQL deprecation). `## Blocked by` encodes topological order so `/impl story` knows which children are AFK-ready right now versus waiting for siblings.
+
+### 7. Edit parent body — Sub-issues list + AC-to-child mapping [deterministic]
+
+Once every child has been filed (with `addSubIssue` already called per Step 6), do TWO substitutions in the parent body via a single `gh issue edit --body` call:
 
 ```bash
 gh issue view <parent-N> -R sonthanh/ai-brain --json body --jq .body > /tmp/parent-body.md
-# Substitute the `## Sub-issues` section content with one line per child, topo order
-# - [ ] ai-brain#<child-N> — <child title>
+# 1. Substitute `## Sub-issues` placeholder with one bare line per child, topo order
+# 2. Amend `## Acceptance` bullets with multi-cover `(also covered by ...)` notes
+#    where ≥2 children declare the same AC# in their `## Covers AC` section
 gh issue edit <parent-N> -R sonthanh/ai-brain --body "$(cat /tmp/parent-body.md)"
 ```
 
-The substituted section MUST look like:
+#### 7a. Sub-issues — list-only
+
+Replace the `- [ ] TBD — children filed in Step 7` placeholder with one bare reference per child (no checkbox; native sub-issue panel drives status):
 
 ```
 ## Sub-issues
 
-- [ ] ai-brain#<child-1-N> — <child-1 title>
-- [ ] ai-brain#<child-2-N> — <child-2 title>
-- [ ] ai-brain#<child-3-N> — <child-3 title>
+- #<child-1-N> — <child-1 title>
+- #<child-2-N> — <child-2 title>
+- #<child-3-N> — <child-3 title>
 ```
 
-This is load-bearing for `/impl story <parent-N>` — that skill parses exactly this checklist to discover children, builds the DAG from each child's `## Blocked by`, drains the story, and ticks each line `- [ ]` → `- [x]` on close. Without the auto-fill, /impl story has nothing to walk.
+GitHub's native sub-issue panel (populated by Step 6's `addSubIssue` mutation) is the canonical source of child status — progress bar + per-child state badges visible in the parent's GitHub UI. The body Sub-issues section is the offline-readable text anchor: `scripts/run-story.ts viewSubIssues()` prefers the GraphQL `subIssues` query (`run-story.ts:734`, shipped in commit `9cf8ca4`), falling back to body-checklist parse (`parseChecklist`) only if the native list is empty. Removing the checkbox is consistent — there is nothing to tick on Sub-issues lines anymore (Acceptance ticks happen on bullet AC bullets via `tickAcceptance` from #221).
+
+#### 7b. Acceptance — multi-cover annotation
+
+For each filed child, parse its `## Covers AC` section per `references/ac-coverage-spec.md` § 1 to build an AC-to-child mapping (`{ AC#1: [#A], AC#2: [#B, #C], ... }`). Walk the parent's `## Acceptance` bullets and amend in place:
+
+- **Single covering child** (mapping has one entry for AC#N): leave the bullet untouched. The `[evidence ↗](#issuecomment-PLACEHOLDER)` placeholder rewrites to the real evidence-comment URL when Gate C in `scripts/run-story.ts` runs.
+- **Multi-cover** (mapping has ≥2 entries for AC#N): inject `(also covered by #M, #K)` between the requirement description and the evidence link. The placeholder still points to the *first* child's evidence comment. Example:
+
+```
+## Acceptance
+
+- [ ] **AC#2** — Gate B blocks /impl story start (also covered by #B, #C) — [evidence ↗](#issuecomment-PLACEHOLDER)
+```
+
+- **Pure-component children** (`## Covers AC` H2 present but empty): contribute nothing to the mapping — they never name an AC# so they never appear in `(also covered by ...)`.
+
+This mapping derivation MUST run after every child is filed (otherwise the `## Covers AC` data isn't available yet). It runs before any `/impl <N>` worker spawns, so multi-cover annotations are stable from the start of the drain.
 
 Do NOT close the parent — it stays `status:in-progress` until /impl story finishes.
 
 ### 8. Report back [deterministic]
 
-After the parent body is updated, print a summary table:
+After the parent body is updated, print a summary table followed by the canonical next-step line:
 
 ```
 Parent: ai-brain#<P> — <story title>
@@ -354,7 +392,11 @@ Parent: ai-brain#<P> — <story title>
 | 115 | Port /slice | AFK | ready | — |
 | 116 | Port /impl (once) | AFK | blocked | #115 |
 | ... |
+
+Next: /impl story <parent-N>
 ```
+
+The `Next: /impl story <parent-N>` line is canonical — it surfaces the orchestrator path that drives DAG drainage AND the parent-close trigger (Gate C in `scripts/run-story.ts`). Per-child invocations (`/impl <child-N>` or `/impl auto`) DO close their child but do NOT auto-close the parent unless the per-child parent-close trigger fires (`/impl <N>` queries `subIssuesSummary.completed == total` post-close — see `skills/impl/SKILL.md`). Recommending per-child as the default leaves stories stuck OPEN after all children close — the failure mode that motivated story #219.
 
 Then append to the grill-session file (if input was a grill-session): `## Issues filed (YYYY-MM-DD)` listing the parent number + child numbers and their statuses. This is the only vault-side persistence — links from the grill to the resulting issues, no PRD copy.
 

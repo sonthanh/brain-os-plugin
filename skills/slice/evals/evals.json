@@ -188,6 +188,40 @@
         "Cites `/impl story` (or `scripts/run-story.ts`) refusing to drain a parent without `type:plan` as the rationale",
         "Distinguishes the existing-parent branch from the new-parent path (Step 2.5 already attaches `type:plan` via `create-task-issue.sh --type plan`)"
       ]
+    },
+    {
+      "id": 21,
+      "prompt": "After Step 5 quiz approval, three children get filed via `create-task-issue.sh`. What additional GitHub mutation does Step 6 run per child, and what does the parent's GitHub UI show afterwards?",
+      "expected_output": "After each `create-task-issue.sh` returns a child URL, Step 6 fetches the child's GraphQL node ID via `gh issue view $CHILD_N --json id --jq .id`, then calls the `addSubIssue` mutation: `gh api graphql -f query='mutation($parent:ID!,$child:ID!){addSubIssue(input:{issueId:$parent,subIssueId:$child}){issue{number}}}' -F parent=$PARENT_NODE_ID -F child=$CHILD_NODE_ID`. The parent node ID was captured once at Step 2.5 right after `transition-status.sh`. Result: parent's GitHub UI populates the native sub-issue panel — progress bar + per-child status badges — and `scripts/run-story.ts viewSubIssues()` (run-story.ts:734, shipped in commit 9cf8ca4) discovers children via the `subIssues` GraphQL query rather than parsing the body checklist.",
+      "expectations": [
+        "Names `addSubIssue` GraphQL mutation as the per-child link step (input: issueId = parent, subIssueId = child)",
+        "Mentions parent node ID captured once at Step 2.5 (not re-fetched per child)",
+        "Mentions native sub-issue panel becoming the canonical status surface (progress bar + badges)",
+        "Cites `viewSubIssues()` / GraphQL `subIssues` query as the orchestrator's discovery channel post-link"
+      ]
+    },
+    {
+      "id": 22,
+      "prompt": "How does Step 7 emit the `## Sub-issues` section after children are filed, and what does it do with the parent's `## Acceptance` bullets?",
+      "expected_output": "Step 7 substitutes the placeholder Sub-issues section with one bare reference per child in topo order — `- #<child-N> — <child title>` — no checkbox. Native sub-issue panel (populated by Step 6's `addSubIssue`) drives status; the body section is the offline-readable text anchor. Acceptance ticks happen on bullet AC bullets via `tickAcceptance` from #221, not on Sub-issues lines, so the checkbox is gone. Then Step 7 amends `## Acceptance` bullets: parses each child's `## Covers AC` per `references/ac-coverage-spec.md` § 1, builds an AC-to-child mapping, and for any AC# covered by ≥2 children injects `(also covered by #M, #K)` between the requirement and the `[evidence ↗](#issuecomment-PLACEHOLDER)` link (placeholder still points to first child's evidence). Single-cover ACs and pure-component children (empty `## Covers AC`) leave bullets untouched.",
+      "expectations": [
+        "Names list-only Sub-issues template `- #<child-N> — <child title>` (no checkbox) in topo order",
+        "Mentions native sub-issue panel as canonical status; body section is offline-readable text anchor",
+        "Mentions AC-to-child mapping built from each child's `## Covers AC` (cites spec § 1)",
+        "Names multi-cover annotation `(also covered by #M, #K)` injected before the evidence link (placeholder points to first child's evidence comment)",
+        "Notes pure-component children (empty `## Covers AC`) contribute nothing to the mapping"
+      ]
+    },
+    {
+      "id": 23,
+      "prompt": "Step 8 prints a summary table of filed children. What MUST follow the table, and why?",
+      "expected_output": "After the summary table, Step 8 MUST append the canonical next-step line `Next: /impl story <parent-N>`. This surfaces the orchestrator path that drives DAG drainage AND the parent-close trigger (Gate C in `scripts/run-story.ts`). Per-child invocations (`/impl <child-N>` or `/impl auto`) close their child but do NOT auto-close the parent unless the per-child parent-close trigger fires. Recommending per-child as the default leaves stories stuck OPEN after all children close — the failure mode that motivated story #219.",
+      "expectations": [
+        "Names the canonical next-step line `Next: /impl story <parent-N>` as required after the summary table",
+        "Cites `/impl story` driving DAG drainage AND the parent-close trigger (Gate C in run-story.ts)",
+        "Notes per-child `/impl <N>` does not auto-close the parent without the trigger firing — leaving stories stuck OPEN",
+        "References story #219 (or the parent-stuck-OPEN failure mode) as the motivation"
+      ]
     }
   ]
 }
