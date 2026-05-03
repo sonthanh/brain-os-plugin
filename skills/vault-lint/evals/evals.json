@@ -76,5 +76,11 @@
     "description": "A1 broken wiki-link scan must exclude Obsidian @-mention links ([[@...]]) — these are person-mention syntax, not file references, and always appear broken in a filesystem check. Eliminates structural false positives from Obsidian @-tag usage.",
     "args": "vault-lint",
     "expect": "@-mention"
+  },
+  {
+    "id": "mcp-context-skip-pass",
+    "description": "D2 result logic must classify context-constrained skips (Phase A4: update-readmes.sh absent; Phase B: gh unauthenticated or gh_task_repo unset) as pass, not partial. These skips are structural in MCP-mode execution — all MCP-accessible phases still ran and the report is fully correct. Prevents persistent 50% partial rate in the improve scanner from polluting skill health metrics.",
+    "args": "vault-lint",
+    "expect": "context-constrained"
   }
 ]

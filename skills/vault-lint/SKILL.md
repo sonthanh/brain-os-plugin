@@ -209,15 +209,15 @@ Follow `{vault}/skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/va
 ```
 
 Result logic:
-- `pass` — all phases completed cleanly. "Needs Review" items are informational output (they're what the skill is supposed to surface for a living vault), not a failure signal.
-- `partial` — a phase was skipped by design (missing `gh` auth, missing `update-readmes.sh`, `gh_task_repo` unset) or recovered gracefully from an unexpected error inside a phase.
+- `pass` — all runnable phases completed cleanly, OR all skips were context-constrained (Phase A4: `update-readmes.sh` absent; Phase B: `gh` unauthenticated or `gh_task_repo` unset). Context-constrained skips are expected in MCP-mode execution — the report is fully correct for the phases that ran. "Needs Review" items are informational output (they're what the skill is supposed to surface for a living vault), not a failure signal.
+- `partial` — a phase encountered an unexpected error and recovered gracefully (not a context-constrained skip — those log `pass`).
 - `fail` — a phase errored and the skill aborted before writing its report.
 
 ### D3. Auto-improve on failure [deterministic]
 
-If `result == fail`, auto-invoke `/brain-os:improve vault-lint`. Phase errors (not "Needs Review has items") are the real skill-improvement signal. `partial` means a phase was skipped by design — that's expected operational state, not a defect. The eval gate inside `/improve` still prevents regressions if invoked.
+If `result == fail`, auto-invoke `/brain-os:improve vault-lint`. Phase errors are the real skill-improvement signal. Context-constrained skips (A4/Phase B unavailable) now log `pass` — they carry no actionable improvement signal. An unexpected recovered error (`partial`) is also low-signal by itself; only a hard abort (`fail`) reliably indicates a SKILL.md gap worth fixing. The eval gate inside `/improve` still prevents regressions if invoked.
 
-> **Intentional divergence from `skill-spec.md § 11` auto-improve convention.** The cross-skill default is `if result != pass`. vault-lint tightens to `== fail` because `partial` here maps to benign skipped phases (missing `gh` auth, missing `update-readmes.sh`), not degraded output. If you're reviewing this and considering a "fix back to the convention," read `daily/improve-reports/2026-04-23-vault-lint.md` first — the tightening was the explicit fix for 100% partial rate + wasted auto-improve cycles across 4 consecutive nightly runs. The eval `auto-improve-on-fail-only` will fail if the tightening is reverted.
+> **Intentional divergence from `skill-spec.md § 11` auto-improve convention.** The cross-skill default is `if result != pass`. vault-lint tightens to `== fail` because context-constrained skips (Phase A4: no `update-readmes.sh`; Phase B: no `gh` auth / `gh_task_repo` unset) now log `pass`, and unexpected recovered errors (`partial`) are still not reliable improvement signals. If you're reviewing this and considering a "fix back to the convention," read `daily/improve-reports/2026-04-23-vault-lint.md` first — the tightening was the explicit fix for 100% partial rate + wasted auto-improve cycles across 4 consecutive nightly runs. The eval `auto-improve-on-fail-only` will fail if the tightening is reverted.
 
 ### D4. Commit and push [deterministic]
 
