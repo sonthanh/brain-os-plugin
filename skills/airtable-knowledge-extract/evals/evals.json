@@ -60,6 +60,20 @@
         "Mentions the trace JSON at ~/.claude/airtable-extract-cache/<run-id>/active-bases.json",
         "Mentions that re-running the same run-id reads the cached trace and skips API probes"
       ]
+    },
+    {
+      "id": 6,
+      "prompt": "How does the operator review the AI-drafted rubric questions before the diff is scored?",
+      "expected_output": "By default scripts/rubric-author.mts runs an interactive readline grill: one question at a time with a sample record from the airtable scan, accepting k (keep), d (drop), free-text rewrite, '+' to jump to add-mode (remaining auto-kept), or batch shorthand like 'k 1-5 d 6,7' (each range needs explicit k/d prefix). After the question loop, the operator is invited to add new questions until an empty line. Pass --editor to fall back to the original $EDITOR-based flow for non-interactive contexts. Prompts go to stderr so the SKILL.md supaterm `> /dev/null` redirect doesn't suppress the UI. Full shortcut table: references/rubric-author-flow.md.",
+      "expectations": [
+        "Names the interactive grill as the default flow (not $EDITOR)",
+        "Mentions one-question-at-a-time with a concrete sample record",
+        "Lists the per-question shortcuts: k / d / free-text rewrite / + (add-mode jump)",
+        "Mentions batch shorthand like 'k 1-5 d 6,7' with explicit per-range prefix",
+        "Mentions add-mode at the end (empty line ends)",
+        "Mentions --editor as the escape hatch for non-interactive contexts",
+        "Notes that prompts write to stderr so the supaterm `> /dev/null` redirect on stdout doesn't hide the UI"
+      ]
     }
   ]
 }

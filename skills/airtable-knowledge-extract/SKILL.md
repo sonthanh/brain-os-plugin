@@ -48,6 +48,8 @@ On the first invocation within a run-id, `active-bases.mts` writes both `~/.clau
 
 For the first run on a new base, keep `-P 1` so re-anchor's rung-0' shallow slice gates HITL approval before any parallel rung-1 sweep. Once the user has approved the re-anchor and the rubric, raise to `-P 5` for rung-1 throughput.
 
+`rubric-author.mts` defaults to an interactive readline grill — one question at a time with a concrete sample record, accepting `k`/`d`/rewrite/`+`/batch shortcuts. Prompts go to stderr so the `> /dev/null` redirect on stdout doesn't suppress the UI; the operator switches to the supaterm tab when it pauses on input. Pass `--editor` to fall back to the original `$EDITOR`-based flow for non-interactive contexts. Full shortcut table + plumbing notes: `references/rubric-author-flow.md`.
+
 ## Status & analysis
 
 Both are read-only one-shots — safe to Bash from a session when the user asks "how's it going?".

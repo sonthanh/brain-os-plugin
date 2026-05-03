@@ -1,13 +1,15 @@
 #!/usr/bin/env bun
 //
-// rubric-author.mts — author a per-base rubric-questions.md draft, hand it to
-// the user for editing, then score the diff against the AI draft. Pipeline:
+// rubric-author.mts — author a per-base rubric-questions.md draft, walk the
+// operator through it via interactive readline grill (one question at a time
+// with a concrete sample record), then score the diff against the AI draft.
 //
+// Pipeline:
 //   1. Vault scan (existing intelligence/decisions/research)
 //   2. Airtable scan (tables + fields + 5 sample rows per table)
 //   3. Angle generation (Opus): obvious / bold / creative
 //   4. Synthesis (Opus): merge angles into N synthetic /think queries
-//   5. User edit: open in $EDITOR, await save
+//   5. Operator review (default: interactive grill; --editor: $EDITOR escape hatch)
 //   6. Diff log: delta_metrics.json with edit_ratio bands
 //
 // Diff classifier — slot-by-slot vs original (position i ↔ position i):
@@ -18,6 +20,17 @@
 //
 // edit_ratio = (edited + replaced) / N_original. added_by_user is reported
 // separately and is NOT in the ratio.
+//
+// Interactive grill shortcuts (default flow):
+//   k                  — keep current question (also: empty input)
+//   d                  — drop current question
+//   <free text>        — rewrite current question with that text
+//   k 1-5              — batch keep questions 1..5
+//   d 6,7              — batch drop 6 and 7
+//   k 1-5 d 6,7 d 9-12 — multi-batch (each range needs explicit k/d prefix)
+//   +                  — jump to add-mode now (remaining auto-kept)
+// After the question loop, operator is invited to add new questions until an
+// empty line is entered. See `references/rubric-author-flow.md` for examples.
 //
 // TODO(C3): cluster-aware angles — once cluster classification (#184) ships,
 // feed cluster shape into angle prompts so cross-cluster questions surface.
@@ -32,6 +45,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { createInterface } from "node:readline/promises";
 
 // ---------- Types ------------------------------------------------------------
 
@@ -96,6 +110,12 @@ export interface ClaudeRunner {
   (args: { model: "opus" | "sonnet"; prompt: string }): Promise<string>;
 }
 
+export interface GrillIO {
+  prompt: (text: string) => Promise<string>;
+  output: (text: string) => void;
+  close?: () => void;
+}
+
 export interface RubricAuthorOptions {
   baseId: string;
   vaultRoot?: string;
@@ -105,7 +125,12 @@ export interface RubricAuthorOptions {
   env?: Record<string, string | undefined>;
   configPath?: string;
   claudeRunner?: ClaudeRunner;
+  /** Editor escape hatch — set `useEditor: true` to fall back to $EDITOR. */
   openEditor?: (filePath: string) => Promise<void>;
+  /** Default false (interactive grill). True → call openEditor on the draft. */
+  useEditor?: boolean;
+  /** Injection point for the interactive grill. Defaults to a stdin/stderr readline IO. */
+  grillIO?: GrillIO;
   questionsTarget?: number;
 }
 
@@ -195,6 +220,69 @@ export function evaluateDelta(m: DeltaMetrics): EvaluateResult {
 export function cliExitCode(verdict: Verdict, strict: boolean): 0 | 1 {
   if (!strict) return 0;
   return verdict === "reject" ? 1 : 0;
+}
+
+// ---------- Grill command parser --------------------------------------------
+
+export interface BatchAction {
+  kind: "keep" | "drop";
+  nums: number[];
+}
+
+export type GrillCommand =
+  | { kind: "keep" }
+  | { kind: "drop" }
+  | { kind: "rewrite"; text: string }
+  | { kind: "add" }
+  | { kind: "batch"; actions: BatchAction[] };
+
+export function parseRange(s: string): number[] {
+  const out: number[] = [];
+  for (const part of s.split(",")) {
+    const trimmed = part.trim();
+    const m = trimmed.match(/^(\d+)-(\d+)$/);
+    if (m) {
+      const a = parseInt(m[1], 10);
+      const b = parseInt(m[2], 10);
+      const lo = Math.min(a, b);
+      const hi = Math.max(a, b);
+      for (let i = lo; i <= hi; i++) out.push(i);
+    } else if (/^\d+$/.test(trimmed)) {
+      out.push(parseInt(trimmed, 10));
+    }
+  }
+  return out;
+}
+
+export function parseGrillCommand(input: string): GrillCommand {
+  const trimmed = input.trim();
+  if (trimmed === "" || trimmed === "k") return { kind: "keep" };
+  if (trimmed === "d") return { kind: "drop" };
+  if (trimmed === "+") return { kind: "add" };
+
+  const parts = trimmed.split(/\s+/);
+  const actions: BatchAction[] = [];
+  let consumedAll = true;
+  let i = 0;
+  while (i < parts.length) {
+    const t = parts[i];
+    const next = parts[i + 1];
+    if ((t === "k" || t === "d") && next && /^[\d,-]+$/.test(next)) {
+      const nums = parseRange(next);
+      if (nums.length === 0) {
+        consumedAll = false;
+        break;
+      }
+      actions.push({ kind: t === "k" ? "keep" : "drop", nums });
+      i += 2;
+    } else {
+      consumedAll = false;
+      break;
+    }
+  }
+  if (consumedAll && actions.length > 0) return { kind: "batch", actions };
+
+  return { kind: "rewrite", text: trimmed };
 }
 
 // ---------- Token resolution (mirrors list-bases.mts) ------------------------
@@ -447,8 +535,8 @@ function renderDraft(questions: string[]): string {
     "# Rubric questions — synthetic /think queries",
     "",
     "Each question asks: after this base imports into the vault, can /think",
-    "answer it from the imported pages alone? Edit freely — the diff against",
-    "this AI draft is logged to delta_metrics.json.",
+    "answer it from the imported pages alone? The diff against the AI draft",
+    "is logged to delta_metrics.json.",
     "",
   ];
   questions.forEach((q, i) => {
@@ -465,6 +553,106 @@ function readQuestionsFromMarkdown(filePath: string): string[] {
     const m = line.match(/^\d+\.\s+(.*)$/);
     if (m) out.push(m[1]);
   }
+  return out;
+}
+
+// ---------- Interactive grill ------------------------------------------------
+
+function sampleForIndex(
+  airtable: AirtableScan,
+  idx: number,
+): { table: string; preview: string } {
+  const candidates = airtable.samples.filter((s) => s.records.length > 0);
+  if (candidates.length === 0) {
+    return { table: "(none)", preview: "(no sample records available)" };
+  }
+  const s = candidates[idx % candidates.length];
+  const r = s.records[0];
+  const json = JSON.stringify(r.fields, null, 2);
+  return {
+    table: s.table,
+    preview: json.length > 400 ? json.slice(0, 400) + "…" : json,
+  };
+}
+
+export async function runInteractiveGrill(args: {
+  questions: string[];
+  airtable: AirtableScan;
+  io: GrillIO;
+}): Promise<string[]> {
+  const { questions, airtable, io } = args;
+  const N = questions.length;
+
+  // Per-slot decision: undefined (undecided) | "__KEEP__" | "__DROP__" | rewrite text.
+  const decisions: (string | undefined)[] = new Array(N).fill(undefined);
+
+  io.output(`\nReviewing ${N} AI-generated questions. Shortcuts:`);
+  io.output(`  k = keep, d = drop, <text> = rewrite`);
+  io.output(`  batch: 'k 1-5 d 6,7' (each range needs explicit k/d prefix)`);
+  io.output(`  + = jump to add-mode (remaining auto-kept)\n`);
+
+  let i = 0;
+  while (i < N) {
+    if (decisions[i] !== undefined) {
+      i += 1;
+      continue;
+    }
+    const q = questions[i];
+    const sample = sampleForIndex(airtable, i);
+    io.output(`Question ${i + 1}/${N}: ${q}`);
+    io.output(`  Sample (${sample.table}):`);
+    io.output(`  ${sample.preview.replace(/\n/g, "\n  ")}`);
+    const input = await io.prompt(`Action [k/d/rewrite/batch/+]: `);
+    const cmd = parseGrillCommand(input);
+
+    switch (cmd.kind) {
+      case "keep":
+        decisions[i] = "__KEEP__";
+        i += 1;
+        break;
+      case "drop":
+        decisions[i] = "__DROP__";
+        i += 1;
+        break;
+      case "rewrite":
+        decisions[i] = cmd.text;
+        i += 1;
+        break;
+      case "add":
+        for (let j = i; j < N; j++) {
+          if (decisions[j] === undefined) decisions[j] = "__KEEP__";
+        }
+        i = N;
+        break;
+      case "batch":
+        for (const a of cmd.actions) {
+          for (const n of a.nums) {
+            if (n >= 1 && n <= N) {
+              decisions[n - 1] = a.kind === "keep" ? "__KEEP__" : "__DROP__";
+            }
+          }
+        }
+        // Loop's auto-skip handles advancing past freshly-decided slots.
+        break;
+    }
+  }
+
+  io.output(`\nAdd new questions (empty line to finish):`);
+  const added: string[] = [];
+  while (true) {
+    const line = (await io.prompt(`Add: `)).trim();
+    if (line === "") break;
+    added.push(line);
+  }
+
+  const out: string[] = [];
+  for (let j = 0; j < N; j++) {
+    const d = decisions[j] ?? "__KEEP__";
+    if (d === "__KEEP__") out.push(questions[j]);
+    else if (d === "__DROP__") continue;
+    else out.push(d);
+  }
+  for (const a of added) out.push(a);
   return out;
 }
 
@@ -502,6 +690,24 @@ async function defaultOpenEditor(filePath: string): Promise<void> {
   await proc.exited;
 }
 
+function defaultGrillIO(): GrillIO {
+  if (!process.stdin.isTTY) {
+    throw new Error(
+      `No interactive TTY available for grill (stdin.isTTY=${Boolean(
+        process.stdin.isTTY,
+      )}). Run from a terminal, pass grillIO explicitly, or use --editor.`,
+    );
+  }
+  // Prompts go to stderr so a `> /dev/null` redirect on stdout (used by the
+  // SKILL.md supaterm flow) doesn't suppress the grill UI.
+  const rl = createInterface({ input: process.stdin, output: process.stderr });
+  return {
+    prompt: (text) => rl.question(text),
+    output: (text) => process.stderr.write(text + "\n"),
+    close: () => rl.close(),
+  };
+}
+
 // ---------- Orchestrator -----------------------------------------------------
 
 export async function runRubricAuthor(
@@ -514,7 +720,6 @@ export async function runRubricAuthor(
     opts.cacheDir ?? join(homedir(), ".claude", "airtable-extract-cache");
   const runId = opts.runId ?? new Date().toISOString().replace(/[:.]/g, "-");
   const claudeRunner = opts.claudeRunner ?? defaultClaudeRunner;
-  const openEditor = opts.openEditor ?? defaultOpenEditor;
   const target = opts.questionsTarget ?? 20;
 
   const vaultRoot = opts.vaultRoot;
@@ -544,10 +749,26 @@ export async function runRubricAuthor(
   writeFileSync(draftPath, renderDraft(aiQuestions));
   writeFileSync(metaRubricPath, META_RUBRIC);
 
-  await openEditor(draftPath);
+  let finalQuestions: string[];
+  if (opts.useEditor) {
+    const openEditor = opts.openEditor ?? defaultOpenEditor;
+    await openEditor(draftPath);
+    finalQuestions = readQuestionsFromMarkdown(draftPath);
+  } else {
+    const io = opts.grillIO ?? defaultGrillIO();
+    try {
+      finalQuestions = await runInteractiveGrill({
+        questions: aiQuestions,
+        airtable,
+        io,
+      });
+    } finally {
+      io.close?.();
+    }
+    writeFileSync(draftPath, renderDraft(finalQuestions));
+  }
 
-  const editedQuestions = readQuestionsFromMarkdown(draftPath);
-  const metrics = computeDelta(aiQuestions, editedQuestions);
+  const metrics = computeDelta(aiQuestions, finalQuestions);
   const verdict = evaluateDelta(metrics);
 
   writeFileSync(
@@ -578,11 +799,12 @@ export async function runRubricAuthor(
 
 if (import.meta.main) {
   const args = process.argv.slice(2);
+  const useEditor = args.includes("--editor");
   const strict = args.includes("--strict");
   const positional = args.filter((a) => !a.startsWith("--"));
   const baseId = positional[0];
   if (!baseId) {
-    process.stderr.write("usage: rubric-author.mts <base-id> [--strict]\n");
+    process.stderr.write("usage: rubric-author.mts <base-id> [--editor] [--strict]\n");
     process.exit(2);
   }
   const vaultRoot = process.env.BRAIN_VAULT ?? join(homedir(), "work", "brain");
@@ -591,6 +813,7 @@ if (import.meta.main) {
       baseId,
       vaultRoot,
       runId: process.env.AIRTABLE_RUN_ID,
+      useEditor,
     });
     process.stdout.write(
       JSON.stringify(
