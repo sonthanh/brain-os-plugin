@@ -203,7 +203,7 @@ User options (re-run /slice after action):
 
 The three options come straight from the parent-story settled decisions (`references/ac-coverage-spec.md` cross-references). They are the only legitimate paths forward — there is no `--force-no-coverage` override flag, no advisory soft-fail, no "we'll cover it later" promise. The gate exists because trust was broken; an override re-creates the failure surface.
 
-**Why mechanical, not advisory.** Asking the LLM "is each parent AC covered by some child?" papers over the check at slice-time when many drafts are in flight and easy to miscount. Two regexes plus a set difference are the deterministic pre-Step-6 contract — same pattern as the trunk-paths validator (§ 4) and the audit gates (§§ 1.5, 2.4). PASS only continues to Step 6.
+**Why mechanical, not advisory.** Asking the LLM "is each parent AC covered by some child?" papers over the check at slice-time when many drafts are in flight and easy to miscount. Two regexes plus a set difference are the deterministic pre-Step-6 contract — same pattern as the audit gates (§§ 1.5, 2.4). PASS only continues to Step 6.
 
 ### 2.7. Await PRD approval [latent]
 
@@ -245,23 +245,11 @@ Break the PRD into tracer-bullet child issues. For each slice, decide:
 
 ### 4. Validate slices [deterministic]
 
-Before showing the breakdown to the user, run three validators on each slice:
+Before showing the breakdown to the user, run two validators on each slice:
 
 **Tracer-bullet (HARD GATE):** the slice MUST declare an `Observable:` — at least one of: a slash command output, a cron tick log line, a journal section, a /status display, a hook stdout/exit-code change, a vault file the user can read. If a slice cannot point to an observable surface, it's a horizontal slice (one layer) — split it differently or merge it with the slice that completes the path.
 
 **Disjoint-files (WARN-SOFT):** if two slices declare overlapping `Files:`, flag it. They can still ship — `/impl -p N` (alias `--parallel N`) uses Agent-tool worktree isolation so file conflicts resolve at merge time. But surfacing the overlap helps the user decide if a merge would be cleaner than parallel work.
-
-**Trunk-paths (HARD GATE on `owner:bot`):** for any slice tentatively marked `owner:bot`, run its declared `Files:` paths through the trunk-paths matcher:
-
-```bash
-printf '%s\n' <files...> | bash "$CLAUDE_PLUGIN_ROOT/scripts/check-trunk-paths.sh"
-```
-
-Exit code semantics: `0` = no matches → keep `owner:bot`; `1` = at least one match → BLOCK `owner:bot`; force `owner:human` and surface the matched paths to the user during quiz step. Stdout is tab-separated `<path>\t<matched-pattern>` per hit.
-
-Why mechanical, not advisory: the rubric (`references/trunk-paths.txt`) covers Schluntz's trunk class — `CLAUDE.md`, hooks, MEMORY, RESOLVER, cross-skill primitives, public-plugin leak surface — and an LLM asking "does this touch trunk?" papers over it during quick slicing. Source: [grill 2026-04-26](daily/grill-sessions/2026-04-26-depth-leaf-trunk-design.md), audited via P1.
-
-Override: if the user judges a flagged slice is genuinely leaf despite the path match (e.g. a CLAUDE.md typo fix), they remove the trunk-path file from `Files:` — that re-classification is itself a trunk decision and gets surfaced for confirmation rather than silently bypassed.
 
 ### 5. Quiz the user [latent]
 

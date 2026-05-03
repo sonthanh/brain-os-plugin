@@ -12,7 +12,7 @@ Wraps "grab next AFK issue → run /tdd → commit + push + close." Designed in 
 | Mode | Invocation | Behavior |
 |------|------------|----------|
 | `once` (default) | `/impl` or `/impl --area <label>` | Grab one AFK issue (`status:ready` AND `owner:bot`), run /tdd, commit, push, close. Exit. |
-| `issue` | `/impl <N>` or `/impl <N>,<M>,...` | Run /tdd on a specific issue number; comma-separated list runs sequentially in list order. Owner-label filter is bypassed (works for `owner:bot` AND `owner:human`). The trunk-block hook still gates AFK trunk-touches via `IMPL_AFK=1`. Use when you (or another skill) already picked the issue(s) and want /impl to handle plumbing. See § Workflow — `issue` mode. |
+| `issue` | `/impl <N>` or `/impl <N>,<M>,...` | Run /tdd on a specific issue number; comma-separated list runs sequentially in list order. Owner-label filter is bypassed (works for `owner:bot` AND `owner:human`). Use when you (or another skill) already picked the issue(s) and want /impl to handle plumbing. See § Workflow — `issue` mode. |
 | `parallel` | `/impl -p K` (alias `--parallel K`) or `/impl -p <N>,<M>,...` | Dispatches `scripts/run-parallel.ts` (TS orchestrator, mirrors `/impl story` after #161 + #173). `-p K` (integer) picks K from queue head (`status:ready,owner:bot`); `-p <list>` (comma-separated) spawns one worker per listed issue (owner-bypass, same as issue-mode list). Workers are detached `claude -w` sessions spawned via `Bun.spawn` with explicit per-issue `cwd: inferRepoFromIssueArea(labels)`. `nohup`-detached, ~0 main-session token burn. Hard cap 5. |
 | `story` | `/impl story <parent-N> [-p N]` (alias `/impl --story <parent-N>`) | Bash-orchestrated DAG drain of a multi-issue story. Reads parent issue body checklist + each child's `Blocked by` to build the DAG, spawns AFK workers (claude -w + /impl) up to parallel cap, surfaces HITL children via osascript notify, ticks parent body checklist on each close, closes parent + macOS-notifies on completion. Self-detached via `nohup` — main Claude session exits immediately, ~0 token burn during drain. Both invocation forms dispatch to the same `scripts/run-story.ts` orchestrator. |
 | `auto` | `/impl auto [-p N]` | Autonomous AFK queue drain. One-shot dispatcher that bash-executes `scripts/run-ralph.sh "/impl[ -p N]" --completion-promise NO_MORE_ISSUES --max-iterations 50`, which sets up an in-session `/ralph-loop` whose body is `/impl` (or `/impl -p N`) per iteration. The Stop hook re-feeds the prompt until `/impl` emits `<promise>NO_MORE_ISSUES</promise>` (empty backlog) or 50 iterations elapse. NOT detached — the loop runs in the same Claude session and burns inference per iteration. See § Workflow — `auto` mode. |
@@ -119,11 +119,9 @@ Invoke the `/tdd` skill on the issue. /tdd handles:
 
 ### 5. Commit + push + close
 
-The commit invocation MUST be prefixed with `IMPL_AFK=1` so the trunk-block hook (PreToolUse Bash, registered in `hooks/hooks.json`) can recognize it as AFK and gate trunk-path changes (see Gotchas):
-
 ```bash
 git add <touched files>
-IMPL_AFK=1 git commit -m "$(cat <<'EOF'
+git commit -m "$(cat <<'EOF'
 <type>: <subject>
 
 <body — 1–3 sentences on the why, not the what>
@@ -142,8 +140,6 @@ bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/close-issue.sh" <N>
 
 `git pull --rebase` is mandatory before push because the CI auto-release pipeline runs on each push and may have bumped `plugin.json`.
 
-If the trunk-block hook fires (exit 2): the commit is blocked because the staged diff touches a file on `references/trunk-paths.txt` (CLAUDE.md, hooks, references, cross-skill primitives, etc.). Do NOT retry with `--no-verify` or strip the prefix. Instead: re-label the issue `status:ready` + `owner:human`, leave the worktree as-is, exit. The user will pick the issue up interactively next session; the work isn't lost — the staged diff persists in the worktree until the user resolves it.
-
 ### 6. Outcome log
 
 Append one line to `{vault}/daily/skill-outcomes/impl.log` (see § Outcome log below).
@@ -161,14 +157,8 @@ Append one line to `{vault}/daily/skill-outcomes/impl.log` (see § Outcome log b
 | Claim | `status:ready` → `status:in-progress` | Same |
 | Read | Issue body, "Required reading", "Acceptance", `Blocked by` | Same |
 | /tdd | Single pass | Wrapped in child-level ralph + advisor (max 3 iters) — see below |
-| Commit | `IMPL_AFK=1 git commit ...` | `IMPL_AFK=1 git commit ...` (still required) |
+| Commit | `git commit ...` | `git commit ...` |
 | Push + close | Same | Same |
-
-### Why `IMPL_AFK=1` still applies
-
-Even though `issue` mode accepts `owner:human`, the `IMPL_AFK=1` prefix is mandatory on the commit invocation. Reason: the prefix is what the trunk-block hook (`hooks/pre-commit-trunk-block.sh`) keys on to decide whether to scan staged paths against `references/trunk-paths.txt`. The owner label is *intent* metadata; the prefix is the *gate*. They are independent — owner controls the pick path, prefix controls the commit gate. Drop the prefix only when the user is hand-driving the commit interactively (and even then, the leaf-vs-trunk discipline still applies — the hook just isn't enforcing it).
-
-If the trunk-block hook fires for an `owner:human` issue you picked up via `/impl <N>`: same response as `once` mode — re-label the issue `status:ready` + `owner:human`, leave the worktree as-is, exit. The user can resolve interactively next session.
 
 ### Child-level ralph + advisor wrapper
 
@@ -205,7 +195,7 @@ ralph-loop (max 3 iters, completion-promise AC_VERIFIED):
     exit 0   # NOT 1 — orchestrator treats unclosed issue + dead worker as failure
 ```
 
-The transitioner ordering matches `§ How spawned workers behave` (owner-first, then status) — a mid-sequence failure leaves the issue `owner:human + status:in-progress` which is invisible to `/impl auto`'s `owner:bot + status:ready` pick filter.
+Owner-first ordering matters: a mid-sequence failure leaves the issue `owner:human + status:in-progress` which is invisible to `/impl auto`'s `owner:bot + status:ready` pick filter, rather than `owner:bot + status:ready` (which would re-pick on the same advisor failure next iteration).
 
 #### Advisor prompt template
 
@@ -281,8 +271,8 @@ When the arg contains one or more commas, parse as a comma-separated list of iss
 
 **Loop.** For each issue in the deduped list:
 
-1. Run the full `issue` mode workflow: claim → read → /tdd → `IMPL_AFK=1 git commit` → `git pull --rebase` → `git push` → `bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/close-issue.sh" <N>`.
-2. On any per-issue failure (test stays red, /tdd aborts, trunk-block hook fires, push rejected): re-label that issue back to `status:ready` (and `owner:human` if trunk-block fired, per existing rule), log the failure, and **continue with the next issue in the list**. Do not abort the rest of the list.
+1. Run the full `issue` mode workflow: claim → read → /tdd → `git commit` → `git pull --rebase` → `git push` → `bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/close-issue.sh" <N>`.
+2. On any per-issue failure (test stays red, /tdd aborts, push rejected): re-label that issue back to `status:ready`, log the failure, and **continue with the next issue in the list**. Do not abort the rest of the list.
 3. Append one outcome-log row per issue with `mode=list-sequential,n=<list-length>` in the optional fields.
 
 **Final summary.** After the loop completes, emit a one-block summary in the assistant text response:
@@ -290,7 +280,7 @@ When the arg contains one or more commas, parse as a comma-separated list of iss
 ```
 /impl list complete:
   closed: #<N>, #<M>, ...
-  failed: #<X> (trunk-block re-labeled owner:human), #<Y> (test red)
+  failed: #<X> (test red), #<Y> (push rejected)
   skipped: #<Z> (already CLOSED before claim)
 ```
 
@@ -559,18 +549,9 @@ Workers spawned by `/impl story` (`scripts/run-story.ts`) and `/impl -p` (`scrip
 - Full issue body fetched via `gh issue view <N>`.
 - `/tdd` invocation per artifact-type table at `~/work/brain-os-plugin/skills/tdd/SKILL.md`.
 - Conventional Commits subject + body + `Closes <tracker-repo>#<N>` + Co-Authored-By line.
-- `IMPL_AFK=1` prefix on the commit invocation so the trunk-block hook gates AFK trunk-touches against `references/trunk-paths.txt`.
-- Re-label-and-exit response on trunk-block hook fire (owner flip FIRST so a mid-sequence failure never leaves the issue `owner:bot + status:ready`):
-
-  ```bash
-  gh issue edit <N> -R <tracker-repo> --remove-label owner:bot --add-label owner:human
-  bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/transition-status.sh" <N> --to ready
-  exit 0
-  ```
-
 - Worker exit protocol: print `#<N> done` (or `#<N> FAILED: <reason>`) on a line by itself so external watchers can latch.
 
-The worker's cwd is set explicitly by the parent orchestrator via `Bun.spawn(claude -w ..., { cwd })`, derived from the issue's `area:*` label (`inferRepoFromIssueArea(labels, areaMap)`). Workers do NOT need their own trunk-paths self-check — the parent script already places them in the correct repo, the PreToolUse(Bash) trunk-block hook fires from the correct cwd, and the canonical `IMPL_AFK=1` prefix gate in `issue` mode handles trunk-block reactions.
+The worker's cwd is set explicitly by the parent orchestrator via `Bun.spawn(claude -w ..., { cwd })`, derived from the issue's `area:*` label (`inferRepoFromIssueArea(labels, areaMap)`).
 
 ## Mid-flow rule
 
@@ -600,7 +581,6 @@ If `/impl <N>` is invoked on an `owner:human` issue (legal — owner filter bypa
 
 - **`Closes <tracker-repo>#N` not `Closes #N`.** Cross-repo close-on-merge requires the explicit repo prefix because the commit lands in the code repo (e.g. brain-os-plugin) but the issue lives in the tracker repo. `bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/close-issue.sh" <N>` is still required as a belt-and-braces step because cross-repo `Closes` doesn't always auto-fire — and the helper additionally strips ghost `status:*` labels that bare `gh issue close` leaves behind.
 - **`git pull --rebase` is mandatory before push.** CI auto-release pipelines bump `plugin.json` on every push. Skipping the rebase guarantees a non-fast-forward push failure.
-- **`IMPL_AFK=1` on the commit invocation is required.** It signals to the trunk-block hook (`hooks/pre-commit-trunk-block.sh`) that this is autonomous AFK work. The hook reads the trunk-paths list (`references/trunk-paths.txt`) and exits 2 if any staged file matches — blocks the commit. Without the prefix, the hook is a no-op (interactive direct-push-to-main is unchanged). Source: [grill 2026-04-26](https://github.com/sonthanh/ai-brain/blob/main/daily/grill-sessions/2026-04-26-depth-leaf-trunk-design.md). DO NOT bypass with `--no-verify` or strip the prefix to "make it work" — the right response to a block is to flip owner first (`gh issue edit <N> -R <tracker-repo> --remove-label owner:bot --add-label owner:human`) then status (`bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/transition-status.sh" <N> --to ready`), then exit. Owner-first ordering matters: a mid-sequence failure leaves the issue `owner:human + status:in-progress` (visible to the user, ignored by `/impl auto`'s `owner:bot + status:ready` pick filter) instead of `owner:bot + status:ready` (which `/impl auto` would re-pick and loop on the same trunk-block). The user resolves interactively.
 - **Empty backlog sentinel must be wrapped in `<promise>` tags** — emit exactly `<promise>NO_MORE_ISSUES</promise>` in the assistant text response. The ralph-loop Stop hook (`stop-hook.sh:130-141`) extracts the inner text via Perl regex and exact-matches against `--completion-promise "NO_MORE_ISSUES"`. Bare `NO_MORE_ISSUES` without tags only matches when the entire response is *literally that string and nothing else* — adding any surrounding prose (which Claude almost always does) breaks the match. Stdout / `Bash(echo)` is also wrong: ralph reads transcript text blocks (`type: text`), not stdout.
 - **`--team` is DEFERRED.** If a user passes `--team`, print "team mode is deferred to Phase G — see grill 2026-04-25" and exit 1. Don't fall back to `-p` silently — the user explicitly asked for the unimplemented mode.
 - **/tdd owns the test loop. /impl owns the issue plumbing.** Do not duplicate /tdd's red-green logic here. If /tdd's discipline isn't holding (reactive `improve: encoded feedback —` patches keep landing), fix /tdd, not /impl.

@@ -116,28 +116,6 @@
       ]
     },
     {
-      "id": 12,
-      "prompt": "Why does /impl prefix its `git commit` invocation with `IMPL_AFK=1`?",
-      "expected_output": "It signals to the trunk-block PreToolUse(Bash) hook (`hooks/pre-commit-trunk-block.sh`) that this commit is autonomous AFK work. The hook fires only when the command contains both `IMPL_AFK=1` and `git commit`; it then runs the staged files through `scripts/check-trunk-paths.sh` against `references/trunk-paths.txt` and exits 2 if any file matches a trunk-path glob — blocking the commit. Without the prefix the hook is a no-op, so interactive direct-push-to-main commits are unaffected.",
-      "expectations": [
-        "Mentions the IMPL_AFK=1 prefix as the AFK signal",
-        "Names the trunk-block hook (hooks/pre-commit-trunk-block.sh) and PreToolUse(Bash) registration",
-        "Says interactive commits without the prefix are pass-through (no-op)",
-        "Mentions check-trunk-paths.sh / references/trunk-paths.txt as the matching rubric"
-      ]
-    },
-    {
-      "id": 13,
-      "prompt": "The trunk-block hook exits 2 because a staged file matches `references/**`. What is the correct response inside /impl, and what is explicitly forbidden?",
-      "expected_output": "Correct response: re-label the issue with `owner:human` first (single inline `gh issue edit ... --remove-label owner:bot --add-label owner:human`) then status to `ready` via the central transitioner (`bash scripts/gh-tasks/transition-status.sh <N> --to ready`). Owner-first ordering matters because a mid-sequence failure leaves the issue `owner:human + status:in-progress` (ignored by `/impl auto`'s `owner:bot + status:ready` pick filter) rather than `owner:bot + status:ready` (which would loop on the same trunk-block next iteration). Status flips go through `transition-status.sh` so all callers stay atomic and canon-validated; the owner flip stays inline because it's a non-status axis. Leave the worktree as-is so the staged diff persists for the user to resolve interactively next session, and exit cleanly. Explicitly forbidden: retrying with `--no-verify` or stripping the `IMPL_AFK=1` prefix to 'make it work' — both would bypass the gate the hook was built to enforce. The hook is the safety net, not an obstacle.",
-      "expectations": [
-        "Says re-label issue (status:ready + owner:human, remove owner:bot)",
-        "Says exit without pushing and preserve the worktree state",
-        "Mentions --no-verify and prefix-stripping as forbidden (or any equivalent bypass)",
-        "Mentions the staged diff persists for the user to resolve interactively"
-      ]
-    },
-    {
       "id": 14,
       "prompt": "What does /impl story <parent-N> do, and where does the orchestration logic live?",
       "expected_output": "/impl story <parent-N> drains a multi-issue story in DAG order. The skill prose first resolves PLUGIN_ROOT via env var → glob fallback (`~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/`, sort -V tail -1) → fail loud with osascript notify if neither resolves. It then dispatches `nohup bun run $PLUGIN_ROOT/scripts/run-story.ts <parent-N> -p <N> >> ~/.local/state/impl-story/<parent-N>.log 2>&1 &`, captures the PID, and verifies launch with `sleep 5 && ps -p $PID` (tails the log + notifies if the process died inside that window — catches module-not-found at the bun-runtime layer, before the script's own try/catch can fire). The TypeScript script (not the Claude session) reads the parent issue body checklist, builds the dependency DAG from each child's `Blocked by` section, spawns AFK workers (`claude -w + /impl <M>`) within the parallel cap (default 3, hard max 5), greedy-promotes newly-unblocked children, ticks the parent body checklist on each close, and closes the parent + fires an osascript macOS notification when all children resolve. The orchestrator also writes a JSON status file at `~/.local/state/impl-story/<parent-N>.status` on every phase (`starting` / `polling` / `done` / `died`), capturing pid, cap, watching, ready, closed, failed, and a heartbeat counter — external observers (main session ScheduleWakeup pings, watcher cr session, manual cat) read that structured file rather than tailing the unstructured log. Pure functions covered by unit tests in scripts/run-story.test.ts (bun test). Main Claude session exits after the verify block — token cost during drain is ~0 because all polling and orchestration is in bun, not in Claude inference.",
@@ -167,19 +145,6 @@
         "Says AFK siblings continue draining while HITL is pending",
         "Mentions cr /pickup as the user-facing resolution command",
         "Says the loop polls HITL state via gh issue view like any other child"
-      ]
-    },
-    {
-      "id": 16,
-      "prompt": "What does `/impl <N>` (issue mode) do differently from `/impl` (once mode), and why is the IMPL_AFK=1 prefix still mandatory?",
-      "expected_output": "`/impl <N>` runs /tdd on the specific issue number passed as an argument, bypassing the `owner:bot`-only filter that gates `once` mode — it accepts both `owner:bot` and `owner:human` issues. The pick step is skipped (the issue is given), but claim / read / /tdd / commit / push / close all match `once`. The `IMPL_AFK=1` prefix is still required on the `git commit` invocation because owner-label and prefix are independent: owner controls the pick path, the prefix is what the trunk-block hook (`hooks/pre-commit-trunk-block.sh`) keys on to scan staged files against `references/trunk-paths.txt`. Dropping the prefix would silence the trunk gate even on legitimate AFK work. If the trunk-block hook fires for an `owner:human` issue picked up via `/impl <N>`, the response is the same as `once` mode: re-label `status:ready` + `owner:human` and exit, leaving the worktree state for interactive resolution. Use cases: user runs `/impl <N>` directly; `/impl story <P>` orchestrator dispatches `claude -w ... -p \"/impl <M>\"` per child; a handover instructs the next session to pick up #<N>.",
-      "expectations": [
-        "Says /impl <N> bypasses the owner:bot filter (accepts owner:human too)",
-        "Says the pick step is skipped because the issue number is given as arg",
-        "Says claim / read / /tdd / commit / push / close still match once mode",
-        "Says IMPL_AFK=1 is still required on commit",
-        "Explains owner label and IMPL_AFK prefix are independent — owner gates pick, prefix gates commit",
-        "Mentions /impl story dispatching /impl <M> per child as a use case"
       ]
     },
     {
@@ -224,12 +189,12 @@
     {
       "id": 20,
       "prompt": "What does `/impl <N>,<M>,...` do (sequential list form), and how does it handle a per-issue failure mid-list?",
-      "expected_output": "`/impl <N>,<M>,...` is the sequential list form of `issue` mode — when the arg contains one or more commas, parse as a comma-separated list of issue numbers and run each through the full `issue` mode workflow (claim → read → /tdd → IMPL_AFK=1 commit → pull --rebase → push → close-issue.sh) in list order. Parser: split on comma, trim, parse each token as positive integer; invalid tokens fatal-abort. Duplicates are deduped with a WARN. Failure handling: if any per-issue step fails (test stays red, /tdd aborts, trunk-block hook fires, push rejected), re-label that issue back to status:ready (and owner:human if trunk-block fired), log the failure, and CONTINUE with the next issue in the list — do not abort the rest. After the loop, emit a final summary block listing closed / failed / skipped issues. Sequential list does NOT use worktree isolation — edits run in the main worktree, same as a single /impl <N>; if you need parallel + isolation use /impl -p <N>,<M>,... instead. Outcome-log: one `once` row per issue with mode=list-sequential and n=<list-length> in the optional fields. NO `<promise>NO_MORE_ISSUES</promise>` — list form has no queue and no empty-condition.",
+      "expected_output": "`/impl <N>,<M>,...` is the sequential list form of `issue` mode — when the arg contains one or more commas, parse as a comma-separated list of issue numbers and run each through the full `issue` mode workflow (claim → read → /tdd → git commit → pull --rebase → push → close-issue.sh) in list order. Parser: split on comma, trim, parse each token as positive integer; invalid tokens fatal-abort. Duplicates are deduped with a WARN. Failure handling: if any per-issue step fails (test stays red, /tdd aborts, push rejected), re-label that issue back to status:ready, log the failure, and CONTINUE with the next issue in the list — do not abort the rest. After the loop, emit a final summary block listing closed / failed / skipped issues. Sequential list does NOT use worktree isolation — edits run in the main worktree, same as a single /impl <N>; if you need parallel + isolation use /impl -p <N>,<M>,... instead. Outcome-log: one `once` row per issue with mode=list-sequential and n=<list-length> in the optional fields. NO `<promise>NO_MORE_ISSUES</promise>` — list form has no queue and no empty-condition.",
       "expectations": [
         "Says /impl <N>,<M> parses comma-separated list and runs each through issue mode sequentially",
-        "Says each iteration runs the full issue-mode workflow including IMPL_AFK=1 commit + close-issue.sh",
+        "Says each iteration runs the full issue-mode workflow including git commit + close-issue.sh",
         "Says failure of one issue does NOT abort the rest of the list — continue with next",
-        "Says failed issue is re-labeled status:ready (and owner:human if trunk-block fired)",
+        "Says failed issue is re-labeled status:ready",
         "Says final summary block reports closed / failed / skipped",
         "Says sequential list does NOT use worktree isolation",
         "Says outcome-log uses mode=list-sequential",

@@ -103,27 +103,6 @@
       ]
     },
     {
-      "id": 11,
-      "prompt": "A slice tentatively marked owner:bot declares `Files: [hooks/foo.sh, skills/bar/SKILL.md]`. What does the §4 trunk-paths validator do, and what is the user-visible result?",
-      "expected_output": "Runs the slice's declared Files: through `scripts/check-trunk-paths.sh` against `references/trunk-paths.txt` globs. `hooks/foo.sh` matches the `hooks/**` glob → exit code 1. Validator BLOCKS owner:bot for the slice (HARD GATE) and forces owner:human; surfaces the matched path during the quiz step so the user sees why. The override path is removing the trunk-path file from `Files:` — itself a trunk-class decision that gets surfaced for confirmation rather than silently bypassed.",
-      "expectations": [
-        "Mentions running check-trunk-paths.sh / matching against references/trunk-paths.txt",
-        "Says owner:bot is BLOCKED and replaced by owner:human (HARD GATE)",
-        "Mentions surfacing the matched path to the user during quiz",
-        "Mentions the override is removing the trunk-path file from Files: (not a silent bypass)"
-      ]
-    },
-    {
-      "id": 12,
-      "prompt": "Why is the §4 trunk-paths validator described as 'mechanical not advisory', and what failure mode does that distinction prevent?",
-      "expected_output": "Because asking the LLM 'does this slice touch trunk?' during quick slicing papers over the check — the rubric (CLAUDE.md, hooks, MEMORY, RESOLVER, cross-skill primitives, plugin.json, marketplace.json) requires a deterministic file match against references/trunk-paths.txt, not LLM judgment. The validator invokes a script (check-trunk-paths.sh / .py) whose exit code drives the gate; the LLM cannot soften or skip the result. Failure mode prevented: misclassification of a trunk-touching slice as owner:bot, which would let /impl AFK-merge it without human review at merge time. P1-audited per [grill 2026-04-26](daily/grill-sessions/2026-04-26-depth-leaf-trunk-design.md).",
-      "expectations": [
-        "Mentions the deterministic / script-based check (vs LLM judgment)",
-        "Names misclassification of trunk as owner:bot as the failure mode being prevented",
-        "References the trunk-paths.txt rubric (CLAUDE.md, hooks, references, cross-skill primitives, etc.)"
-      ]
-    },
-    {
       "id": 13,
       "prompt": "A user runs /slice on a settled grill-session. After the PRD is synthesized in conversation context, what is the very next deterministic step BEFORE drafting any child slices, and what does the user see?",
       "expected_output": "The skill files a parent story issue on sonthanh/ai-brain with the synthesized PRD as the body — labels `type:plan`, `owner:human`, `status:in-progress`, area label inherited from the grill scope. The body MUST contain the sections: User Story, Settled Decisions, Sub-issues (placeholder checklist `- [ ] TBD — children filed in step 7`), Acceptance, Out of Scope. After creation the skill surfaces the parent issue URL + number to the user and waits for `approve` (proceed to slicing) or `edit <section>` (revise PRD before children are filed). Nothing downstream runs until approval — that is the new PRD-review gate added in Workflow Step 2.5 / 2.7.",

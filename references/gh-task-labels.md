@@ -96,7 +96,7 @@ Required label set when each skill **files** (creates) or **picks up** (claims) 
 | Skill | `area` | `status` | `owner` | `priority` | `weight` | `type` | Notes |
 |-------|--------|----------|---------|------------|----------|--------|-------|
 | `/slice` (parent) | required | `in-progress` | `human` | (inherited from grill) | (inherited) | `type:plan` | Parent stays `in-progress` until last child closes; awaits PRD approval before children spawn. |
-| `/slice` (child) | required | `ready` (or `blocked` if has open `Blocked by`) | `bot` (default) or `human` per slice depth | required | required | (none, unless child also carries a handover) | Carries `## Parent` + `## Blocked by` body sections — DAG drainer reads these. Trunk-paths matcher forces `owner:human` if any declared `Files:` path matches `references/trunk-paths.txt`. |
+| `/slice` (child) | required | `ready` (or `blocked` if has open `Blocked by`) | `bot` (default) or `human` per slice depth | required | required | (none, unless child also carries a handover) | Carries `## Parent` + `## Blocked by` body sections — DAG drainer reads these. |
 | `/handover` | required | `ready` | `human` (default; override with `--owner bot` only for AFK-resumable continuations) | required | required | `type:handover` | Body links the handover doc via `[handover](<vault-relative-path>)`. |
 | `/study` (review task) | required | `ready` | `human` | `priority:p3` | `weight:quick` | (none) | Filed by `/study` to schedule a review pass on absorbed knowledge. |
 | `/debug` | required | `ready` | `bot` (default; `human` if reproduction needs interactive judgment) | required | required | (none — `kind:bug` is retired; `area` carries the repo, body carries the symptom) | RED-GREEN fix plan goes in body. |
@@ -125,7 +125,7 @@ transition-status.sh <issue-N> --to <ready|in-progress|blocked|backlog> [--dry-r
 | From | To | Trigger | Caller |
 |------|-----|---------|--------|
 | `ready` | `in-progress` | Skill claims an issue to start work | `/impl` (`transition-status.sh`), `/pickup` (`pickup-claim.sh`) |
-| `in-progress` | `ready` | Skill defers work — HITL needed mid-flight, trunk-block fired, or test loop aborted | `/impl` (deferral path), manual on user interrupt |
+| `in-progress` | `ready` | Skill defers work — HITL needed mid-flight or test loop aborted | `/impl` (deferral path), manual on user interrupt |
 | `backlog` | `ready` | `/pickup` promotes a backlog item during grooming | `/pickup` |
 | any | `backlog` | `/pickup` defers an item the operator decides isn't ready | `/pickup` |
 | any | `blocked` | A new dependency is discovered (skill or human) | manual or skill-driven |
@@ -227,7 +227,6 @@ Skipping step 1 means the script will reject the label as invalid. Skipping step
 ### Settled grills + cleanup history
 
 - `~/work/brain/thinking/aha/2026-04-26-gh-issue-close-status-label-drift.md` — root-cause aha that motivated the close-step lifecycle (#155, #157, #158).
-- `~/work/brain/daily/grill-sessions/2026-04-26-depth-leaf-trunk-design.md` — leaf-vs-trunk grill that produced `references/trunk-paths.txt` and the trunk-block hook (`/impl` AFK gate).
 - ai-brain#155 — label cleanup issue (prune defaults, retire `priority:p4`, drop `kind:bug`).
 - ai-brain#157 — filer + transitioner + closer helpers.
 - ai-brain#153 — parent story for the full taxonomy refactor.
