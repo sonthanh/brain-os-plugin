@@ -20,6 +20,7 @@ import {
   findRelatedWikilinks,
   findSourceRecordByEntity,
   resolveEntitySourceIds,
+  SliceRejectedError,
   CLUSTER_CONTEXT_BUDGET,
   type SonnetRunner,
   type ExtractedEntity,
@@ -488,7 +489,7 @@ describe("extractSlice (end-to-end CRM)", () => {
       record("recP1", { Name: "Alice Smith", Company: ["recC1"] }),
     ];
     const companyRecs = [record("recC1", { Name: "Acme Corp" })];
-    const meetingRecs = [record("recM1", { Name: "Q2 Strategy", Attendees: ["recP1"] })];
+    const meetingRecs = [record("recM1", { Name: "2025 Q2 Strategy", Attendees: ["recP1"] })];
 
     const sonnetCalls: string[] = [];
     const runSonnet = mockSonnet(
@@ -641,8 +642,8 @@ describe("extractSlice (per-table-type variants)", () => {
       table("tObj", "Objectives", [{ targetId: "tKR", name: "KeyResults" }]),
       table("tKR", "Key Results"),
     ];
-    const objRecs = [record("recO1", { Name: "Launch", KeyResults: ["recK1"] })];
-    const krRecs = [record("recK1", { Name: "Vault live" })];
+    const objRecs = [record("recO1", { Name: "2026 Q2 Launch", KeyResults: ["recK1"] })];
+    const krRecs = [record("recK1", { Name: "2026 Q2 Launch KR 1" })];
 
     const sonnetCalls: string[] = [];
     const runSonnet = mockSonnet(
@@ -699,7 +700,7 @@ describe("extractSlice (per-table-type variants)", () => {
 
   test("decision cluster fires decision prompt", async () => {
     const tables = [table("tDec", "Decisions")];
-    const decRecs = [record("recD1", { Name: "Adopt bun" })];
+    const decRecs = [record("recD1", { Name: "2026-04-27 Adopt bun" })];
 
     const sonnetCalls: string[] = [];
     const runSonnet = mockSonnet(
@@ -746,7 +747,8 @@ describe("extractSlice (truncation)", () => {
     const tables = [table("tA", "A", [{ targetId: "tA", name: "Next" }])];
     const recs: AirtableRecord[] = [];
     for (let i = 0; i < 50; i++) {
-      const fields: Record<string, unknown> = { Name: "x".repeat(500) };
+      const fields: Record<string, unknown> =
+        i === 0 ? { Name: "anchor" } : { Name: `${"x".repeat(500)}-${i}` };
       if (i + 1 < 50) fields.Next = [`r${i + 1}`];
       recs.push(record(`r${i}`, fields));
     }
@@ -1209,7 +1211,7 @@ describe("extractSlice (AC#1 — per-entity source traceability)", () => {
     expect(cashMd).toContain('source_url: "https://airtable.com/appUV3hAWcRzrGjqK/tCash/recCash1"');
   });
 
-  test("falls back to seedRecordId when entity has no source_record_ids", async () => {
+  test("entity with no source_record_ids resolves to the seed record via reverse-lookup (slug matches Name)", async () => {
     const tables = [table("tA", "Things")];
     const recs = [record("recSeed", { Name: "alpha" })];
 
@@ -1837,30 +1839,29 @@ describe("resolveEntitySourceIds", () => {
     expect(out).toEqual(["recReal"]);
   });
 
-  test("falls back to seed with warn when reverse-lookup finds no match", () => {
+  test("throws SliceRejectedError when reverse-lookup finds no match (#234 — no silent seed fallback)", () => {
     const recs = new Map<string, AirtableRecord>([
       ["recSeed", record("recSeed", { Name: "seed" })],
     ]);
     const recordToTable = new Map<string, string>([["recSeed", "t1"]]);
-    const warnings: string[] = [];
-    const out = resolveEntitySourceIds(
-      {
-        type: "thing",
-        slug: "no-match",
-        body: "",
-        source_record_ids: [],
-      },
-      recs,
-      recordToTable,
-      tablesById,
-      "recSeed",
-      (m) => warnings.push(m),
-    );
-    expect(out).toEqual(["recSeed"]);
-    expect(warnings.some((w) => /matched no records/.test(w) && /recSeed/.test(w))).toBe(true);
+    expect(() =>
+      resolveEntitySourceIds(
+        {
+          type: "thing",
+          slug: "no-match",
+          body: "",
+          source_record_ids: [],
+        },
+        recs,
+        recordToTable,
+        tablesById,
+        "recSeed",
+        () => {},
+      ),
+    ).toThrow(SliceRejectedError);
   });
 
-  test("falls back to seed with warn on ambiguous reverse-lookup", () => {
+  test("throws SliceRejectedError on ambiguous reverse-lookup (#234 — no silent seed fallback)", () => {
     const recs = new Map<string, AirtableRecord>([
       ["recA", record("recA", { Name: "duplicate" })],
       ["recB", record("recB", { Name: "duplicate" })],
@@ -1871,22 +1872,27 @@ describe("resolveEntitySourceIds", () => {
       ["recB", "t1"],
       ["recSeed", "t1"],
     ]);
-    const warnings: string[] = [];
-    const out = resolveEntitySourceIds(
-      {
-        type: "thing",
-        slug: "duplicate",
-        body: "",
-        source_record_ids: [],
-      },
-      recs,
-      recordToTable,
-      tablesById,
-      "recSeed",
-      (m) => warnings.push(m),
-    );
-    expect(out).toEqual(["recSeed"]);
-    expect(warnings.some((w) => /ambiguous|multiple/i.test(w))).toBe(true);
+    let caught: SliceRejectedError | null = null;
+    try {
+      resolveEntitySourceIds(
+        {
+          type: "thing",
+          slug: "duplicate",
+          body: "",
+          source_record_ids: [],
+        },
+        recs,
+        recordToTable,
+        tablesById,
+        "recSeed",
+        () => {},
+      );
+    } catch (err) {
+      caught = err as SliceRejectedError;
+    }
+    expect(caught).toBeInstanceOf(SliceRejectedError);
+    expect(caught?.reason).toBe("ambiguous");
+    expect(caught?.candidates?.sort()).toEqual(["recA", "recB"]);
   });
 });
 
@@ -2118,7 +2124,7 @@ describe("extractSlice (ai-brain#233 — multi-entity reverse-lookup)", () => {
     expect(md).toContain("source_record_id: recReal");
   });
 
-  test("reverse-lookup no match → seed fallback with warning", async () => {
+  test("reverse-lookup no match → throws SliceRejectedError (#234 supersedes #233 fallback)", async () => {
     const tables = [table("tA", "Things")];
     const recs = [record("recSeed", { Name: "totally-different" })];
 
@@ -2130,27 +2136,387 @@ describe("extractSlice (ai-brain#233 — multi-entity reverse-lookup)", () => {
       model: "claude-sonnet-4-6",
     });
 
-    const warnings: string[] = [];
-    const result = await extractSlice(
+    let caught: unknown = null;
+    try {
+      await extractSlice(
+        {
+          baseId: "appB",
+          clusterId: "c233-fallback",
+          clusterType: "knowledge-note",
+          tableIds: ["tA"],
+          seedRecordId: "recSeed",
+        },
+        {
+          fetch: mockFetch({ tables, recordsByTable: { tA: recs } }),
+          runSonnet,
+          env: { AIRTABLE_API_KEY: "patFake" },
+          cacheDir: tmp,
+          runId: "run-233-fallback",
+          promptsPath,
+        },
+      );
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(SliceRejectedError);
+  });
+});
+
+describe("extractSlice (ai-brain#234 — per-entity provenance deterministic across cluster shapes)", () => {
+  test("Cashflow-seed slice with Payment entity: source_record_id is the Payment record, NOT the seed", async () => {
+    // Reproduces the headline bug from #234: seed.table != entity.table.
+    // Sonnet emits the seed's record_id for a Payment entity (because the prompt
+    // anchors on seed_record_id). Script must override via reverse-lookup.
+    const tables: AirtableTable[] = [
       {
-        baseId: "appB",
-        clusterId: "c233-fallback",
-        clusterType: "knowledge-note",
-        tableIds: ["tA"],
-        seedRecordId: "recSeed",
+        id: "tCash",
+        name: "Cashflows",
+        fields: [{ id: "fCashName", name: "Name", type: "singleLineText" }],
       },
       {
-        fetch: mockFetch({ tables, recordsByTable: { tA: recs } }),
+        id: "tPay",
+        name: "Payments",
+        fields: [{ id: "fRef", name: "Reference", type: "singleLineText" }],
+      },
+    ];
+    const cashRecs = [record("recCashSeed", { Name: "Server Hosting Fees" })];
+    const payRecs = [record("recPayActual", { Reference: "AP09252025d" })];
+
+    const runSonnet = mockSonnet(() =>
+      staticSonnet([
+        {
+          type: "payment",
+          slug: "payment-ap09252025d",
+          body: "Payment for hosting.",
+          source_record_ids: ["recCashSeed"], // ← seed-anchored bug pattern
+        },
+        {
+          type: "cashflow",
+          slug: "server-hosting-fees",
+          body: "Hosting cashflow.",
+          source_record_ids: ["recCashSeed"],
+        },
+      ]),
+    );
+
+    const result = await extractSlice(
+      {
+        baseId: "appUV3hAWcRzrGjqK",
+        clusterId: "c234-cash-seed",
+        clusterType: "knowledge-note",
+        tableIds: ["tCash", "tPay"],
+        seedRecordId: "recCashSeed",
+      },
+      {
+        fetch: mockFetch({
+          tables,
+          recordsByTable: { tCash: cashRecs, tPay: payRecs },
+        }),
         runSonnet,
         env: { AIRTABLE_API_KEY: "patFake" },
         cacheDir: tmp,
-        runId: "run-233-fallback",
+        runId: "run-234-cash-seed",
         promptsPath,
-        warn: (m) => warnings.push(m),
       },
     );
 
-    expect(result.entities[0].source_record_ids).toEqual(["recSeed"]);
-    expect(warnings.some((w) => /matched no records/.test(w))).toBe(true);
+    const paymentEntity = result.entities.find((e) => e.slug === "payment-ap09252025d");
+    expect(paymentEntity?.source_record_ids).toEqual(["recPayActual"]);
+
+    const payMd = readFileSync(
+      join(tmp, "run-234-cash-seed", "out", "payment", "payment-ap09252025d.md"),
+      "utf8",
+    );
+    expect(payMd).toContain("source_record_id: recPayActual");
+    expect(payMd).toContain('source_table: "Payments"');
+    expect(payMd).toContain('source_url: "https://airtable.com/appUV3hAWcRzrGjqK/tPay/recPayActual"');
+    expect(payMd).not.toContain("source_record_id: recCashSeed");
+  });
+
+  test("PnL-seed slice with Payment entity: same shape, primary = report_name, payment is reverse-looked-up via type-prefix", async () => {
+    const tables: AirtableTable[] = [
+      {
+        id: "tPnL",
+        name: "PnL Reports",
+        fields: [{ id: "fReport", name: "Report Name", type: "singleLineText" }],
+      },
+      {
+        id: "tPay",
+        name: "Payments",
+        fields: [{ id: "fRef", name: "Reference", type: "singleLineText" }],
+      },
+    ];
+    const pnlRecs = [record("recPnLSeed", { "Report Name": "2025 Q3 P&L" })];
+    const payRecs = [record("recPayBT", { Reference: "BT-2025-09-001" })];
+
+    const runSonnet = mockSonnet(() =>
+      staticSonnet([
+        {
+          type: "payment",
+          slug: "payment-bt-2025-09-001",
+          body: "Payment BT-2025-09-001.",
+          source_record_ids: ["recPnLSeed"],
+        },
+        {
+          type: "pnl-report",
+          slug: "pnl-report-2025-q3-p-l",
+          body: "Q3 P&L.",
+          source_record_ids: ["recPnLSeed"],
+        },
+      ]),
+    );
+
+    const result = await extractSlice(
+      {
+        baseId: "appUV3hAWcRzrGjqK",
+        clusterId: "c234-pnl-seed",
+        clusterType: "knowledge-note",
+        tableIds: ["tPnL", "tPay"],
+        seedRecordId: "recPnLSeed",
+      },
+      {
+        fetch: mockFetch({
+          tables,
+          recordsByTable: { tPnL: pnlRecs, tPay: payRecs },
+        }),
+        runSonnet,
+        env: { AIRTABLE_API_KEY: "patFake" },
+        cacheDir: tmp,
+        runId: "run-234-pnl-seed",
+        promptsPath,
+      },
+    );
+
+    const pay = result.entities.find((e) => e.slug === "payment-bt-2025-09-001");
+    expect(pay?.source_record_ids).toEqual(["recPayBT"]);
+
+    const pnl = result.entities.find((e) => e.slug === "pnl-report-2025-q3-p-l");
+    expect(pnl?.source_record_ids).toEqual(["recPnLSeed"]);
+  });
+
+  test("Payment-seed slice continues to pass (regression: do not break the case #233 fixed)", async () => {
+    const tables: AirtableTable[] = [
+      {
+        id: "tPay",
+        name: "Payments",
+        fields: [{ id: "fRef", name: "Reference", type: "singleLineText" }],
+      },
+    ];
+    const payRecs = [
+      record("recPay1", { Reference: "BT-001" }),
+      record("recPay2", { Reference: "BT-002" }),
+    ];
+
+    const runSonnet = mockSonnet(() =>
+      staticSonnet([
+        {
+          type: "payment",
+          slug: "payment-bt-001",
+          body: "P1",
+          source_record_ids: ["recPay1"],
+        },
+        {
+          type: "payment",
+          slug: "payment-bt-002",
+          body: "P2",
+          source_record_ids: ["recPay2"],
+        },
+      ]),
+    );
+
+    const result = await extractSlice(
+      {
+        baseId: "appB",
+        clusterId: "c234-pay-seed",
+        clusterType: "knowledge-note",
+        tableIds: ["tPay"],
+        seedRecordId: "recPay1",
+      },
+      {
+        fetch: mockFetch({ tables, recordsByTable: { tPay: payRecs } }),
+        runSonnet,
+        env: { AIRTABLE_API_KEY: "patFake" },
+        cacheDir: tmp,
+        runId: "run-234-pay-seed",
+        promptsPath,
+      },
+    );
+
+    const e1 = result.entities.find((e) => e.slug === "payment-bt-001");
+    const e2 = result.entities.find((e) => e.slug === "payment-bt-002");
+    expect(e1?.source_record_ids).toEqual(["recPay1"]);
+    expect(e2?.source_record_ids).toEqual(["recPay2"]);
+  });
+
+  test("findSourceRecordByEntity matches type-prefixed slug against bare-primary records (slug='payment-ap09252025d', primary='AP09252025d')", () => {
+    const t: AirtableTable = {
+      id: "t1",
+      name: "Payments",
+      fields: [{ id: "fp", name: "Reference", type: "singleLineText" }],
+    };
+    const recs = new Map<string, AirtableRecord>([
+      ["recA", record("recA", { Reference: "AP09252025d" })],
+    ]);
+    const recordToTable = new Map<string, string>([["recA", "t1"]]);
+    const tablesById = new Map<string, AirtableTable>([["t1", t]]);
+    const entity: ExtractedEntity = {
+      type: "payment",
+      slug: "payment-ap09252025d",
+      body: "",
+      source_record_ids: [],
+    };
+    expect(findSourceRecordByEntity(entity, recs, recordToTable, tablesById)).toEqual({
+      recordId: "recA",
+      reason: "match",
+    });
+  });
+
+  test("extractSlice writes escalation.md and throws when reverse-lookup has no match", async () => {
+    const tables = [table("tA", "Things")];
+    const recs = [record("recSeed", { Name: "different-thing" })];
+
+    const runSonnet: SonnetRunner = async () => ({
+      rawText: JSON.stringify({
+        entities: [{ type: "thing", slug: "no-such-entity", body: "x" }],
+      }),
+      usage: { input_tokens: 10, output_tokens: 5 },
+      model: "claude-sonnet-4-6",
+    });
+
+    let caught: SliceRejectedError | null = null;
+    try {
+      await extractSlice(
+        {
+          baseId: "appB",
+          clusterId: "c234-escalate",
+          clusterType: "knowledge-note",
+          tableIds: ["tA"],
+          seedRecordId: "recSeed",
+        },
+        {
+          fetch: mockFetch({ tables, recordsByTable: { tA: recs } }),
+          runSonnet,
+          env: { AIRTABLE_API_KEY: "patFake" },
+          cacheDir: tmp,
+          runId: "run-234-escalate-no-match",
+          promptsPath,
+        },
+      );
+    } catch (err) {
+      caught = err as SliceRejectedError;
+    }
+    expect(caught).toBeInstanceOf(SliceRejectedError);
+
+    const escalationPath = join(tmp, "run-234-escalate-no-match", "escalation.md");
+    expect(existsSync(escalationPath)).toBe(true);
+    const md = readFileSync(escalationPath, "utf8");
+    expect(md).toContain("recSeed");
+    expect(md).toContain("no-such-entity");
+    expect(md).toContain("no-match");
+  });
+
+  test("extractSlice writes escalation.md and throws when reverse-lookup is ambiguous", async () => {
+    const tables = [table("tA", "Things")];
+    const recs = [
+      record("recA", { Name: "duplicate" }),
+      record("recB", { Name: "duplicate" }),
+    ];
+
+    const runSonnet: SonnetRunner = async () => ({
+      rawText: JSON.stringify({
+        entities: [{ type: "thing", slug: "duplicate", body: "x" }],
+      }),
+      usage: { input_tokens: 10, output_tokens: 5 },
+      model: "claude-sonnet-4-6",
+    });
+
+    let caught: SliceRejectedError | null = null;
+    try {
+      await extractSlice(
+        {
+          baseId: "appB",
+          clusterId: "c234-ambiguous",
+          clusterType: "knowledge-note",
+          tableIds: ["tA"],
+          seedRecordId: "recA",
+        },
+        {
+          fetch: mockFetch({ tables, recordsByTable: { tA: recs } }),
+          runSonnet,
+          env: { AIRTABLE_API_KEY: "patFake" },
+          cacheDir: tmp,
+          runId: "run-234-escalate-ambiguous",
+          promptsPath,
+        },
+      );
+    } catch (err) {
+      caught = err as SliceRejectedError;
+    }
+    expect(caught).toBeInstanceOf(SliceRejectedError);
+    expect(caught?.reason).toBe("ambiguous");
+    expect(caught?.candidates?.sort()).toEqual(["recA", "recB"]);
+
+    const escalationPath = join(tmp, "run-234-escalate-ambiguous", "escalation.md");
+    expect(existsSync(escalationPath)).toBe(true);
+    const md = readFileSync(escalationPath, "utf8");
+    expect(md).toContain("ambiguous");
+    expect(md).toContain("recA");
+    expect(md).toContain("recB");
+  });
+
+  test("extractSlice ignores Sonnet's seed-anchored source_record_ids when reverse-lookup finds the actual entity record", async () => {
+    // Even when Sonnet's emit is wire-level "valid" (record exists in cluster),
+    // the reverse-lookup result wins. This is the core architectural change of #234:
+    // zero LLM judgment on provenance fields.
+    const tables: AirtableTable[] = [
+      {
+        id: "tCash",
+        name: "Cashflows",
+        fields: [{ id: "fCashName", name: "Name", type: "singleLineText" }],
+      },
+      {
+        id: "tPay",
+        name: "Payments",
+        fields: [{ id: "fRef", name: "Reference", type: "singleLineText" }],
+      },
+    ];
+    const cashRecs = [record("recCash", { Name: "Hosting" })];
+    const payRecs = [record("recPay", { Reference: "BT-001" })];
+
+    const runSonnet = mockSonnet(() =>
+      staticSonnet([
+        {
+          // Sonnet "claims" the Payment entity is sourced from the Cashflow seed —
+          // wire-level valid (recCash IS in the cluster) but semantically wrong.
+          type: "payment",
+          slug: "payment-bt-001",
+          body: "P1",
+          source_record_ids: ["recCash"],
+        },
+      ]),
+    );
+
+    const result = await extractSlice(
+      {
+        baseId: "appB",
+        clusterId: "c234-trust-script",
+        clusterType: "knowledge-note",
+        tableIds: ["tCash", "tPay"],
+        seedRecordId: "recCash",
+      },
+      {
+        fetch: mockFetch({
+          tables,
+          recordsByTable: { tCash: cashRecs, tPay: payRecs },
+        }),
+        runSonnet,
+        env: { AIRTABLE_API_KEY: "patFake" },
+        cacheDir: tmp,
+        runId: "run-234-trust-script",
+        promptsPath,
+      },
+    );
+
+    expect(result.entities[0].source_record_ids).toEqual(["recPay"]);
   });
 });

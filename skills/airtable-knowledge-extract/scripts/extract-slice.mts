@@ -376,33 +376,59 @@ export interface ReverseLookupResult {
   candidates?: string[];
 }
 
+export class SliceRejectedError extends Error {
+  readonly entity: ExtractedEntity;
+  readonly reason: ReverseLookupReason;
+  readonly candidates?: string[];
+  constructor(entity: ExtractedEntity, lookup: ReverseLookupResult) {
+    const desc =
+      lookup.reason === "ambiguous"
+        ? `ambiguous (candidates: ${(lookup.candidates ?? []).join(", ")})`
+        : "no-match";
+    super(
+      `extract-slice: entity '${entity.slug}' (type=${entity.type}) reverse-lookup ${desc}`,
+    );
+    this.name = "SliceRejectedError";
+    this.entity = entity;
+    this.reason = lookup.reason;
+    this.candidates = lookup.candidates;
+  }
+}
+
+function recordSlugCandidates(
+  rec: AirtableRecord,
+  table: AirtableTable,
+  entityType: string,
+): Set<string> {
+  const out = new Set<string>();
+  const fieldNames = new Set<string>();
+  const primary = table.fields[0]?.name;
+  if (primary) fieldNames.add(primary);
+  fieldNames.add("Name");
+  for (const fname of fieldNames) {
+    const v = rec.fields[fname];
+    if (typeof v !== "string" || v.length === 0) continue;
+    out.add(slugify(v));
+    if (entityType.length > 0) out.add(slugify(`${entityType}-${v}`));
+  }
+  return out;
+}
+
 export function findSourceRecordByEntity(
   entity: ExtractedEntity,
   recordsById: Map<string, AirtableRecord>,
   recordToTable: Map<string, string>,
   tablesById: Map<string, AirtableTable>,
 ): ReverseLookupResult {
-  const slug = entity.slug;
   const matches: string[] = [];
   for (const [recId, rec] of recordsById) {
     const tableId = recordToTable.get(recId);
     if (!tableId) continue;
     const table = tablesById.get(tableId);
     if (!table) continue;
-    const candidateFields = new Set<string>();
-    const primary = table.fields[0]?.name;
-    if (primary) candidateFields.add(primary);
-    candidateFields.add("Name");
-    let matched = false;
-    for (const fname of candidateFields) {
-      const v = rec.fields[fname];
-      if (typeof v !== "string") continue;
-      if (slugify(v) === slug) {
-        matched = true;
-        break;
-      }
+    if (recordSlugCandidates(rec, table, entity.type).has(entity.slug)) {
+      matches.push(recId);
     }
-    if (matched) matches.push(recId);
   }
   if (matches.length === 0) return { recordId: null, reason: "no-match" };
   if (matches.length > 1) {
@@ -416,33 +442,58 @@ export function resolveEntitySourceIds(
   recordsById: Map<string, AirtableRecord>,
   recordToTable: Map<string, string>,
   tablesById: Map<string, AirtableTable>,
-  seedRecordId: string,
+  _seedRecordId: string,
   warn: (msg: string) => void,
 ): string[] {
-  const valid = entity.source_record_ids.filter((id) => recordsById.has(id));
   const dropped = entity.source_record_ids.filter((id) => !recordsById.has(id));
   if (dropped.length > 0) {
     warn(
       `extract-slice: entity '${entity.slug}' had hallucinated source IDs ${JSON.stringify(dropped)} — dropped`,
     );
   }
-  if (valid.length > 0) return valid;
-
   const lookup = findSourceRecordByEntity(entity, recordsById, recordToTable, tablesById);
   if (lookup.reason === "match" && lookup.recordId) {
     return [lookup.recordId];
   }
+  throw new SliceRejectedError(entity, lookup);
+}
 
-  if (lookup.reason === "ambiguous") {
-    warn(
-      `extract-slice: entity '${entity.slug}' ambiguous reverse-lookup — multiple records ${JSON.stringify(lookup.candidates)} share the slugified primary; falling back to seed ${seedRecordId}`,
-    );
-  } else {
-    warn(
-      `extract-slice: entity '${entity.slug}' matched no records by primary-field slug; falling back to seed ${seedRecordId}`,
+function writeEscalationMd(
+  runDir: string,
+  input: ExtractSliceInput,
+  err: SliceRejectedError,
+): void {
+  const lines = [
+    `# Slice rejected: ${input.baseId} / ${input.clusterId}`,
+    "",
+    `- Seed record: \`${input.seedRecordId}\``,
+    `- Cluster type: ${input.clusterType}`,
+    `- Tables: ${input.tableIds.map((t) => `\`${t}\``).join(", ")}`,
+    "",
+    `## Reason`,
+    "",
+    `Entity \`${err.entity.slug}\` (type=\`${err.entity.type}\`) failed reverse-lookup: **${err.reason}**.`,
+  ];
+  if (err.reason === "ambiguous" && err.candidates && err.candidates.length > 0) {
+    lines.push("");
+    lines.push(
+      `Candidates: ${err.candidates.map((c) => `\`${c}\``).join(", ")}`,
     );
   }
-  return [seedRecordId];
+  lines.push("");
+  lines.push("## Next steps");
+  lines.push("");
+  lines.push(
+    "- Inspect the entity slug — it must equal `slugify(<primary-field-value>)` or `slugify(<type>-<primary-field-value>)` for some record in the cluster.",
+  );
+  lines.push(
+    "- If the target record is missing from the slice, regenerate the cluster or expand `tableIds`.",
+  );
+  lines.push(
+    "- If multiple records share the natural key, disambiguate (rename one) before re-running.",
+  );
+  mkdirSync(runDir, { recursive: true });
+  writeFileSync(join(runDir, "escalation.md"), lines.join("\n") + "\n");
 }
 
 export function buildSubgraphContext(
@@ -871,15 +922,22 @@ export async function extractSlice(
   const sonnetResp = await runSonnet(prompt, DEFAULT_MODEL);
   const entities = parseSonnetEntityResponse(sonnetResp.rawText);
   const warn = opts.warn ?? ((msg: string) => process.stderr.write(`${msg}\n`));
-  for (const e of entities) {
-    e.source_record_ids = resolveEntitySourceIds(
-      e,
-      recordsById,
-      recordToTable,
-      tablesById,
-      input.seedRecordId,
-      warn,
-    );
+  try {
+    for (const e of entities) {
+      e.source_record_ids = resolveEntitySourceIds(
+        e,
+        recordsById,
+        recordToTable,
+        tablesById,
+        input.seedRecordId,
+        warn,
+      );
+    }
+  } catch (err) {
+    if (err instanceof SliceRejectedError) {
+      writeEscalationMd(runDir, input, err);
+    }
+    throw err;
   }
 
   mkdirSync(runDir, { recursive: true });
