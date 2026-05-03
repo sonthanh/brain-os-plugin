@@ -9,8 +9,12 @@
  * via its manifest is NOT yet persisting subgraph; the orchestrator MUST
  * carry the subgraph string forward when it queues a slice for review.
  *
- * 1. Loads the per-base context dir: `meta-rubric.md`, optional
- *    `examples.jsonl` (absent on first batch), `rubric-questions.md`.
+ * 1. Loads two context paths:
+ *    - `goldSetPath` (= `<runDir>/gold-set/`): per-run rubric files written
+ *      by `rubric-author.mts` — `meta-rubric.md` + `rubric-questions.md`.
+ *      Single source of truth (#235).
+ *    - `basePath` (= `<runDir>/bases/<baseId>/`, optional): per-base
+ *      `examples.jsonl` appended by `self-improve.mts`. Absent on first batch.
  * 2. Renders `prompts/review.md` with the static prefix BEFORE the dynamic
  *    batch — order chosen so Anthropic's prompt cache hits on the prefix
  *    across batches in the same run.
@@ -27,9 +31,10 @@
  *
  * CLI: `bun run review-slice.mts <batch-file>`
  *   Required env / flags:
- *     - `--base-path <dir>` (or `AIRTABLE_BASE_CONTEXT_DIR`): per-base
- *       context dir holding meta-rubric.md, examples.jsonl,
- *       rubric-questions.md.
+ *     - `--gold-set-path <dir>` (or `AIRTABLE_GOLD_SET_DIR`): per-run rubric
+ *       dir holding meta-rubric.md + rubric-questions.md.
+ *     - `--base-path <dir>` (or `AIRTABLE_BASE_CONTEXT_DIR`, optional):
+ *       per-base context dir holding examples.jsonl. Omit on first batch.
  *     - `--cost-meter <path>` (or `AIRTABLE_COST_METER`): cost-meter file
  *       to append.
  *     - `--threshold <num>`: pass threshold; default 0.95.
@@ -118,6 +123,17 @@ export interface ReviewBatchInput {
 
 export interface ReviewBatchDeps {
   runOpus?: OpusRunner;
+  /**
+   * Per-run gold-set dir holding `meta-rubric.md` + `rubric-questions.md`.
+   * Required unless `baseContext` is provided. Single source of truth for
+   * rubric files (#235); never per-base.
+   */
+  goldSetPath?: string;
+  /**
+   * Per-base context dir holding `examples.jsonl`. Optional even when
+   * `goldSetPath` is set — examples are absent on the first batch and are
+   * appended by `self-improve.mts` over the run.
+   */
   basePath?: string;
   baseContext?: BaseContext;
   promptsPath?: string;
@@ -128,14 +144,20 @@ export interface ReviewBatchDeps {
   now?: () => string;
 }
 
+export interface LoadBaseContextOpts {
+  /** Per-run dir with `meta-rubric.md` + `rubric-questions.md`. */
+  goldSetPath: string;
+  /** Per-base dir with optional `examples.jsonl`. */
+  basePath?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Pure helpers — exported for unit-test access
 // ---------------------------------------------------------------------------
 
-export function loadBaseContext(basePath: string): BaseContext {
-  const metaRubricPath = join(basePath, "meta-rubric.md");
-  const rubricQuestionsPath = join(basePath, "rubric-questions.md");
-  const examplesPath = join(basePath, "examples.jsonl");
+export function loadBaseContext(opts: LoadBaseContextOpts): BaseContext {
+  const metaRubricPath = join(opts.goldSetPath, "meta-rubric.md");
+  const rubricQuestionsPath = join(opts.goldSetPath, "rubric-questions.md");
 
   if (!existsSync(metaRubricPath)) {
     throw new Error(`meta-rubric.md missing at ${metaRubricPath}`);
@@ -143,11 +165,18 @@ export function loadBaseContext(basePath: string): BaseContext {
   if (!existsSync(rubricQuestionsPath)) {
     throw new Error(`rubric-questions.md missing at ${rubricQuestionsPath}`);
   }
+
+  let examples = "";
+  if (opts.basePath) {
+    const examplesPath = join(opts.basePath, "examples.jsonl");
+    if (existsSync(examplesPath)) {
+      examples = readFileSync(examplesPath, "utf8");
+    }
+  }
+
   return {
     metaRubric: readFileSync(metaRubricPath, "utf8"),
-    examples: existsSync(examplesPath)
-      ? readFileSync(examplesPath, "utf8")
-      : "",
+    examples,
     rubricQuestions: readFileSync(rubricQuestionsPath, "utf8"),
   };
 }
@@ -467,10 +496,15 @@ export async function reviewBatch(
   let baseContext: BaseContext;
   if (deps.baseContext) {
     baseContext = deps.baseContext;
-  } else if (deps.basePath) {
-    baseContext = loadBaseContext(deps.basePath);
+  } else if (deps.goldSetPath) {
+    baseContext = loadBaseContext({
+      goldSetPath: deps.goldSetPath,
+      basePath: deps.basePath,
+    });
   } else {
-    throw new Error("reviewBatch: deps.baseContext or deps.basePath required");
+    throw new Error(
+      "reviewBatch: deps.baseContext or deps.goldSetPath required",
+    );
   }
 
   const template = readFileSync(promptsPath, "utf8");
@@ -526,14 +560,16 @@ interface BatchFile {
   slices: SliceForReview[];
 }
 
-function parseArgs(argv: string[]): {
+export function parseArgs(argv: string[]): {
   batchPath: string;
-  basePath: string;
+  goldSetPath: string;
+  basePath?: string;
   costMeterPath?: string;
   threshold: number;
   model?: string;
 } {
   let batchPath: string | undefined;
+  let goldSetPath: string | undefined = process.env.AIRTABLE_GOLD_SET_DIR;
   let basePath: string | undefined = process.env.AIRTABLE_BASE_CONTEXT_DIR;
   let costMeterPath: string | undefined = process.env.AIRTABLE_COST_METER;
   let threshold = DEFAULT_THRESHOLD;
@@ -542,7 +578,8 @@ function parseArgs(argv: string[]): {
   const args = argv.slice(2);
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
-    if (a === "--base-path") basePath = args[++i];
+    if (a === "--gold-set-path") goldSetPath = args[++i];
+    else if (a === "--base-path") basePath = args[++i];
     else if (a === "--cost-meter") costMeterPath = args[++i];
     else if (a === "--threshold") threshold = Number(args[++i]);
     else if (a === "--model") model = args[++i];
@@ -551,25 +588,24 @@ function parseArgs(argv: string[]): {
 
   if (!batchPath) {
     throw new Error(
-      "usage: review-slice.mts <batch-file> --base-path <dir> [--cost-meter <path>] [--threshold 0.95] [--model <id>]",
+      "usage: review-slice.mts <batch-file> --gold-set-path <dir> [--base-path <dir>] [--cost-meter <path>] [--threshold 0.95] [--model <id>]",
     );
   }
-  if (!basePath) {
+  if (!goldSetPath) {
     throw new Error(
-      "review-slice: --base-path or AIRTABLE_BASE_CONTEXT_DIR required",
+      "review-slice: --gold-set-path or AIRTABLE_GOLD_SET_DIR required",
     );
   }
   if (!Number.isFinite(threshold) || threshold < 0 || threshold > 1) {
     throw new Error(`review-slice: --threshold must be in [0,1]`);
   }
-  return { batchPath, basePath, costMeterPath, threshold, model };
+  return { batchPath, goldSetPath, basePath, costMeterPath, threshold, model };
 }
 
 if (import.meta.main) {
   try {
-    const { batchPath, basePath, costMeterPath, threshold, model } = parseArgs(
-      process.argv,
-    );
+    const { batchPath, goldSetPath, basePath, costMeterPath, threshold, model } =
+      parseArgs(process.argv);
     const batchRaw = readFileSync(batchPath, "utf8");
     const batchFile = JSON.parse(batchRaw) as BatchFile;
     if (!Array.isArray(batchFile.slices) || batchFile.slices.length === 0) {
@@ -584,6 +620,7 @@ if (import.meta.main) {
     const verdict = await reviewBatch(
       { batchId, baseId, slices: batchFile.slices },
       {
+        goldSetPath,
         basePath,
         costMeterPath,
         threshold,

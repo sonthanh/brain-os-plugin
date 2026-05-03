@@ -27,7 +27,9 @@
  *   Required:
  *     - `--base-path <dir>` (or `AIRTABLE_BASE_CONTEXT_DIR`): per-base
  *       context dir holding examples.jsonl. Same dir review-slice.mts
- *       reads via `loadBaseContext`.
+ *       reads via `loadBaseContext`'s `basePath` arg. Rubric files
+ *       (meta-rubric.md, rubric-questions.md) live in the per-run
+ *       `gold-set/` dir, not here (#235).
  *   Output: SelfImproveResult JSON on stdout. Exit 0 on success.
  */
 import {

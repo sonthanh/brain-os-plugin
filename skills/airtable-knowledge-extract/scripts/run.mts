@@ -524,20 +524,22 @@ export async function runOrchestrator(
 // Default I/O wiring (CLI)
 // ---------------------------------------------------------------------------
 
-interface CacheLayout {
+export interface CacheLayout {
   runDir: string;
   statePath: string;
   basesDir: string;
+  goldSetDir: string;
   metricsDir: string;
   costMeterPath: string;
 }
 
-function resolveLayout(runId: string): CacheLayout {
+export function resolveLayout(runId: string): CacheLayout {
   const runDir = join(homedir(), ".claude", "airtable-extract-cache", runId);
   return {
     runDir,
     statePath: join(runDir, "state.json"),
     basesDir: join(runDir, "bases"),
+    goldSetDir: join(runDir, "gold-set"),
     metricsDir: join(runDir, "metrics"),
     costMeterPath: join(runDir, "cost-meter.jsonl"),
   };
@@ -696,6 +698,7 @@ async function defaultRunReview(
   layout: CacheLayout,
 ): Promise<BatchVerdict> {
   return reviewBatch(input, {
+    goldSetPath: layout.goldSetDir,
     basePath: join(layout.basesDir, input.baseId),
     costMeterPath: layout.costMeterPath,
   });

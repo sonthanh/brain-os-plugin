@@ -79,15 +79,20 @@ afterEach(() => {
   rmSync(tmp, { recursive: true, force: true });
 });
 
-function makeBaseDir(opts?: { withExamples?: boolean }): string {
-  const dir = join(tmp, "base-context");
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, "meta-rubric.md"), META_RUBRIC);
-  writeFileSync(join(dir, "rubric-questions.md"), RUBRIC_QUESTIONS);
+function makeContext(opts?: { withExamples?: boolean }): {
+  goldSetDir: string;
+  baseDir: string;
+} {
+  const goldSetDir = join(tmp, "gold-set");
+  const baseDir = join(tmp, "bases", "appBase");
+  mkdirSync(goldSetDir, { recursive: true });
+  mkdirSync(baseDir, { recursive: true });
+  writeFileSync(join(goldSetDir, "meta-rubric.md"), META_RUBRIC);
+  writeFileSync(join(goldSetDir, "rubric-questions.md"), RUBRIC_QUESTIONS);
   if (opts?.withExamples) {
-    writeFileSync(join(dir, "examples.jsonl"), EXAMPLES_JSONL);
+    writeFileSync(join(baseDir, "examples.jsonl"), EXAMPLES_JSONL);
   }
-  return dir;
+  return { goldSetDir, baseDir };
 }
 
 function makeSlice(id: string): SliceForReview {
@@ -174,33 +179,65 @@ describe("constants", () => {
 // ---------------------------------------------------------------------------
 
 describe("loadBaseContext", () => {
-  test("loads meta-rubric + rubric-questions; examples optional and absent → empty", () => {
-    const dir = makeBaseDir();
-    const ctx = loadBaseContext(dir);
+  test("loads rubric from goldSetPath; basePath omitted → examples empty", () => {
+    const { goldSetDir } = makeContext();
+    const ctx = loadBaseContext({ goldSetPath: goldSetDir });
     expect(ctx.metaRubric).toContain("Entity completeness");
     expect(ctx.rubricQuestions).toContain("founded Acme");
     expect(ctx.examples).toBe("");
   });
 
-  test("loads examples.jsonl when present", () => {
-    const dir = makeBaseDir({ withExamples: true });
-    const ctx = loadBaseContext(dir);
+  test("loads rubric from goldSetPath + examples from basePath", () => {
+    const { goldSetDir, baseDir } = makeContext({ withExamples: true });
+    const ctx = loadBaseContext({ goldSetPath: goldSetDir, basePath: baseDir });
     expect(ctx.examples).toContain("slug-collision");
     expect(ctx.examples).toContain("link-mismatch");
   });
 
-  test("throws when meta-rubric missing", () => {
-    const dir = join(tmp, "broken");
-    mkdirSync(dir);
-    writeFileSync(join(dir, "rubric-questions.md"), RUBRIC_QUESTIONS);
-    expect(() => loadBaseContext(dir)).toThrow(/meta-rubric/);
+  test("basePath set but examples.jsonl absent → examples empty (first batch)", () => {
+    const { goldSetDir, baseDir } = makeContext();
+    const ctx = loadBaseContext({ goldSetPath: goldSetDir, basePath: baseDir });
+    expect(ctx.examples).toBe("");
+    expect(ctx.metaRubric).toContain("Entity completeness");
   });
 
-  test("throws when rubric-questions missing", () => {
-    const dir = join(tmp, "broken2");
+  test("AC#235 — rubric NOT read from basePath; only from goldSetPath", () => {
+    // Place stale rubric in basePath and verify it's ignored — the only
+    // source of truth is goldSetPath.
+    const { goldSetDir, baseDir } = makeContext();
+    writeFileSync(join(baseDir, "meta-rubric.md"), "# STALE BASE RUBRIC");
+    writeFileSync(join(baseDir, "rubric-questions.md"), "# STALE QUESTIONS");
+    const ctx = loadBaseContext({ goldSetPath: goldSetDir, basePath: baseDir });
+    expect(ctx.metaRubric).not.toContain("STALE");
+    expect(ctx.metaRubric).toContain("Entity completeness");
+    expect(ctx.rubricQuestions).not.toContain("STALE");
+    expect(ctx.rubricQuestions).toContain("founded Acme");
+  });
+
+  test("throws when meta-rubric missing in goldSetPath", () => {
+    const dir = join(tmp, "broken-gold");
+    mkdirSync(dir);
+    writeFileSync(join(dir, "rubric-questions.md"), RUBRIC_QUESTIONS);
+    expect(() => loadBaseContext({ goldSetPath: dir })).toThrow(/meta-rubric/);
+  });
+
+  test("throws when rubric-questions missing in goldSetPath", () => {
+    const dir = join(tmp, "broken-gold2");
     mkdirSync(dir);
     writeFileSync(join(dir, "meta-rubric.md"), META_RUBRIC);
-    expect(() => loadBaseContext(dir)).toThrow(/rubric-questions/);
+    expect(() => loadBaseContext({ goldSetPath: dir })).toThrow(
+      /rubric-questions/,
+    );
+  });
+
+  test("error message points at goldSetPath, not basePath", () => {
+    const goldSetDir = join(tmp, "empty-gold");
+    const baseDir = join(tmp, "bases", "appBase");
+    mkdirSync(goldSetDir, { recursive: true });
+    mkdirSync(baseDir, { recursive: true });
+    expect(() =>
+      loadBaseContext({ goldSetPath: goldSetDir, basePath: baseDir }),
+    ).toThrow(new RegExp(`meta-rubric.md missing at ${goldSetDir}`));
   });
 });
 
@@ -522,7 +559,7 @@ describe("computeFidelityMetrics", () => {
 
 describe("reviewBatch (end-to-end)", () => {
   test("≥95% pass-rate → batch.pass = true; cost-meter appended", async () => {
-    const baseDir = makeBaseDir({ withExamples: true });
+    const { goldSetDir, baseDir } = makeContext({ withExamples: true });
     const slices = Array.from({ length: 10 }, (_, i) => makeSlice(`rec${i}`));
     const opusCalls: string[] = [];
     const runOpus = mockOpus(
@@ -533,7 +570,13 @@ describe("reviewBatch (end-to-end)", () => {
 
     const verdict = await reviewBatch(
       { batchId: "batch-1", baseId: "appBase", slices },
-      { runOpus, basePath: baseDir, promptsPath, costMeterPath },
+      {
+        runOpus,
+        goldSetPath: goldSetDir,
+        basePath: baseDir,
+        promptsPath,
+        costMeterPath,
+      },
     );
 
     expect(verdict.pass).toBe(true);
@@ -558,7 +601,7 @@ describe("reviewBatch (end-to-end)", () => {
   });
 
   test("9 of 10 pass (90%) → batch.pass = false at default 95% threshold", async () => {
-    const baseDir = makeBaseDir();
+    const { goldSetDir } = makeContext();
     const slices = Array.from({ length: 10 }, (_, i) => makeSlice(`rec${i}`));
     const runOpus = mockOpus(() =>
       staticOpus(
@@ -573,7 +616,7 @@ describe("reviewBatch (end-to-end)", () => {
 
     const verdict = await reviewBatch(
       { batchId: "batch-2", baseId: "appBase", slices },
-      { runOpus, basePath: baseDir, promptsPath },
+      { runOpus, goldSetPath: goldSetDir, promptsPath },
     );
 
     expect(verdict.pass_rate).toBeCloseTo(0.9);
@@ -582,7 +625,7 @@ describe("reviewBatch (end-to-end)", () => {
   });
 
   test("configurable threshold passes lower bar", async () => {
-    const baseDir = makeBaseDir();
+    const { goldSetDir } = makeContext();
     const slices = Array.from({ length: 10 }, (_, i) => makeSlice(`rec${i}`));
     const runOpus = mockOpus(() =>
       staticOpus(
@@ -596,7 +639,7 @@ describe("reviewBatch (end-to-end)", () => {
 
     const verdict = await reviewBatch(
       { batchId: "batch-3", baseId: "appBase", slices },
-      { runOpus, basePath: baseDir, promptsPath, threshold: 0.85 },
+      { runOpus, goldSetPath: goldSetDir, promptsPath, threshold: 0.85 },
     );
 
     expect(verdict.pass_rate).toBeCloseTo(0.9);
@@ -605,7 +648,7 @@ describe("reviewBatch (end-to-end)", () => {
   });
 
   test("model is loose-coupled via env (AIRTABLE_REVIEWER_MODEL)", async () => {
-    const baseDir = makeBaseDir();
+    const { goldSetDir } = makeContext();
     const slices = [makeSlice("recA")];
     let modelArg: string | null = null;
     const runOpus: OpusRunner = async (_p, model) => {
@@ -617,7 +660,7 @@ describe("reviewBatch (end-to-end)", () => {
       { batchId: "b", baseId: "appBase", slices },
       {
         runOpus,
-        basePath: baseDir,
+        goldSetPath: goldSetDir,
         promptsPath,
         env: { AIRTABLE_REVIEWER_MODEL: "claude-haiku-4-5-20251001" },
       },
@@ -627,7 +670,7 @@ describe("reviewBatch (end-to-end)", () => {
   });
 
   test("explicit model arg beats env var", async () => {
-    const baseDir = makeBaseDir();
+    const { goldSetDir } = makeContext();
     const slices = [makeSlice("recA")];
     let modelArg: string | null = null;
     const runOpus: OpusRunner = async (_p, model) => {
@@ -639,7 +682,7 @@ describe("reviewBatch (end-to-end)", () => {
       { batchId: "b", baseId: "appBase", slices },
       {
         runOpus,
-        basePath: baseDir,
+        goldSetPath: goldSetDir,
         promptsPath,
         model: "explicit-model-id",
         env: { AIRTABLE_REVIEWER_MODEL: "from-env" },
@@ -672,16 +715,20 @@ describe("reviewBatch (end-to-end)", () => {
   });
 
   test("throws on empty slice list", async () => {
-    const baseDir = makeBaseDir();
+    const { goldSetDir } = makeContext();
     await expect(
       reviewBatch(
         { batchId: "b", baseId: "appBase", slices: [] },
-        { runOpus: mockOpus(() => staticOpus([])), basePath: baseDir, promptsPath },
+        {
+          runOpus: mockOpus(() => staticOpus([])),
+          goldSetPath: goldSetDir,
+          promptsPath,
+        },
       ),
     ).rejects.toThrow(/empty/i);
   });
 
-  test("throws when neither basePath nor baseContext provided", async () => {
+  test("throws when neither goldSetPath nor baseContext provided", async () => {
     const slices = [makeSlice("recA")];
     await expect(
       reviewBatch(
@@ -691,11 +738,11 @@ describe("reviewBatch (end-to-end)", () => {
           promptsPath,
         },
       ),
-    ).rejects.toThrow(/baseContext.*basePath/);
+    ).rejects.toThrow(/baseContext.*goldSetPath/);
   });
 
-  test("missing meta-rubric in baseDir → throws (helpful error)", async () => {
-    const dir = join(tmp, "broken-base");
+  test("missing meta-rubric in goldSetPath → throws (helpful error)", async () => {
+    const dir = join(tmp, "broken-gold");
     mkdirSync(dir);
     writeFileSync(join(dir, "rubric-questions.md"), RUBRIC_QUESTIONS);
     const slices = [makeSlice("recA")];
@@ -704,7 +751,7 @@ describe("reviewBatch (end-to-end)", () => {
         { batchId: "b", baseId: "appBase", slices },
         {
           runOpus: mockOpus(() => staticOpus([{ slice_id: "recA", pass: true }])),
-          basePath: dir,
+          goldSetPath: dir,
           promptsPath,
         },
       ),
@@ -712,7 +759,7 @@ describe("reviewBatch (end-to-end)", () => {
   });
 
   test("does NOT write cost-meter when costMeterPath omitted", async () => {
-    const baseDir = makeBaseDir();
+    const { goldSetDir } = makeContext();
     const slices = [makeSlice("recA")];
     const runOpus = mockOpus(() =>
       staticOpus([{ slice_id: "recA", pass: true }]),
@@ -720,14 +767,14 @@ describe("reviewBatch (end-to-end)", () => {
 
     await reviewBatch(
       { batchId: "b", baseId: "appBase", slices },
-      { runOpus, basePath: baseDir, promptsPath },
+      { runOpus, goldSetPath: goldSetDir, promptsPath },
     );
 
     expect(existsSync(join(tmp, "cost-meter.jsonl"))).toBe(false);
   });
 
   test("propagates cache-read tokens when present in usage", async () => {
-    const baseDir = makeBaseDir();
+    const { goldSetDir } = makeContext();
     const slices = [makeSlice("recA")];
     const runOpus: OpusRunner = async () => ({
       rawText: JSON.stringify({
@@ -748,11 +795,35 @@ describe("reviewBatch (end-to-end)", () => {
 
     await reviewBatch(
       { batchId: "b", baseId: "appBase", slices },
-      { runOpus, basePath: baseDir, promptsPath, costMeterPath },
+      { runOpus, goldSetPath: goldSetDir, promptsPath, costMeterPath },
     );
 
     const cost = JSON.parse(readFileSync(costMeterPath, "utf8").trim());
     expect(cost.cache_read_input_tokens).toBe(5000);
     expect(cost.cache_creation_input_tokens).toBe(200);
+  });
+
+  test("AC#235 — examples loaded from per-base basePath, NOT from goldSetPath", async () => {
+    const { goldSetDir, baseDir } = makeContext({ withExamples: true });
+    // Negative-control: place a different examples.jsonl in goldSetPath to
+    // verify it's never read.
+    writeFileSync(
+      join(goldSetDir, "examples.jsonl"),
+      `{"raw":{},"corrected":{},"reason":"GOLD-NOISE"}\n`,
+    );
+    const slices = [makeSlice("recA")];
+    const opusCalls: string[] = [];
+    const runOpus = mockOpus(
+      () => staticOpus([{ slice_id: "recA", pass: true }]),
+      opusCalls,
+    );
+
+    await reviewBatch(
+      { batchId: "b", baseId: "appBase", slices },
+      { runOpus, goldSetPath: goldSetDir, basePath: baseDir, promptsPath },
+    );
+
+    expect(opusCalls[0]).toContain("slug-collision");
+    expect(opusCalls[0]).not.toContain("GOLD-NOISE");
   });
 });

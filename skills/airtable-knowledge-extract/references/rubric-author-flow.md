@@ -1,8 +1,10 @@
 # rubric-author flow — operator review of AI-drafted /think queries
 
-`scripts/rubric-author.mts` produces a per-base `rubric-questions.md` draft (N
-synthetic queries the vault should answer after import). Before scoring the
-diff, the operator reviews and refines that draft.
+`scripts/rubric-author.mts` produces a `rubric-questions.md` draft (N synthetic
+queries the vault should answer after import) written to the per-run
+`<runDir>/gold-set/` dir — single source of truth consumed by `review-slice.mts`
+via `loadBaseContext({ goldSetPath })` (#235). Before scoring the diff, the
+operator reviews and refines that draft.
 
 ## Two review modes
 

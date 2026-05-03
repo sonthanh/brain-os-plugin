@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   runOrchestrator,
+  resolveLayout,
   chunk,
   initState,
   nextBaseToProcess,
@@ -29,12 +30,16 @@ import {
   formatStatusLine,
   type StatusDeps,
 } from "../scripts/status.mts";
-import type {
-  BatchVerdict,
-  ReviewBatchInput,
-  SliceForReview,
-  SliceVerdict,
+import {
+  reviewBatch,
+  type BatchVerdict,
+  type OpusRunner,
+  type ReviewBatchInput,
+  type SliceForReview,
+  type SliceVerdict,
 } from "../scripts/review-slice.mts";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import type {
   ExtractedEntity,
 } from "../scripts/extract-slice.mts";
@@ -1031,5 +1036,123 @@ describe("status.mts — read-only snapshot", () => {
     const snap = readStatus("run-y", deps);
     expect(snap.base_summaries).toHaveLength(0);
     expect(snap.eta_ms).toBe(null);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AC#235 — review-invocation paths: rubric in gold-set/, examples in bases/
+// ---------------------------------------------------------------------------
+
+describe("acceptance #235 — review-invocation path layout", () => {
+  test("resolveLayout exposes goldSetDir at <runDir>/gold-set/", () => {
+    const layout = resolveLayout("run-235");
+    expect(layout.goldSetDir).toMatch(/airtable-extract-cache\/run-235\/gold-set$/);
+    expect(layout.basesDir).toMatch(/airtable-extract-cache\/run-235\/bases$/);
+    expect(layout.goldSetDir.startsWith(layout.runDir)).toBe(true);
+    expect(layout.goldSetDir).not.toBe(layout.basesDir);
+  });
+
+  test("rubric in gold-set/ + no rubric in bases/<baseId>/ → reviewer invokes without FS error", async () => {
+    // Set up a synthetic run dir matching the layout shape but rooted in tmp
+    // so we don't pollute ~/.claude/airtable-extract-cache.
+    const runDir = join(tmp, "run-235");
+    const goldSetDir = join(runDir, "gold-set");
+    const baseId = "appUV3hAWcRzrGjqK";
+    const baseDir = join(runDir, "bases", baseId);
+    mkdirSync(goldSetDir, { recursive: true });
+    mkdirSync(baseDir, { recursive: true });
+
+    // Rubric files written to gold-set/ ONLY — exactly as rubric-author.mts does.
+    writeFileSync(
+      join(goldSetDir, "meta-rubric.md"),
+      "# Meta-Rubric\n1. Entity completeness.\n",
+    );
+    writeFileSync(
+      join(goldSetDir, "rubric-questions.md"),
+      "# Rubric questions\n1. Can vault answer Q1?\n",
+    );
+    // bases/<baseId>/ deliberately has NO rubric files — the prior bug.
+    expect(existsSync(join(baseDir, "meta-rubric.md"))).toBe(false);
+    expect(existsSync(join(baseDir, "rubric-questions.md"))).toBe(false);
+
+    const promptsPath = join(tmp, "review.md");
+    writeFileSync(
+      promptsPath,
+      "{{meta_rubric}}\n{{examples}}\n{{rubric_questions}}\n{{batch}}\n",
+    );
+
+    const slice: SliceForReview = {
+      slice_id: "recA",
+      base_id: baseId,
+      cluster_id: "cluster-1",
+      cluster_type: "crm",
+      subgraph: "### tA\n- recA\n",
+      entities: [
+        {
+          type: "person",
+          slug: "recA",
+          body: "test",
+          source_record_ids: ["recA"],
+        },
+      ],
+    };
+
+    const runOpus: OpusRunner = async () => ({
+      rawText: JSON.stringify({
+        slices: [
+          {
+            slice_id: "recA",
+            score: 0.95,
+            pass: true,
+            reasoning: "ok",
+            fail_modes: [],
+          },
+        ],
+        batch: { pass_rate: 1, pass: true },
+      }),
+      usage: { input_tokens: 100, output_tokens: 50 },
+      model: "claude-opus-4-6",
+    });
+
+    const verdict = await reviewBatch(
+      { batchId: "b1", baseId, slices: [slice] },
+      {
+        runOpus,
+        goldSetPath: goldSetDir,
+        basePath: baseDir,
+        promptsPath,
+      },
+    );
+
+    expect(verdict.pass).toBe(true);
+    expect(verdict.pass_rate).toBe(1);
+    expect(verdict.base_id).toBe(baseId);
+  });
+
+  test("AC#2 grep — no script constructs bases/<baseId>/{meta-rubric,rubric-questions}.md", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const scriptsDir = join(here, "..", "scripts");
+    const files = [
+      "review-slice.mts",
+      "re-anchor.mts",
+      "run.mts",
+      "self-improve.mts",
+      "rubric-author.mts",
+    ];
+    for (const f of files) {
+      const src = readFileSync(join(scriptsDir, f), "utf8");
+      expect(src).not.toMatch(
+        /join\(\s*basePath\s*,\s*["']meta-rubric\.md["']/,
+      );
+      expect(src).not.toMatch(
+        /join\(\s*basePath\s*,\s*["']rubric-questions\.md["']/,
+      );
+      expect(src).not.toMatch(
+        /join\(\s*[^,]*basesDir[^,]*,\s*[^,]*,\s*["']meta-rubric\.md["']/,
+      );
+      expect(src).not.toMatch(
+        /join\(\s*[^,]*basesDir[^,]*,\s*[^,]*,\s*["']rubric-questions\.md["']/,
+      );
+    }
   });
 });

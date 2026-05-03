@@ -545,6 +545,7 @@ interface CacheLayout {
   runDir: string;
   statePath: string;
   basesDir: string;
+  goldSetDir: string;
   hitlDir: string;
 }
 
@@ -554,6 +555,7 @@ function resolveLayout(runId: string): CacheLayout {
     runDir,
     statePath: join(runDir, "state.json"),
     basesDir: join(runDir, "bases"),
+    goldSetDir: join(runDir, "gold-set"),
     hitlDir: join(runDir, "hitl"),
   };
 }
@@ -764,6 +766,7 @@ async function main(
     runExtract: (seed) => defaultRunExtract(seed, runId),
     runReview: (input) =>
       reviewBatch(input, {
+        goldSetPath: layout.goldSetDir,
         basePath: join(layout.basesDir, input.baseId),
         costMeterPath: join(layout.runDir, "cost-meter.jsonl"),
         threshold: DEFAULT_THRESHOLD,
