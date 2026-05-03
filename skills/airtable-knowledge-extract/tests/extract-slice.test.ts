@@ -13,6 +13,11 @@ import {
   extractRecordLinks,
   buildSubgraphContext,
   renderPrompt,
+  airtableRecordUrl,
+  extractAiFields,
+  extractAttachments,
+  buildSlugMap,
+  findRelatedWikilinks,
   CLUSTER_CONTEXT_BUDGET,
   type SonnetRunner,
   type ExtractedEntity,
@@ -835,6 +840,781 @@ describe("extractSlice (idempotency)", () => {
     expect(r3.cachedHit).toBe(true);
     const md2 = readFileSync(personPath, "utf8");
     expect(md1).toBe(md2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AC#2 spec compliance: source traceability, wikilinks, AI fields, attachments
+// ai-brain#231 — entity render must surface per-entity source record metadata
+// + AI text fields + attachment count + Related-section wikilinks.
+// ---------------------------------------------------------------------------
+
+describe("airtableRecordUrl", () => {
+  test("produces canonical https://airtable.com/<base>/<table>/<record> URL", () => {
+    expect(airtableRecordUrl("appBase", "tblPay", "recPay1")).toBe(
+      "https://airtable.com/appBase/tblPay/recPay1",
+    );
+  });
+});
+
+describe("extractAiFields", () => {
+  test("captures plain-string aiText values", () => {
+    const t: AirtableTable = {
+      id: "t1",
+      name: "Payments",
+      fields: [
+        { id: "fName", name: "Name", type: "singleLineText" },
+        { id: "fRisk", name: "Payment Risk Assessment (AI)", type: "aiText" },
+      ],
+    };
+    const r = record("recX", {
+      Name: "X",
+      "Payment Risk Assessment (AI)": "Medium risk: monitor.",
+    });
+    expect(extractAiFields(r, t)).toEqual([
+      { field: "Payment Risk Assessment (AI)", value: "Medium risk: monitor." },
+    ]);
+  });
+
+  test("captures object-shape aiText values via .value", () => {
+    const t: AirtableTable = {
+      id: "t1",
+      name: "Cashflows",
+      fields: [
+        { id: "fSum", name: "Cashflow Summary (AI)", type: "aiText" },
+      ],
+    };
+    const r = record("recY", {
+      "Cashflow Summary (AI)": { value: "Quarterly summary.", state: "generated", isStale: false },
+    });
+    expect(extractAiFields(r, t)).toEqual([
+      { field: "Cashflow Summary (AI)", value: "Quarterly summary." },
+    ]);
+  });
+
+  test("ignores non-aiText fields and empty values", () => {
+    const t: AirtableTable = {
+      id: "t1",
+      name: "Notes",
+      fields: [
+        { id: "fA", name: "Plain", type: "singleLineText" },
+        { id: "fB", name: "EmptyAI", type: "aiText" },
+        { id: "fC", name: "ObjectErr", type: "aiText" },
+      ],
+    };
+    const r = record("recZ", {
+      Plain: "ignored — not aiText",
+      EmptyAI: "",
+      ObjectErr: { state: "error" },
+    });
+    expect(extractAiFields(r, t)).toEqual([]);
+  });
+});
+
+describe("extractAttachments", () => {
+  test("counts attachments and surfaces first URL", () => {
+    const t: AirtableTable = {
+      id: "t1",
+      name: "Payments",
+      fields: [
+        { id: "fA", name: "Receipt", type: "multipleAttachments" },
+      ],
+    };
+    const r = record("recA", {
+      Receipt: [
+        { id: "att1", url: "https://dl.airtable.com/a.png", filename: "a.png" },
+        { id: "att2", url: "https://dl.airtable.com/b.png", filename: "b.png" },
+      ],
+    });
+    expect(extractAttachments(r, t)).toEqual({
+      count: 2,
+      firstUrl: "https://dl.airtable.com/a.png",
+    });
+  });
+
+  test("returns zero when no attachment fields", () => {
+    const t: AirtableTable = {
+      id: "t1",
+      name: "Plain",
+      fields: [{ id: "fA", name: "Name", type: "singleLineText" }],
+    };
+    const r = record("recA", { Name: "X" });
+    expect(extractAttachments(r, t)).toEqual({ count: 0, firstUrl: null });
+  });
+
+  test("ignores malformed attachment entries (no url)", () => {
+    const t: AirtableTable = {
+      id: "t1",
+      name: "Files",
+      fields: [{ id: "fA", name: "Files", type: "multipleAttachments" }],
+    };
+    const r = record("recA", { Files: [{ id: "att1" }, "garbage"] });
+    expect(extractAttachments(r, t)).toEqual({ count: 0, firstUrl: null });
+  });
+});
+
+describe("buildSlugMap", () => {
+  test("maps each source_record_id to its entity slug; first wins on conflict", () => {
+    const entities: ExtractedEntity[] = [
+      { type: "person", slug: "alice", body: "", source_record_ids: ["recP1"] },
+      { type: "company", slug: "acme", body: "", source_record_ids: ["recC1", "recC2"] },
+      { type: "person", slug: "shadow", body: "", source_record_ids: ["recP1"] },
+    ];
+    const m = buildSlugMap(entities);
+    expect(m.get("recP1")).toBe("alice");
+    expect(m.get("recC1")).toBe("acme");
+    expect(m.get("recC2")).toBe("acme");
+    expect(m.size).toBe(3);
+  });
+});
+
+describe("findRelatedWikilinks", () => {
+  test("returns linked-record wikilinks for entities present in slice", () => {
+    const t: AirtableTable = {
+      id: "tPeople",
+      name: "Contacts",
+      fields: [
+        { id: "fName", name: "Name", type: "singleLineText" },
+        {
+          id: "fCo",
+          name: "Company",
+          type: "multipleRecordLinks",
+          options: { linkedTableId: "tCompanies" },
+        },
+      ],
+    };
+    const tCo: AirtableTable = {
+      id: "tCompanies",
+      name: "Companies",
+      fields: [{ id: "fName", name: "Name", type: "singleLineText" }],
+    };
+    const recs = new Map<string, AirtableRecord>([
+      ["recP1", record("recP1", { Name: "Alice", Company: ["recC1"] })],
+      ["recC1", record("recC1", { Name: "Acme" })],
+    ]);
+    const recordToTable = new Map<string, string>([
+      ["recP1", "tPeople"],
+      ["recC1", "tCompanies"],
+    ]);
+    const tablesById = new Map<string, AirtableTable>([
+      ["tPeople", t],
+      ["tCompanies", tCo],
+    ]);
+    const slugMap = new Map<string, string>([
+      ["recP1", "alice"],
+      ["recC1", "acme"],
+    ]);
+    const entity: ExtractedEntity = {
+      type: "person",
+      slug: "alice",
+      body: "Alice",
+      source_record_ids: ["recP1"],
+    };
+    const links = findRelatedWikilinks(entity, recs, recordToTable, tablesById, slugMap);
+    expect(links).toEqual([{ slug: "acme", recordId: "recC1", tableName: "Companies" }]);
+  });
+
+  test("skips self-references", () => {
+    const t: AirtableTable = {
+      id: "tA",
+      name: "Notes",
+      fields: [
+        {
+          id: "fSelf",
+          name: "Related",
+          type: "multipleRecordLinks",
+          options: { linkedTableId: "tA" },
+        },
+      ],
+    };
+    const recs = new Map<string, AirtableRecord>([
+      ["r1", record("r1", { Related: ["r1"] })],
+    ]);
+    const slugMap = new Map<string, string>([["r1", "self"]]);
+    const entity: ExtractedEntity = {
+      type: "note",
+      slug: "self",
+      body: "",
+      source_record_ids: ["r1"],
+    };
+    const links = findRelatedWikilinks(
+      entity,
+      recs,
+      new Map([["r1", "tA"]]),
+      new Map([["tA", t]]),
+      slugMap,
+    );
+    expect(links).toEqual([]);
+  });
+
+  test("skips linked records not represented in this slice", () => {
+    const t: AirtableTable = {
+      id: "tA",
+      name: "A",
+      fields: [
+        {
+          id: "fLink",
+          name: "Other",
+          type: "multipleRecordLinks",
+          options: { linkedTableId: "tB" },
+        },
+      ],
+    };
+    const recs = new Map<string, AirtableRecord>([
+      ["r1", record("r1", { Other: ["rUnknown"] })],
+    ]);
+    const slugMap = new Map<string, string>([["r1", "alpha"]]);
+    const entity: ExtractedEntity = {
+      type: "x",
+      slug: "alpha",
+      body: "",
+      source_record_ids: ["r1"],
+    };
+    const links = findRelatedWikilinks(
+      entity,
+      recs,
+      new Map([["r1", "tA"]]),
+      new Map([["tA", t]]),
+      slugMap,
+    );
+    expect(links).toEqual([]);
+  });
+
+  test("dedupes by target slug across multiple link fields", () => {
+    const t: AirtableTable = {
+      id: "tA",
+      name: "A",
+      fields: [
+        {
+          id: "fL1",
+          name: "Link1",
+          type: "multipleRecordLinks",
+          options: { linkedTableId: "tB" },
+        },
+        {
+          id: "fL2",
+          name: "Link2",
+          type: "multipleRecordLinks",
+          options: { linkedTableId: "tB" },
+        },
+      ],
+    };
+    const recs = new Map<string, AirtableRecord>([
+      ["r1", record("r1", { Link1: ["r2"], Link2: ["r2"] })],
+      ["r2", record("r2", {})],
+    ]);
+    const slugMap = new Map<string, string>([
+      ["r1", "alpha"],
+      ["r2", "beta"],
+    ]);
+    const entity: ExtractedEntity = {
+      type: "x",
+      slug: "alpha",
+      body: "",
+      source_record_ids: ["r1"],
+    };
+    const links = findRelatedWikilinks(
+      entity,
+      recs,
+      new Map([["r1", "tA"], ["r2", "tA"]]),
+      new Map([["tA", t]]),
+      slugMap,
+    );
+    expect(links).toHaveLength(1);
+    expect(links[0].slug).toBe("beta");
+  });
+});
+
+describe("extractSlice (AC#1 — per-entity source traceability)", () => {
+  test("each entity gets distinct source_record_id, source_table, source_url in frontmatter", async () => {
+    const tables = [
+      table("tPay", "Payments", [{ targetId: "tCash", name: "RelatedCashflow" }]),
+      table("tCash", "Cashflows"),
+    ];
+    const payRecs = [
+      record("recPay1", { Name: "Payment alpha", RelatedCashflow: ["recCash1"] }),
+      record("recPay2", { Name: "Payment beta" }),
+    ];
+    const cashRecs = [record("recCash1", { Name: "Cashflow root" })];
+
+    const runSonnet = mockSonnet(() =>
+      staticSonnet([
+        {
+          type: "payment",
+          slug: "payment-alpha",
+          body: "Payment alpha.",
+          source_record_ids: ["recPay1"],
+        },
+        {
+          type: "payment",
+          slug: "payment-beta",
+          body: "Payment beta.",
+          source_record_ids: ["recPay2"],
+        },
+        {
+          type: "cashflow",
+          slug: "cashflow-root",
+          body: "Cashflow root.",
+          source_record_ids: ["recCash1"],
+        },
+      ]),
+    );
+
+    const result = await extractSlice(
+      {
+        baseId: "appUV3hAWcRzrGjqK",
+        clusterId: "cluster-fin",
+        clusterType: "knowledge-note",
+        tableIds: ["tPay", "tCash"],
+        seedRecordId: "recCash1",
+      },
+      {
+        fetch: mockFetch({
+          tables,
+          recordsByTable: { tPay: payRecs, tCash: cashRecs },
+        }),
+        runSonnet,
+        env: { AIRTABLE_API_KEY: "patFake" },
+        cacheDir: tmp,
+        runId: "run-ac1",
+        promptsPath,
+      },
+    );
+
+    expect(result.entities).toHaveLength(3);
+
+    const alphaMd = readFileSync(
+      join(tmp, "run-ac1", "out", "payment", "payment-alpha.md"),
+      "utf8",
+    );
+    expect(alphaMd).toContain("source_record_id: recPay1");
+    expect(alphaMd).toContain('source_table: "Payments"');
+    expect(alphaMd).toContain('source_url: "https://airtable.com/appUV3hAWcRzrGjqK/tPay/recPay1"');
+
+    const betaMd = readFileSync(
+      join(tmp, "run-ac1", "out", "payment", "payment-beta.md"),
+      "utf8",
+    );
+    expect(betaMd).toContain("source_record_id: recPay2");
+    expect(betaMd).toContain('source_url: "https://airtable.com/appUV3hAWcRzrGjqK/tPay/recPay2"');
+
+    const cashMd = readFileSync(
+      join(tmp, "run-ac1", "out", "cashflow", "cashflow-root.md"),
+      "utf8",
+    );
+    expect(cashMd).toContain("source_record_id: recCash1");
+    expect(cashMd).toContain('source_table: "Cashflows"');
+    expect(cashMd).toContain('source_url: "https://airtable.com/appUV3hAWcRzrGjqK/tCash/recCash1"');
+  });
+
+  test("falls back to seedRecordId when entity has no source_record_ids", async () => {
+    const tables = [table("tA", "Things")];
+    const recs = [record("recSeed", { Name: "alpha" })];
+
+    const runSonnet: SonnetRunner = async () => ({
+      rawText: JSON.stringify({
+        entities: [{ type: "thing", slug: "alpha", body: "x" }],
+      }),
+      usage: { input_tokens: 10, output_tokens: 5 },
+      model: "claude-sonnet-4-6",
+    });
+
+    const result = await extractSlice(
+      {
+        baseId: "appB",
+        clusterId: "c1",
+        clusterType: "knowledge-note",
+        tableIds: ["tA"],
+        seedRecordId: "recSeed",
+      },
+      {
+        fetch: mockFetch({ tables, recordsByTable: { tA: recs } }),
+        runSonnet,
+        env: { AIRTABLE_API_KEY: "patFake" },
+        cacheDir: tmp,
+        runId: "run-ac1-fallback",
+        promptsPath,
+      },
+    );
+
+    const md = readFileSync(
+      join(tmp, "run-ac1-fallback", "out", "thing", "alpha.md"),
+      "utf8",
+    );
+    expect(md).toContain("source_record_id: recSeed");
+    expect(md).toContain('source_table: "Things"');
+    expect(result.entities[0].source_record_ids).toEqual(["recSeed"]);
+  });
+});
+
+describe("extractSlice (AC#2 — wikilinks for linked records)", () => {
+  test("appends ## Related section with [[slug]] for each linked record present in slice", async () => {
+    const tables = [
+      table("tPay", "Payments", [{ targetId: "tCash", name: "Linked" }]),
+      table("tCash", "Cashflows"),
+    ];
+    const payRecs = [record("recPay1", { Name: "Pay", Linked: ["recCash1"] })];
+    const cashRecs = [record("recCash1", { Name: "Cash" })];
+
+    const runSonnet = mockSonnet(() =>
+      staticSonnet([
+        {
+          type: "payment",
+          slug: "pay",
+          body: "Linked to Cash cashflow.",
+          source_record_ids: ["recPay1"],
+        },
+        {
+          type: "cashflow",
+          slug: "cash",
+          body: "Cashflow root.",
+          source_record_ids: ["recCash1"],
+        },
+      ]),
+    );
+
+    await extractSlice(
+      {
+        baseId: "appB",
+        clusterId: "c1",
+        clusterType: "knowledge-note",
+        tableIds: ["tPay", "tCash"],
+        seedRecordId: "recPay1",
+      },
+      {
+        fetch: mockFetch({
+          tables,
+          recordsByTable: { tPay: payRecs, tCash: cashRecs },
+        }),
+        runSonnet,
+        env: { AIRTABLE_API_KEY: "patFake" },
+        cacheDir: tmp,
+        runId: "run-ac2",
+        promptsPath,
+      },
+    );
+
+    const payMd = readFileSync(join(tmp, "run-ac2", "out", "payment", "pay.md"), "utf8");
+    expect(payMd).toContain("## Related");
+    expect(payMd).toContain("[[cash]]");
+    expect(payMd).toContain("recCash1");
+    expect(payMd).toContain("Cashflows");
+  });
+
+  test("skips Related entry when wikilink already in body (idempotent against existing CRM-style outputs)", async () => {
+    const tables = [
+      table("tPeople", "Contacts", [{ targetId: "tCompanies", name: "Company" }]),
+      table("tCompanies", "Companies"),
+    ];
+    const peopleRecs = [
+      record("recP1", { Name: "Alice", Company: ["recC1"] }),
+    ];
+    const companyRecs = [record("recC1", { Name: "Acme" })];
+
+    const runSonnet = mockSonnet(() =>
+      staticSonnet([
+        {
+          type: "person",
+          slug: "alice",
+          body: "Alice — founder at [[acme]].",
+          source_record_ids: ["recP1"],
+        },
+        {
+          type: "company",
+          slug: "acme",
+          body: "Acme.",
+          source_record_ids: ["recC1"],
+        },
+      ]),
+    );
+
+    await extractSlice(
+      {
+        baseId: "appB",
+        clusterId: "c1",
+        clusterType: "crm",
+        tableIds: ["tPeople", "tCompanies"],
+        seedRecordId: "recP1",
+      },
+      {
+        fetch: mockFetch({
+          tables,
+          recordsByTable: {
+            tPeople: peopleRecs,
+            tCompanies: companyRecs,
+          },
+        }),
+        runSonnet,
+        env: { AIRTABLE_API_KEY: "patFake" },
+        cacheDir: tmp,
+        runId: "run-ac2-dup",
+        promptsPath,
+      },
+    );
+
+    const aliceMd = readFileSync(join(tmp, "run-ac2-dup", "out", "person", "alice.md"), "utf8");
+    const matches = aliceMd.match(/\[\[acme\]\]/g) ?? [];
+    expect(matches).toHaveLength(1);
+    expect(aliceMd).not.toContain("## Related");
+  });
+});
+
+describe("extractSlice (AC#3 — AI fields preserved)", () => {
+  test("ai_fields list rendered in frontmatter for both string and object aiText shapes", async () => {
+    const tables: AirtableTable[] = [
+      {
+        id: "tPay",
+        name: "Payments",
+        fields: [
+          { id: "fName", name: "Name", type: "singleLineText" },
+          { id: "fRisk", name: "Payment Risk Assessment (AI)", type: "aiText" },
+          { id: "fSum", name: "Cashflow Summary (AI)", type: "aiText" },
+        ],
+      },
+    ];
+    const payRecs = [
+      record("recP1", {
+        Name: "Pay alpha",
+        "Payment Risk Assessment (AI)": "Medium risk: monitor closely.",
+        "Cashflow Summary (AI)": {
+          value: "Steady inflow Q2.",
+          state: "generated",
+          isStale: false,
+        },
+      }),
+    ];
+
+    const runSonnet = mockSonnet(() =>
+      staticSonnet([
+        {
+          type: "payment",
+          slug: "pay-alpha",
+          body: "Pay alpha.",
+          source_record_ids: ["recP1"],
+        },
+      ]),
+    );
+
+    await extractSlice(
+      {
+        baseId: "appB",
+        clusterId: "c1",
+        clusterType: "knowledge-note",
+        tableIds: ["tPay"],
+        seedRecordId: "recP1",
+      },
+      {
+        fetch: mockFetch({ tables, recordsByTable: { tPay: payRecs } }),
+        runSonnet,
+        env: { AIRTABLE_API_KEY: "patFake" },
+        cacheDir: tmp,
+        runId: "run-ac3",
+        promptsPath,
+      },
+    );
+
+    const md = readFileSync(join(tmp, "run-ac3", "out", "payment", "pay-alpha.md"), "utf8");
+    expect(md).toContain("ai_fields:");
+    expect(md).toContain('Payment Risk Assessment (AI)');
+    expect(md).toContain("Medium risk: monitor closely.");
+    expect(md).toContain("Cashflow Summary (AI)");
+    expect(md).toContain("Steady inflow Q2.");
+  });
+
+  test("no ai_fields key emitted when source records have no aiText fields", async () => {
+    const tables = [table("tA", "Plain")];
+    const recs = [record("rA", { Name: "alpha" })];
+
+    const runSonnet = mockSonnet(() =>
+      staticSonnet([
+        {
+          type: "thing",
+          slug: "alpha",
+          body: "Alpha.",
+          source_record_ids: ["rA"],
+        },
+      ]),
+    );
+
+    await extractSlice(
+      {
+        baseId: "appB",
+        clusterId: "c1",
+        clusterType: "knowledge-note",
+        tableIds: ["tA"],
+        seedRecordId: "rA",
+      },
+      {
+        fetch: mockFetch({ tables, recordsByTable: { tA: recs } }),
+        runSonnet,
+        env: { AIRTABLE_API_KEY: "patFake" },
+        cacheDir: tmp,
+        runId: "run-ac3-empty",
+        promptsPath,
+      },
+    );
+
+    const md = readFileSync(join(tmp, "run-ac3-empty", "out", "thing", "alpha.md"), "utf8");
+    expect(md).not.toContain("ai_fields:");
+  });
+});
+
+describe("extractSlice (AC#4 — attachment metadata)", () => {
+  test("frontmatter has attachments_count + first_attachment_url when source record has attachments", async () => {
+    const tables: AirtableTable[] = [
+      {
+        id: "tPay",
+        name: "Payments",
+        fields: [
+          { id: "fName", name: "Name", type: "singleLineText" },
+          { id: "fRecpt", name: "Payment Receipt Photo", type: "multipleAttachments" },
+        ],
+      },
+    ];
+    const payRecs = [
+      record("recP1", {
+        Name: "Pay",
+        "Payment Receipt Photo": [
+          {
+            id: "att1",
+            url: "https://dl.airtable.com/receipt-1.png",
+            filename: "receipt-1.png",
+          },
+          {
+            id: "att2",
+            url: "https://dl.airtable.com/receipt-2.png",
+            filename: "receipt-2.png",
+          },
+        ],
+      }),
+    ];
+
+    const runSonnet = mockSonnet(() =>
+      staticSonnet([
+        {
+          type: "payment",
+          slug: "pay",
+          body: "Pay.",
+          source_record_ids: ["recP1"],
+        },
+      ]),
+    );
+
+    await extractSlice(
+      {
+        baseId: "appB",
+        clusterId: "c1",
+        clusterType: "knowledge-note",
+        tableIds: ["tPay"],
+        seedRecordId: "recP1",
+      },
+      {
+        fetch: mockFetch({ tables, recordsByTable: { tPay: payRecs } }),
+        runSonnet,
+        env: { AIRTABLE_API_KEY: "patFake" },
+        cacheDir: tmp,
+        runId: "run-ac4",
+        promptsPath,
+      },
+    );
+
+    const md = readFileSync(join(tmp, "run-ac4", "out", "payment", "pay.md"), "utf8");
+    expect(md).toContain("attachments_count: 2");
+    expect(md).toContain('first_attachment_url: "https://dl.airtable.com/receipt-1.png"');
+  });
+
+  test("no attachment keys emitted when source record has no attachments", async () => {
+    const tables = [table("tA", "Plain")];
+    const recs = [record("rA", { Name: "alpha" })];
+
+    const runSonnet = mockSonnet(() =>
+      staticSonnet([
+        {
+          type: "thing",
+          slug: "alpha",
+          body: "Alpha.",
+          source_record_ids: ["rA"],
+        },
+      ]),
+    );
+
+    await extractSlice(
+      {
+        baseId: "appB",
+        clusterId: "c1",
+        clusterType: "knowledge-note",
+        tableIds: ["tA"],
+        seedRecordId: "rA",
+      },
+      {
+        fetch: mockFetch({ tables, recordsByTable: { tA: recs } }),
+        runSonnet,
+        env: { AIRTABLE_API_KEY: "patFake" },
+        cacheDir: tmp,
+        runId: "run-ac4-empty",
+        promptsPath,
+      },
+    );
+
+    const md = readFileSync(join(tmp, "run-ac4-empty", "out", "thing", "alpha.md"), "utf8");
+    expect(md).not.toContain("attachments_count:");
+    expect(md).not.toContain("first_attachment_url:");
+  });
+});
+
+describe("extractSlice (AC#5 — legacy seed_record_id coexists with source_record_id)", () => {
+  test("non-seed entity has both seed_record_id and a distinct source_record_id", async () => {
+    const tables = [table("tCash", "Cashflows", [{ targetId: "tPay", name: "Payments" }]), table("tPay", "Payments")];
+    const cashRecs = [
+      record("recCashSeed", { Name: "Seed cashflow", Payments: ["recPayChild"] }),
+    ];
+    const payRecs = [record("recPayChild", { Name: "Child payment" })];
+
+    const runSonnet = mockSonnet(() =>
+      staticSonnet([
+        {
+          type: "cashflow",
+          slug: "seed-cashflow",
+          body: "Seed.",
+          source_record_ids: ["recCashSeed"],
+        },
+        {
+          type: "payment",
+          slug: "child-payment",
+          body: "Child.",
+          source_record_ids: ["recPayChild"],
+        },
+      ]),
+    );
+
+    await extractSlice(
+      {
+        baseId: "appLegacy",
+        clusterId: "c-legacy",
+        clusterType: "knowledge-note",
+        tableIds: ["tCash", "tPay"],
+        seedRecordId: "recCashSeed",
+      },
+      {
+        fetch: mockFetch({
+          tables,
+          recordsByTable: { tCash: cashRecs, tPay: payRecs },
+        }),
+        runSonnet,
+        env: { AIRTABLE_API_KEY: "patFake" },
+        cacheDir: tmp,
+        runId: "run-ac5",
+        promptsPath,
+      },
+    );
+
+    const childMd = readFileSync(
+      join(tmp, "run-ac5", "out", "payment", "child-payment.md"),
+      "utf8",
+    );
+    expect(childMd).toContain("seed_record_id: recCashSeed");
+    expect(childMd).toContain("source_record_id: recPayChild");
+    expect(childMd).toContain("sources:");
   });
 });
 

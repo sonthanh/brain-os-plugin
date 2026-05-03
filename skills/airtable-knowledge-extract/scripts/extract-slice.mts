@@ -255,6 +255,118 @@ export function bfsFromSeed(
   return { keptRecordIds: kept, truncated, reason, estimatedTokens: tokens };
 }
 
+export function airtableRecordUrl(
+  baseId: string,
+  tableId: string,
+  recordId: string,
+): string {
+  return `https://airtable.com/${baseId}/${tableId}/${recordId}`;
+}
+
+export interface AiFieldEntry {
+  field: string;
+  value: string;
+}
+
+export function extractAiFields(
+  record: AirtableRecord,
+  table: AirtableTable,
+): AiFieldEntry[] {
+  const out: AiFieldEntry[] = [];
+  for (const f of table.fields) {
+    if (f.type !== "aiText") continue;
+    const v = record.fields[f.name];
+    let str: string | null = null;
+    if (typeof v === "string") {
+      str = v;
+    } else if (v && typeof v === "object") {
+      const candidate = (v as { value?: unknown }).value;
+      if (typeof candidate === "string") str = candidate;
+    }
+    if (str !== null && str.length > 0) {
+      out.push({ field: f.name, value: str });
+    }
+  }
+  return out;
+}
+
+export interface AttachmentSummary {
+  count: number;
+  firstUrl: string | null;
+}
+
+export function extractAttachments(
+  record: AirtableRecord,
+  table: AirtableTable,
+): AttachmentSummary {
+  let count = 0;
+  let firstUrl: string | null = null;
+  for (const f of table.fields) {
+    if (f.type !== "multipleAttachments") continue;
+    const v = record.fields[f.name];
+    if (!Array.isArray(v)) continue;
+    for (const att of v) {
+      if (att && typeof att === "object" && typeof (att as { url?: unknown }).url === "string") {
+        count += 1;
+        if (firstUrl === null) firstUrl = (att as { url: string }).url;
+      }
+    }
+  }
+  return { count, firstUrl };
+}
+
+export interface RelatedLink {
+  slug: string;
+  recordId: string;
+  tableName: string;
+}
+
+export function buildSlugMap(entities: ExtractedEntity[]): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const e of entities) {
+    for (const rid of e.source_record_ids) {
+      if (!m.has(rid)) m.set(rid, e.slug);
+    }
+  }
+  return m;
+}
+
+export function findRelatedWikilinks(
+  entity: ExtractedEntity,
+  recordsById: Map<string, AirtableRecord>,
+  recordToTable: Map<string, string>,
+  tablesById: Map<string, AirtableTable>,
+  slugMap: Map<string, string>,
+): RelatedLink[] {
+  const out: RelatedLink[] = [];
+  const seen = new Set<string>();
+  for (const recId of entity.source_record_ids) {
+    const rec = recordsById.get(recId);
+    if (!rec) continue;
+    const tableId = recordToTable.get(recId);
+    if (!tableId) continue;
+    const table = tablesById.get(tableId);
+    if (!table) continue;
+    for (const f of table.fields) {
+      if (f.type !== "multipleRecordLinks") continue;
+      const v = rec.fields[f.name];
+      if (!Array.isArray(v)) continue;
+      for (const linkedId of v) {
+        if (typeof linkedId !== "string") continue;
+        const slug = slugMap.get(linkedId);
+        if (!slug) continue;
+        if (slug === entity.slug) continue;
+        if (seen.has(slug)) continue;
+        seen.add(slug);
+        const linkedTableId = recordToTable.get(linkedId) ?? "";
+        const linkedTableName = tablesById.get(linkedTableId)?.name ?? linkedTableId;
+        out.push({ slug, recordId: linkedId, tableName: linkedTableName });
+      }
+    }
+  }
+  return out;
+}
+
 export function buildSubgraphContext(
   recordsById: Map<string, AirtableRecord>,
   keptIds: Set<string>,
@@ -448,10 +560,32 @@ function yamlScalar(v: unknown): string {
   return JSON.stringify(String(v));
 }
 
+export interface EntityRenderExtras {
+  source_record_id: string;
+  source_table: string | null;
+  source_url: string | null;
+  ai_fields: AiFieldEntry[];
+  attachments_count: number;
+  first_attachment_url: string | null;
+  related_links: RelatedLink[];
+}
+
+function appendRelatedSection(body: string, links: RelatedLink[]): string {
+  const newLinks = links.filter((l) => !body.includes(`[[${l.slug}]]`));
+  if (newLinks.length === 0) return body;
+  const trailing = body.endsWith("\n") ? "" : "\n";
+  const lines = ["", "## Related", ""];
+  for (const l of newLinks) {
+    lines.push(`- [[${l.slug}]] (${l.tableName} \`${l.recordId}\`)`);
+  }
+  return `${body}${trailing}${lines.join("\n")}\n`;
+}
+
 function renderEntityMarkdown(
   e: ExtractedEntity,
   input: ExtractSliceInput,
   ts: string,
+  extras: EntityRenderExtras,
 ): string {
   const lines: string[] = [];
   lines.push("---");
@@ -461,10 +595,30 @@ function renderEntityMarkdown(
   lines.push(`cluster_id: ${input.clusterId}`);
   lines.push(`cluster_type: ${input.clusterType}`);
   lines.push(`seed_record_id: ${input.seedRecordId}`);
+  lines.push(`source_record_id: ${extras.source_record_id}`);
+  if (extras.source_table) {
+    lines.push(`source_table: ${yamlScalar(extras.source_table)}`);
+  }
+  if (extras.source_url) {
+    lines.push(`source_url: ${yamlScalar(extras.source_url)}`);
+  }
   lines.push(`extracted_at: ${ts}`);
   lines.push(`sources:`);
   for (const rid of e.source_record_ids) {
     lines.push(`  - ${rid}`);
+  }
+  if (extras.ai_fields.length > 0) {
+    lines.push("ai_fields:");
+    for (const f of extras.ai_fields) {
+      lines.push(`  - field: ${yamlScalar(f.field)}`);
+      lines.push(`    value: ${yamlScalar(f.value)}`);
+    }
+  }
+  if (extras.attachments_count > 0) {
+    lines.push(`attachments_count: ${extras.attachments_count}`);
+    if (extras.first_attachment_url) {
+      lines.push(`first_attachment_url: ${yamlScalar(extras.first_attachment_url)}`);
+    }
   }
   if (e.frontmatter) {
     for (const [k, v] of Object.entries(e.frontmatter)) {
@@ -482,8 +636,9 @@ function renderEntityMarkdown(
   }
   lines.push("---");
   lines.push("");
-  lines.push(e.body);
-  if (!e.body.endsWith("\n")) lines.push("");
+  const body = appendRelatedSection(e.body, extras.related_links);
+  lines.push(body);
+  if (!body.endsWith("\n")) lines.push("");
   return lines.join("\n");
 }
 
@@ -662,10 +817,57 @@ export async function extractSlice(
 
   const ts = now();
   const entityPaths: string[] = [];
+  const slugMap = buildSlugMap(entities);
   for (const e of entities) {
+    const primarySourceId = e.source_record_ids[0] ?? input.seedRecordId;
+    const primaryTableId = recordToTable.get(primarySourceId) ?? null;
+    const primaryTable = primaryTableId
+      ? tablesById.get(primaryTableId) ?? null
+      : null;
+    const sourceTable = primaryTable?.name ?? null;
+    const sourceUrl = primaryTableId
+      ? airtableRecordUrl(input.baseId, primaryTableId, primarySourceId)
+      : null;
+
+    const aiFields: AiFieldEntry[] = [];
+    let attachmentsCount = 0;
+    let firstAttachmentUrl: string | null = null;
+    for (const recId of e.source_record_ids) {
+      const rec = recordsById.get(recId);
+      if (!rec) continue;
+      const tId = recordToTable.get(recId);
+      if (!tId) continue;
+      const t = tablesById.get(tId);
+      if (!t) continue;
+      aiFields.push(...extractAiFields(rec, t));
+      const att = extractAttachments(rec, t);
+      attachmentsCount += att.count;
+      if (firstAttachmentUrl === null && att.firstUrl !== null) {
+        firstAttachmentUrl = att.firstUrl;
+      }
+    }
+
+    const relatedLinks = findRelatedWikilinks(
+      e,
+      recordsById,
+      recordToTable,
+      tablesById,
+      slugMap,
+    );
+
+    const extras: EntityRenderExtras = {
+      source_record_id: primarySourceId,
+      source_table: sourceTable,
+      source_url: sourceUrl,
+      ai_fields: aiFields,
+      attachments_count: attachmentsCount,
+      first_attachment_url: firstAttachmentUrl,
+      related_links: relatedLinks,
+    };
+
     const path = join(outDir, e.type, `${slugify(e.slug)}.md`);
     mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, renderEntityMarkdown(e, input, ts));
+    writeFileSync(path, renderEntityMarkdown(e, input, ts, extras));
     entityPaths.push(path);
   }
 
