@@ -372,7 +372,8 @@ export function parseSonnetEntityResponse(text: string): ExtractedEntity[] {
       throw new Error("Sonnet output: entity missing 'body'");
     }
     if (!Array.isArray(ee?.source_record_ids)) {
-      throw new Error("Sonnet output: entity missing 'source_record_ids'");
+      // Lenient — caller backfills from seedRecordId. See ai-brain#230.
+      ee.source_record_ids = [];
     }
   }
   return arr as ExtractedEntity[];
@@ -636,6 +637,11 @@ export async function extractSlice(
 
   const sonnetResp = await runSonnet(prompt, DEFAULT_MODEL);
   const entities = parseSonnetEntityResponse(sonnetResp.rawText);
+  for (const e of entities) {
+    if (e.source_record_ids.length === 0) {
+      e.source_record_ids = [input.seedRecordId];
+    }
+  }
 
   mkdirSync(runDir, { recursive: true });
   const costEvent: Record<string, unknown> = {

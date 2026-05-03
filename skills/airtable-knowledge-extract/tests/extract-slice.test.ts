@@ -417,6 +417,35 @@ describe("parseSonnetEntityResponse", () => {
       parseSonnetEntityResponse(JSON.stringify({ entities: [{ slug: "x" }] })),
     ).toThrow();
   });
+
+  test("lenient on missing source_record_ids — returns empty array (caller backfills)", () => {
+    const r = parseSonnetEntityResponse(
+      JSON.stringify({
+        entities: [{ type: "person", slug: "x", body: "y" }],
+      }),
+    );
+    expect(r).toHaveLength(1);
+    expect(r[0].source_record_ids).toEqual([]);
+  });
+
+  test("lenient on non-array source_record_ids (string, null) — returns empty array", () => {
+    const rString = parseSonnetEntityResponse(
+      JSON.stringify({
+        entities: [
+          { type: "person", slug: "a", body: "b", source_record_ids: "recX" },
+        ],
+      }),
+    );
+    expect(rString[0].source_record_ids).toEqual([]);
+    const rNull = parseSonnetEntityResponse(
+      JSON.stringify({
+        entities: [
+          { type: "person", slug: "c", body: "d", source_record_ids: null },
+        ],
+      }),
+    );
+    expect(rNull[0].source_record_ids).toEqual([]);
+  });
 });
 
 describe("buildSubgraphContext", () => {
@@ -546,6 +575,56 @@ describe("extractSlice (end-to-end CRM)", () => {
     const manifest = JSON.parse(readFileSync(result.manifestPath, "utf8"));
     expect(manifest.seed_record_id).toBe("recP1");
     expect(manifest.entities).toHaveLength(3);
+  });
+});
+
+describe("extractSlice — Sonnet output missing source_record_ids", () => {
+  test("backfills source_record_ids with seedRecordId so downstream render + manifest stay valid", async () => {
+    const tables = [table("tPeople", "Contacts")];
+    const peopleRecs = [record("recP1", { Name: "Alice Smith" })];
+
+    const runSonnet: SonnetRunner = async () => ({
+      rawText: JSON.stringify({
+        entities: [
+          { type: "person", slug: "alice-smith", body: "Alice Smith." },
+        ],
+      }),
+      usage: { input_tokens: 100, output_tokens: 50 },
+      model: "claude-sonnet-4-6",
+    });
+
+    const result = await extractSlice(
+      {
+        baseId: "appBase",
+        clusterId: "cluster-1",
+        clusterType: "crm",
+        tableIds: ["tPeople"],
+        seedRecordId: "recP1",
+      },
+      {
+        fetch: mockFetch({
+          tables,
+          recordsByTable: { tPeople: peopleRecs },
+        }),
+        runSonnet,
+        env: { AIRTABLE_API_KEY: "patFake" },
+        cacheDir: tmp,
+        runId: "run-fallback",
+        promptsPath,
+      },
+    );
+
+    expect(result.entities).toHaveLength(1);
+    expect(result.entities[0].source_record_ids).toEqual(["recP1"]);
+
+    const personPath = join(tmp, "run-fallback", "out", "person", "alice-smith.md");
+    expect(existsSync(personPath)).toBe(true);
+    const personMd = readFileSync(personPath, "utf8");
+    expect(personMd).toContain("sources:");
+    expect(personMd).toContain("recP1");
+
+    const manifest = JSON.parse(readFileSync(result.manifestPath, "utf8"));
+    expect(manifest.entities[0].source_record_ids).toEqual(["recP1"]);
   });
 });
 
