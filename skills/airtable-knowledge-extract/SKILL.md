@@ -23,7 +23,7 @@ This is a **Pattern B pipeline** (rationale: `{vault}/thinking/aha/2026-04-18-or
 
 ## Run
 
-Resolve the bases to process up-front via `scripts/list-bases.mts`, then chain the per-base pre-steps and the orchestrator inside one supaterm tab:
+Resolve the bases to process up-front via `scripts/active-bases.mts` (which internally calls `list-bases.mts`, applies the inclusion + exclusion rules from `references/base-selection-rules.md`, and emits the filtered set). Then chain the per-base pre-steps and the orchestrator inside one supaterm tab:
 
 ```bash
 RUN_ID="$(date -u +%Y-%m-%d)-airtable-extract"
@@ -31,8 +31,8 @@ SKILL_DIR="${CLAUDE_PLUGIN_ROOT}/skills/airtable-knowledge-extract"
 sp tab new --script "env -u CLAUDECODE bash -c '
   set -euo pipefail
   cd \"$SKILL_DIR\"
-  AIRTABLE_RUN_ID=\"$RUN_ID\" bun run scripts/list-bases.mts > /dev/null
-  for BASE_ID in <list-of-base-ids>; do
+  ACTIVE_IDS=\$(AIRTABLE_RUN_ID=\"$RUN_ID\" bun run scripts/active-bases.mts --ids)
+  for BASE_ID in \$ACTIVE_IDS; do
     AIRTABLE_RUN_ID=\"$RUN_ID\" bun run scripts/classify-clusters.mts \"\$BASE_ID\" > /dev/null
     AIRTABLE_RUN_ID=\"$RUN_ID\" bun run scripts/legacy-link-detector.mts \"\$BASE_ID\" > /dev/null
     AIRTABLE_RUN_ID=\"$RUN_ID\" bun run scripts/seed-selection.mts \"\$BASE_ID\" > /dev/null
@@ -43,6 +43,8 @@ sp tab new --script "env -u CLAUDECODE bash -c '
   sleep 10
 '"
 ```
+
+On the first invocation within a run-id, `active-bases.mts` writes both `~/.claude/airtable-extract-cache/<run-id>/bases.json` (raw Meta API listing, via the wrapped `list-bases.mts`) and `~/.claude/airtable-extract-cache/<run-id>/active-bases.json` (filter trace per base). On any subsequent invocation with the same run-id, the cached trace is read and the API probes are skipped.
 
 For the first run on a new base, keep `-P 1` so re-anchor's rung-0' shallow slice gates HITL approval before any parallel rung-1 sweep. Once the user has approved the re-anchor and the rubric, raise to `-P 5` for rung-1 throughput.
 
@@ -67,7 +69,8 @@ bun run ${CLAUDE_PLUGIN_ROOT}/skills/airtable-knowledge-extract/scripts/status.m
 |------|---------|
 | `~/.claude/airtable-extract-cache/<run-id>/state.json` | Orchestrator resume state (single source of truth for `--run-id` resume) |
 | `~/.claude/airtable-extract-cache/<run-id>/cost-meter.jsonl` | Per-call token usage (guard input + cumulative reporter) |
-| `~/.claude/airtable-extract-cache/<run-id>/bases.json` | Cached Airtable Meta API bases listing |
+| `~/.claude/airtable-extract-cache/<run-id>/bases.json` | Cached Airtable Meta API bases listing (raw, unfiltered) |
+| `~/.claude/airtable-extract-cache/<run-id>/active-bases.json` | Filter trace per base — `{id, name, included, excluded_by, last_activity, table_count}` |
 | `~/.claude/airtable-extract-cache/<run-id>/clusters-<base-id>.json` | Cluster classification cache (link-graph components) |
 | `~/.claude/airtable-extract-cache/<run-id>/seed-records-<base-id>-<cluster-id>.json` | Seed record selection cache |
 | `~/.claude/airtable-extract-cache/<run-id>/bases/<base-id>/out/<entity-type>/<slug>.md` | Extracted entity page — frontmatter + body with `[[wikilinks]]` to other extracted slugs |
