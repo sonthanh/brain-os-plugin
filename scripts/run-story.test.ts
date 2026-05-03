@@ -16,6 +16,8 @@ import {
   parseCoversAc,
   findUncoveredAc,
   formatUncoveredComment,
+  parseSubIssuesResponse,
+  getChildIssues,
   PreCheckBlockedError,
   runPreCheck,
   writeImplStoryLogRow,
@@ -162,6 +164,20 @@ describe("tickChecklist", () => {
     const result = tickChecklist(body, 146);
     expect(result).toContain("- [ ] All sub-issues closed");
     expect(result).toContain("- [x] #146 — child");
+  });
+
+  test("returns body unchanged for new-format Sub-issues list (no checkboxes)", () => {
+    // Phase 2 #219 settled list-only sub-issues format (no `[ ]` checkbox).
+    // tickChecklist must be a no-op so callers driving native-sub-issue parents
+    // don't accidentally mutate body. Regex doesn't match → no replacement.
+    const body = [
+      "## Sub-issues",
+      "",
+      "- #220 — child one",
+      "- #221 — child two",
+    ].join("\n");
+    expect(tickChecklist(body, 220)).toBe(body);
+    expect(tickChecklist(body, 221)).toBe(body);
   });
 });
 
@@ -388,6 +404,7 @@ describe("runStory — type:plan assertion", () => {
         createIssue: async () => {
           throw new Error("createIssue must not be called");
         },
+        viewSubIssues: async () => [],
       },
       spawn: {
         spawnWorker: () => {
@@ -440,11 +457,12 @@ describe("runStory — type:plan assertion", () => {
         createIssue: async () => {
           throw new Error("createIssue must not be called");
         },
+        viewSubIssues: async () => [],
       },
       spawn: {
         spawnWorker: () => {
           spawnCalls++;
-          throw new Error("spawnWorker must not be invoked when parent has no checklist children");
+          throw new Error("spawnWorker must not be invoked when parent has no children");
         },
         cleanupWorktree: () => {},
       },
@@ -464,7 +482,7 @@ describe("runStory — type:plan assertion", () => {
     // Confirms the type:plan guard did NOT fire for this case (no refusal
     // message); the empty-checklist abort path took over instead.
     expect(notifications.some((m) => m.includes("not type:plan"))).toBe(false);
-    expect(notifications.some((m) => m.includes("no checklist children"))).toBe(true);
+    expect(notifications.some((m) => m.includes("no children"))).toBe(true);
   });
 });
 
@@ -603,7 +621,13 @@ describe("formatUncoveredComment", () => {
 
 // runPreCheck integration — uses an in-memory GhClient that records each
 // addComment call so tests can assert both the throw AND the comment content.
-function makeGh(bodies: Record<number, { body: string; labels?: string[]; state?: State }>): {
+// `subIssues` maps parent → native sub-issue numbers (Phase 2 #219 format);
+// unmapped parents default to []  so `getChildIssues` falls back to the
+// `parseChecklist(parentBody)` path used by legacy parents.
+function makeGh(
+  bodies: Record<number, { body: string; labels?: string[]; state?: State }>,
+  subIssues: Record<number, number[]> = {},
+): {
   gh: GhClient;
   comments: Array<{ n: number; body: string }>;
 } {
@@ -633,9 +657,134 @@ function makeGh(bodies: Record<number, { body: string; labels?: string[]; state?
     createIssue: async () => {
       throw new Error("createIssue must not be called in this test");
     },
+    viewSubIssues: async (n) => subIssues[n] ?? [],
   };
   return { gh, comments };
 }
+
+describe("parseSubIssuesResponse", () => {
+  test("returns sorted issue numbers from GraphQL nodes (sub-issue panel order is not stable)", () => {
+    const json = JSON.stringify({
+      data: {
+        repository: {
+          issue: {
+            subIssues: { nodes: [{ number: 222 }, { number: 220 }, { number: 223 }, { number: 221 }] },
+          },
+        },
+      },
+    });
+    expect(parseSubIssuesResponse(json)).toEqual([220, 221, 222, 223]);
+  });
+
+  test("returns [] when sub-issues panel is empty (legacy parent without native links)", () => {
+    const json = JSON.stringify({
+      data: { repository: { issue: { subIssues: { nodes: [] } } } },
+    });
+    expect(parseSubIssuesResponse(json)).toEqual([]);
+  });
+
+  test("returns [] when subIssues field is null (older repo schema variant)", () => {
+    const json = JSON.stringify({
+      data: { repository: { issue: { subIssues: null } } },
+    });
+    expect(parseSubIssuesResponse(json)).toEqual([]);
+  });
+
+  test("throws on malformed JSON (caller should propagate, not silently fall back)", () => {
+    expect(() => parseSubIssuesResponse("not-json")).toThrow();
+  });
+});
+
+describe("getChildIssues", () => {
+  test("prefers native sub-issues when GraphQL returns non-empty (ignores parent body checklist entirely)", async () => {
+    // Even a parent whose body still has a checklist should follow native
+    // links once they exist — Phase 2 stories may have stale checklists
+    // during the migration window.
+    const { gh } = makeGh({}, { 300: [220, 221, 222] });
+    const result = await getChildIssues(300, gh, "- [ ] #999\n- [ ] #888");
+    expect(result).toEqual([220, 221, 222]);
+  });
+
+  test("falls back to parseChecklist when native sub-issues empty (legacy parent)", async () => {
+    const { gh } = makeGh({});
+    const body = "## Sub-issues\n\n- [ ] #100\n- [ ] #101";
+    expect(await getChildIssues(500, gh, body)).toEqual([100, 101]);
+  });
+
+  test("returns [] when both native list and checklist are empty", async () => {
+    const { gh } = makeGh({});
+    expect(await getChildIssues(500, gh, "no children listed")).toEqual([]);
+  });
+});
+
+// Snapshot of the #219 Phase 2 parent body shape: list-only Sub-issues +
+// bullet AC. Snapshotted (not live) so the test stays stable when #219 closes.
+const PARENT_219_BODY_FIXTURE = [
+  "## User Story",
+  "Brain-os operator running /impl per-child needs parent stories to auto-close.",
+  "",
+  "## Sub-issues",
+  "",
+  "- #220 — /impl per-child — post evidence comments + spawn /impl story (#219 C2)",
+  "- #221 — run-story.ts — tickAcceptance + drop form-(i) + Verification detect (#219 C3)",
+  "- #222 — /slice update — addSubIssue + Sub-issues list-only + bullet AC (#219 C1)",
+  "- #223 — ac-coverage-spec.md — form-(ii) canonical + bullet AC + Verification (#219 C4)",
+  "",
+  "## Acceptance",
+  "",
+  "- [ ] **AC#1** — /impl per-child posts evidence comments — covered by #220",
+  "- [ ] **AC#2** — /impl per-child spawns /impl story on last close — covered by #220",
+  "- [ ] **AC#3** — tickAcceptance() function exists + called in Gate C — covered by #221",
+  "- [ ] **AC#4** — Gate C drops form-(i), uses form-(ii); Verification section detect — covered by #221",
+  "- [ ] **AC#5** — /slice Step 6/7/8 updated — covered by #222",
+  "- [ ] **AC#6** — ac-coverage-spec.md updated — covered by #223",
+].join("\n");
+
+describe("runPreCheck — native sub-issue parents (#219 fixture)", () => {
+  test("Phase 2 native-sub-issue parent: 4 children discovered via GraphQL, all 6 ACs covered → success", async () => {
+    const { gh, comments } = makeGh(
+      {
+        219: { body: PARENT_219_BODY_FIXTURE },
+        220: { body: "## Covers AC\n\n- AC#1\n- AC#2\n\n## What to build\n\nfoo" },
+        221: { body: "## Covers AC\n\n- AC#3\n- AC#4\n\n## What to build\n\nfoo" },
+        222: { body: "## Covers AC\n\n- AC#5\n\n## What to build\n\nfoo" },
+        223: { body: "## Covers AC\n\n- AC#6\n\n## What to build\n\nfoo" },
+      },
+      { 219: [220, 221, 222, 223] },
+    );
+    const logs: string[] = [];
+    await expect(
+      runPreCheck(219, { gh, logger: { log: (m) => logs.push(m) } }),
+    ).resolves.toBeUndefined();
+    expect(comments).toHaveLength(0);
+    expect(logs.some((l) => l.includes("all 6 AC covered"))).toBe(true);
+  });
+
+  test("legacy parent (checklist only, no native sub-issues) still passes — fallback regression guard", async () => {
+    const { gh, comments } = makeGh({
+      400: {
+        body: [
+          "## Sub-issues",
+          "- [ ] #401",
+          "- [ ] #402",
+          "",
+          "## Acceptance",
+          "",
+          "- [ ] **AC#1** — first.",
+          "- [ ] **AC#2** — second.",
+        ].join("\n"),
+      },
+      401: { body: "## Covers AC\n\n- AC#1\n\n## What to build" },
+      402: { body: "## Covers AC\n\n- AC#2\n\n## What to build" },
+    });
+    const logs: string[] = [];
+    await expect(
+      runPreCheck(400, { gh, logger: { log: (m) => logs.push(m) } }),
+    ).resolves.toBeUndefined();
+    expect(comments).toHaveLength(0);
+    expect(logs.some((l) => l.includes("all 2 AC covered"))).toBe(true);
+  });
+});
 
 describe("runPreCheck — Gate B", () => {
   test("legacy parent without ## Acceptance bullets → skips entirely (no comment, no throw)", async () => {
@@ -1144,6 +1293,7 @@ function makeCloseGateGh(initial: Record<number, { body: string; labels?: string
       events.push(`createIssue(${n})`);
       return n;
     },
+    viewSubIssues: async () => [],
   };
   return { gh, bodies, events, createdIssues };
 }
@@ -1563,6 +1713,7 @@ describe("runStory — replay: live-AC child + advisor 3x reject → hitl-fallba
         editBody: async () => {},
         closeIssue: async () => {},
         relabelHuman: async () => {},
+        viewSubIssues: async () => [],
       },
       spawn: {
         spawnWorker: () => ({ pid: 12345 }),
@@ -1698,6 +1849,7 @@ describe("runStory — Gate C wiring", () => {
         createIssue: async () => {
           throw new Error("createIssue intentionally throws so Phase 2 short-circuits to Phase 3");
         },
+        viewSubIssues: async () => [],
       },
       spawn: {
         spawnWorker: () => ({ pid: 1 }),
@@ -1774,6 +1926,7 @@ describe("runStory — Gate C wiring", () => {
         createIssue: async () => {
           throw new Error("createIssue must not be called when gate passes");
         },
+        viewSubIssues: async () => [],
       },
       spawn: {
         spawnWorker: () => ({ pid: 1 }),

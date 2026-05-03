@@ -64,6 +64,36 @@ export function parseChecklist(body: string): number[] {
   return nums;
 }
 
+// Parse the JSON envelope returned by `gh api graphql` for the
+// repository.issue.subIssues query. Sorted ascending because GraphQL
+// does not guarantee node order. Empty when subIssues is null OR nodes
+// is empty (legacy parents without native links). Throws on malformed
+// JSON — callers MUST propagate (silent fallback would mask real
+// GraphQL errors and is a future debugging nightmare).
+export function parseSubIssuesResponse(json: string): number[] {
+  const data = JSON.parse(json);
+  const nodes: Array<{ number: number }> | null | undefined =
+    data?.data?.repository?.issue?.subIssues?.nodes;
+  if (!nodes || nodes.length === 0) return [];
+  return nodes.map((n) => n.number).sort((a, b) => a - b);
+}
+
+// Discover a parent's child issue numbers. Native GitHub sub-issues
+// (Phase 2 #219 settled format) are authoritative when present; legacy
+// parents that pre-date sub-issue links fall back to the body checklist.
+// Both sites that need child enumeration (Gate B pre-check, Gate C
+// recheck, main drain loop) already hold parentBody, so it is passed
+// in to avoid a redundant fetch.
+export async function getChildIssues(
+  parent: number,
+  gh: { viewSubIssues: (n: number) => Promise<number[]> },
+  parentBody: string,
+): Promise<number[]> {
+  const native = await gh.viewSubIssues(parent);
+  if (native.length > 0) return native;
+  return parseChecklist(parentBody);
+}
+
 // Parent ## Acceptance bullet parser. Source of truth for the regex shape:
 // references/ac-coverage-spec.md § 3.1. Em-dash literal is U+2014.
 // Spec mandates global match (multiple bullets per body), so we matchAll
@@ -419,6 +449,13 @@ export interface GhClient {
    * Phase 2 to file evidence-gathering children.
    */
   createIssue(opts: CreateIssueOpts): Promise<number>;
+  /**
+   * List native GitHub sub-issues of a parent via `gh api graphql`. Used by
+   * `getChildIssues` to prefer Phase 2 native links over legacy body
+   * checklists. Returns sorted issue numbers; empty when the parent has no
+   * sub-issue links (caller falls back to `parseChecklist`).
+   */
+  viewSubIssues(parent: number): Promise<number[]>;
 }
 
 export interface CreateIssueOpts {
@@ -687,6 +724,28 @@ export class RealGh implements GhClient {
     }
     return Number(m[1]);
   }
+
+  async viewSubIssues(parent: number): Promise<number[]> {
+    const [owner, name] = this.repo.split("/");
+    if (!owner || !name) {
+      throw new Error(`viewSubIssues: malformed repo "${this.repo}" — expected "owner/name"`);
+    }
+    const query =
+      'query($owner:String!,$name:String!,$num:Int!){repository(owner:$owner,name:$name){issue(number:$num){subIssues(first:50){nodes{number}}}}}';
+    const json = await this.run([
+      "api",
+      "graphql",
+      "-f",
+      `query=${query}`,
+      "-F",
+      `owner=${owner}`,
+      "-F",
+      `name=${name}`,
+      "-F",
+      `num=${parent}`,
+    ]);
+    return parseSubIssuesResponse(json);
+  }
 }
 
 export class RealSpawn implements SpawnClient {
@@ -926,7 +985,7 @@ export async function runPreCheck(
     `pre-check: parent #${parent} has ${parentAcIds.length} AC bullets: [${parentAcIds.join(",")}]`,
   );
 
-  const childNums = parseChecklist(parentFull.body);
+  const childNums = await getChildIssues(parent, gh, parentFull.body);
   const childCoverage = new Map<number, Set<number>>();
   for (const n of childNums) {
     const child = await gh.viewFull(n);
@@ -1008,7 +1067,7 @@ export async function runCloseGate(
     const parentAc = parseAcceptance(parentFull.body);
     if (parentAc.size === 0) return { missing: [], childCount: 0, parentFull, parentAc };
     const parentAcIds = [...parentAc.keys()].sort((a, b) => a - b);
-    const childNums = parseChecklist(parentFull.body);
+    const childNums = await getChildIssues(parent, gh, parentFull.body);
     const closedCovers = new Map<number, Set<number>>();
     for (const n of childNums) {
       const c = await gh.viewFull(n);
@@ -1261,10 +1320,10 @@ export async function runStory(
     notify.notify(`#${parent} not type:plan, refuse to drain. Use /impl ${parent} for single-issue tdd.`);
     return { closed: [], failed: [] };
   }
-  const childNums = parseChecklist(parentFull.body);
+  const childNums = await getChildIssues(parent, gh, parentFull.body);
   if (childNums.length === 0) {
-    logger.log(`ERROR: no checklist children found in parent #${parent}`);
-    notify.notify(`Story #${parent} — no checklist children found, aborting`);
+    logger.log(`ERROR: no children found in parent #${parent} (neither native sub-issues nor body checklist)`);
+    notify.notify(`Story #${parent} — no children found, aborting`);
     return { closed: [], failed: [] };
   }
   logger.log(`children: ${childNums.join(", ")}`);
