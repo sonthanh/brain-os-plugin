@@ -395,23 +395,33 @@ export class SliceRejectedError extends Error {
   }
 }
 
-function recordSlugCandidates(
+const SUFFIX_MATCH_MIN_LEN = 3;
+
+type MatchTier = "" | "strict" | "suffix";
+
+function classifyRecordMatch(
   rec: AirtableRecord,
   table: AirtableTable,
-  entityType: string,
-): Set<string> {
-  const out = new Set<string>();
+  entity: ExtractedEntity,
+): MatchTier {
   const fieldNames = new Set<string>();
   const primary = table.fields[0]?.name;
   if (primary) fieldNames.add(primary);
   fieldNames.add("Name");
+  let tier: MatchTier = "";
   for (const fname of fieldNames) {
     const v = rec.fields[fname];
     if (typeof v !== "string" || v.length === 0) continue;
-    out.add(slugify(v));
-    if (entityType.length > 0) out.add(slugify(`${entityType}-${v}`));
+    const sv = slugify(v);
+    if (sv === entity.slug) return "strict";
+    if (entity.type.length > 0 && slugify(`${entity.type}-${v}`) === entity.slug) {
+      return "strict";
+    }
+    if (sv.length >= SUFFIX_MATCH_MIN_LEN && entity.slug.endsWith(`-${sv}`)) {
+      tier = "suffix";
+    }
   }
-  return out;
+  return tier;
 }
 
 export function findSourceRecordByEntity(
@@ -420,16 +430,18 @@ export function findSourceRecordByEntity(
   recordToTable: Map<string, string>,
   tablesById: Map<string, AirtableTable>,
 ): ReverseLookupResult {
-  const matches: string[] = [];
+  const strict: string[] = [];
+  const suffix: string[] = [];
   for (const [recId, rec] of recordsById) {
     const tableId = recordToTable.get(recId);
     if (!tableId) continue;
     const table = tablesById.get(tableId);
     if (!table) continue;
-    if (recordSlugCandidates(rec, table, entity.type).has(entity.slug)) {
-      matches.push(recId);
-    }
+    const tier = classifyRecordMatch(rec, table, entity);
+    if (tier === "strict") strict.push(recId);
+    else if (tier === "suffix") suffix.push(recId);
   }
+  const matches = strict.length > 0 ? strict : suffix;
   if (matches.length === 0) return { recordId: null, reason: "no-match" };
   if (matches.length > 1) {
     return { recordId: null, reason: "ambiguous", candidates: matches };

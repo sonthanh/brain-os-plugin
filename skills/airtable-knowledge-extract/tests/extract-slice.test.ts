@@ -2371,6 +2371,93 @@ describe("extractSlice (ai-brain#234 — per-entity provenance deterministic acr
     });
   });
 
+  test("findSourceRecordByEntity matches free-form-prefixed slug under orphan cluster (entity.type='entity', slug='payment-ap09252025d', primary='AP09252025d')", () => {
+    // Real cached v6 entity shape: cluster_type=orphan collapses entity.type to
+    // generic 'entity', but Sonnet still emits semantic prefixes in the slug
+    // (e.g. 'payment-...'). Strict tier (direct + type-prefix-explicit) misses
+    // because slugify('entity-AP09252025d') = 'entity-ap09252025d' != slug.
+    // Tier-2 suffix fallback (slug.endsWith('-' + slugify(primary))) is the
+    // only path that resolves this shape.
+    const t: AirtableTable = {
+      id: "tPay",
+      name: "Payments",
+      fields: [{ id: "fp", name: "Reference", type: "singleLineText" }],
+    };
+    const recs = new Map<string, AirtableRecord>([
+      ["recPay", record("recPay", { Reference: "AP09252025d" })],
+    ]);
+    const recordToTable = new Map<string, string>([["recPay", "tPay"]]);
+    const tablesById = new Map<string, AirtableTable>([["tPay", t]]);
+    const entity: ExtractedEntity = {
+      type: "entity",
+      slug: "payment-ap09252025d",
+      body: "",
+      source_record_ids: [],
+    };
+    expect(findSourceRecordByEntity(entity, recs, recordToTable, tablesById)).toEqual({
+      recordId: "recPay",
+      reason: "match",
+    });
+  });
+
+  test("findSourceRecordByEntity prefers strict match over suffix match when both present", () => {
+    // recA: primary "BT-001" (strict via type-prefix), recB: primary "Some BT-001" (suffix only).
+    // Strict tier wins; suffix tier is only consulted when strict yields zero matches.
+    const t: AirtableTable = {
+      id: "tPay",
+      name: "Payments",
+      fields: [{ id: "fp", name: "Reference", type: "singleLineText" }],
+    };
+    const recs = new Map<string, AirtableRecord>([
+      ["recA", record("recA", { Reference: "BT-001" })],
+      ["recB", record("recB", { Reference: "Some BT-001" })],
+    ]);
+    const recordToTable = new Map<string, string>([
+      ["recA", "tPay"],
+      ["recB", "tPay"],
+    ]);
+    const tablesById = new Map<string, AirtableTable>([["tPay", t]]);
+    const entity: ExtractedEntity = {
+      type: "payment",
+      slug: "payment-bt-001",
+      body: "",
+      source_record_ids: [],
+    };
+    expect(findSourceRecordByEntity(entity, recs, recordToTable, tablesById)).toEqual({
+      recordId: "recA",
+      reason: "match",
+    });
+  });
+
+  test("findSourceRecordByEntity returns ambiguous when multiple records suffix-match (strict tier empty)", () => {
+    // Two records whose slugified primary collapses to the same suffix —
+    // entity.slug ends with that suffix, strict tier yields zero, suffix tier
+    // surfaces both → ambiguous (escalation).
+    const t: AirtableTable = {
+      id: "tPay",
+      name: "Payments",
+      fields: [{ id: "fp", name: "Reference", type: "singleLineText" }],
+    };
+    const recs = new Map<string, AirtableRecord>([
+      ["recA", record("recA", { Reference: "AP09252025d" })],
+      ["recB", record("recB", { Reference: "ap09252025d" })],
+    ]);
+    const recordToTable = new Map<string, string>([
+      ["recA", "tPay"],
+      ["recB", "tPay"],
+    ]);
+    const tablesById = new Map<string, AirtableTable>([["tPay", t]]);
+    const entity: ExtractedEntity = {
+      type: "entity",
+      slug: "payment-ap09252025d",
+      body: "",
+      source_record_ids: [],
+    };
+    const r = findSourceRecordByEntity(entity, recs, recordToTable, tablesById);
+    expect(r.reason).toBe("ambiguous");
+    expect(r.candidates?.sort()).toEqual(["recA", "recB"]);
+  });
+
   test("extractSlice writes escalation.md and throws when reverse-lookup has no match", async () => {
     const tables = [table("tA", "Things")];
     const recs = [record("recSeed", { Name: "different-thing" })];
