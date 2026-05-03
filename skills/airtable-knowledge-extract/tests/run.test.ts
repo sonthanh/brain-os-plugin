@@ -1141,17 +1141,20 @@ describe("acceptance #235 — review-invocation path layout", () => {
     ];
     for (const f of files) {
       const src = readFileSync(join(scriptsDir, f), "utf8");
+      // Match `basePath`, `opts.basePath`, `deps.basePath`, `input.basePath`
+      // joined with the rubric filenames — any per-base path construction.
       expect(src).not.toMatch(
-        /join\(\s*basePath\s*,\s*["']meta-rubric\.md["']/,
+        /join\([^,]*basePath[^,]*,\s*["']meta-rubric\.md["']/,
       );
       expect(src).not.toMatch(
-        /join\(\s*basePath\s*,\s*["']rubric-questions\.md["']/,
+        /join\([^,]*basePath[^,]*,\s*["']rubric-questions\.md["']/,
+      );
+      // basesDir + baseId + rubric file pattern (the original mismatch).
+      expect(src).not.toMatch(
+        /join\([^,]*basesDir[^,]*,\s*[^,]*,\s*["']meta-rubric\.md["']/,
       );
       expect(src).not.toMatch(
-        /join\(\s*[^,]*basesDir[^,]*,\s*[^,]*,\s*["']meta-rubric\.md["']/,
-      );
-      expect(src).not.toMatch(
-        /join\(\s*[^,]*basesDir[^,]*,\s*[^,]*,\s*["']rubric-questions\.md["']/,
+        /join\([^,]*basesDir[^,]*,\s*[^,]*,\s*["']rubric-questions\.md["']/,
       );
     }
   });
