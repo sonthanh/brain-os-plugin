@@ -2458,6 +2458,53 @@ describe("extractSlice (ai-brain#234 — per-entity provenance deterministic acr
     expect(r.candidates?.sort()).toEqual(["recA", "recB"]);
   });
 
+  test("reverse-lookup matches non-primary unique field", () => {
+    // ai-brain#236: Payments table primary='Payer Name' is shared across rows
+    // (e.g. "Staronline Project"); the natural key the slug grounds on lives in
+    // the non-primary 'Reference Number' field. Pre-#236 classifyRecordMatch only
+    // scanned primary + literal "Name" → no-match → SliceRejectedError. Widened
+    // scan inspects every string-bearing field and finds recA via Reference Number.
+    const t: AirtableTable = {
+      id: "tPay",
+      name: "Payments",
+      fields: [
+        { id: "fPayer", name: "Payer Name", type: "singleLineText" },
+        { id: "fRef", name: "Reference Number", type: "singleLineText" },
+      ],
+    };
+    const recs = new Map<string, AirtableRecord>([
+      [
+        "recA",
+        record("recA", {
+          "Payer Name": "Staronline Project",
+          "Reference Number": "AP09252025D",
+        }),
+      ],
+      [
+        "recB",
+        record("recB", {
+          "Payer Name": "Staronline Project",
+          "Reference Number": "AP10012025E",
+        }),
+      ],
+    ]);
+    const recordToTable = new Map<string, string>([
+      ["recA", "tPay"],
+      ["recB", "tPay"],
+    ]);
+    const tablesById = new Map<string, AirtableTable>([["tPay", t]]);
+    const entity: ExtractedEntity = {
+      type: "entity",
+      slug: "payment-ap09252025d",
+      body: "",
+      source_record_ids: [],
+    };
+    expect(findSourceRecordByEntity(entity, recs, recordToTable, tablesById)).toEqual({
+      recordId: "recA",
+      reason: "match",
+    });
+  });
+
   test("extractSlice writes escalation.md and throws when reverse-lookup has no match", async () => {
     const tables = [table("tA", "Things")];
     const recs = [record("recSeed", { Name: "different-thing" })];

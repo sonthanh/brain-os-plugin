@@ -404,13 +404,17 @@ function classifyRecordMatch(
   table: AirtableTable,
   entity: ExtractedEntity,
 ): MatchTier {
-  const fieldNames = new Set<string>();
-  const primary = table.fields[0]?.name;
-  if (primary) fieldNames.add(primary);
-  fieldNames.add("Name");
   let tier: MatchTier = "";
-  for (const fname of fieldNames) {
-    const v = rec.fields[fname];
+  for (const f of table.fields) {
+    if (
+      f.type !== "singleLineText" &&
+      f.type !== "multilineText" &&
+      f.type !== "richText" &&
+      f.type !== "formula" &&
+      f.type !== "rollup" &&
+      f.type !== "lookup"
+    ) continue;
+    const v = rec.fields[f.name];
     if (typeof v !== "string" || v.length === 0) continue;
     const sv = slugify(v);
     if (sv === entity.slug) return "strict";
