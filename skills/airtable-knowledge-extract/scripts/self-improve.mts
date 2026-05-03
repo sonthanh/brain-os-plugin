@@ -35,9 +35,15 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+import {
+  HITL_PENDING_EXIT_CODE,
+  HitlPendingError,
+  makeWakeToken,
+} from "./hitl.mts";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -99,6 +105,26 @@ export interface SelfImproveResult {
   examples_path: string;
   appended: number;
   triples: ExampleTriple[];
+}
+
+export interface SelfImproveDecisionNeededPayload {
+  phase: "self-improve";
+  base_id: string;
+  rung: number;
+  slice_id: string;
+  raw: unknown;
+  reasoning: string;
+  fail_modes: string[];
+  decision_path: string;
+  wake_token: string;
+}
+
+export function correctionNeededPathFor(basePath: string, sliceId: string): string {
+  return join(basePath, "corrections", `correction-needed-${sliceId}.json`);
+}
+
+export function correctionDecidedPathFor(basePath: string, sliceId: string): string {
+  return join(basePath, "corrections", `correction-decided-${sliceId}.json`);
 }
 
 // ---------------------------------------------------------------------------
@@ -184,7 +210,90 @@ export function appendTriples(
 }
 
 // ---------------------------------------------------------------------------
-// Default HITL impl — write template, notify, poll for user save
+// Default HITL — export-decision-and-exit (issue #232)
+// ---------------------------------------------------------------------------
+
+export function buildSelfImproveDecisionNeeded(args: {
+  reject: RejectedSlice;
+  baseId: string;
+  rung: number;
+  decisionPath: string;
+  wakeToken: string;
+}): SelfImproveDecisionNeededPayload {
+  return {
+    phase: "self-improve",
+    base_id: args.baseId,
+    rung: args.rung,
+    slice_id: args.reject.slice_id,
+    raw: args.reject.raw,
+    reasoning: args.reject.reasoning,
+    fail_modes: args.reject.fail_modes ?? [],
+    decision_path: args.decisionPath,
+    wake_token: args.wakeToken,
+  };
+}
+
+export function parseSelfImproveDecisionFile(raw: string): UserCorrection {
+  let obj: unknown;
+  try {
+    obj = JSON.parse(raw);
+  } catch (err) {
+    throw new Error(
+      `self-improve decision file: JSON parse failed — ${(err as Error).message}`,
+    );
+  }
+  if (!obj || typeof obj !== "object") {
+    throw new Error("self-improve decision file: must be a JSON object");
+  }
+  const o = obj as Record<string, unknown>;
+  if (!("corrected" in o)) {
+    throw new Error(
+      "self-improve decision file: 'corrected' key required",
+    );
+  }
+  if (typeof o.reason !== "string" || o.reason.length === 0) {
+    throw new Error(
+      "self-improve decision file: 'reason' (non-empty string) required",
+    );
+  }
+  return { corrected: o.corrected, reason: o.reason };
+}
+
+export function defaultExportAndExitPromptUser(opts: {
+  uuid?: () => string;
+}): UserPromptFn {
+  const uuid = opts.uuid ?? makeWakeToken;
+  return async (reject, ctx) => {
+    mkdirSync(ctx.workspaceDir, { recursive: true });
+    const decisionPath = join(
+      ctx.workspaceDir,
+      `correction-decided-${reject.slice_id}.json`,
+    );
+    if (existsSync(decisionPath)) {
+      const correction = parseSelfImproveDecisionFile(
+        readFileSync(decisionPath, "utf8"),
+      );
+      unlinkSync(decisionPath);
+      return correction;
+    }
+    const neededPath = join(
+      ctx.workspaceDir,
+      `correction-needed-${reject.slice_id}.json`,
+    );
+    const payload = buildSelfImproveDecisionNeeded({
+      reject,
+      baseId: ctx.base_id,
+      rung: ctx.rung,
+      decisionPath,
+      wakeToken: uuid(),
+    });
+    writeFileSync(neededPath, `${JSON.stringify(payload, null, 2)}\n`);
+    throw new HitlPendingError([neededPath]);
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Legacy HITL — file-poll prompt (opt-in via --strict-stdin-hitl)
 // ---------------------------------------------------------------------------
 
 const POLL_INTERVAL_MS = 1_000;
@@ -216,7 +325,7 @@ function renderCorrectionTemplate(
   );
 }
 
-async function defaultPromptUser(
+async function strictFilePollPromptUser(
   reject: RejectedSlice,
   ctx: PromptContext,
 ): Promise<UserCorrection> {
@@ -253,7 +362,7 @@ async function defaultPromptUser(
     await sleep(POLL_INTERVAL_MS);
   }
   throw new Error(
-    `defaultPromptUser: timed out waiting for ${file} (slice ${reject.slice_id})`,
+    `strictFilePollPromptUser: timed out waiting for ${file} (slice ${reject.slice_id})`,
   );
 }
 
@@ -298,21 +407,67 @@ export async function selfImprove(
     throw new Error("selfImprove: basePath required");
   }
   const batch = parseRejectBatch(input.batch);
-  const promptUser = deps.promptUser ?? defaultPromptUser;
+  const promptUser = deps.promptUser;
   const notify = deps.notify ?? defaultNotify;
   const now = deps.now ?? (() => new Date().toISOString());
   const examplesPath = join(input.basePath, "examples.jsonl");
+  const workspaceDir = join(input.basePath, "corrections");
 
+  // Default flow (no promptUser override): two-pass detection — atomic export
+  // pattern. If any reject lacks a decision file, write needed-files for the
+  // missing ones only and throw, without consuming any existing decisions.
+  if (!promptUser) {
+    const missing: RejectedSlice[] = [];
+    for (const reject of batch.rejects) {
+      const decisionPath = correctionDecidedPathFor(
+        input.basePath,
+        reject.slice_id,
+      );
+      if (!existsSync(decisionPath)) missing.push(reject);
+    }
+    if (missing.length > 0) {
+      mkdirSync(workspaceDir, { recursive: true });
+      const neededPaths: string[] = [];
+      for (const reject of missing) {
+        const decisionPath = correctionDecidedPathFor(
+          input.basePath,
+          reject.slice_id,
+        );
+        const neededPath = correctionNeededPathFor(
+          input.basePath,
+          reject.slice_id,
+        );
+        const payload = buildSelfImproveDecisionNeeded({
+          reject,
+          baseId: batch.base_id,
+          rung: batch.rung ?? 0,
+          decisionPath,
+          wakeToken: makeWakeToken(),
+        });
+        writeFileSync(neededPath, `${JSON.stringify(payload, null, 2)}\n`);
+        neededPaths.push(neededPath);
+        notify(
+          `airtable-knowledge-extract: HITL correction needed`,
+          `slice ${reject.slice_id} (base ${batch.base_id}, rung ${batch.rung}): ${truncate(reject.reasoning, 120)}`,
+        );
+      }
+      throw new HitlPendingError(neededPaths);
+    }
+  }
+
+  // Either: all decision files present (default flow consumes via the prompt),
+  // or a promptUser override is supplied (tests / --strict-stdin-hitl).
+  const effectivePromptUser = promptUser ?? defaultExportAndExitPromptUser({});
   const triples: ExampleTriple[] = [];
   for (const reject of batch.rejects) {
     notify(
       `airtable-knowledge-extract: HITL correction needed`,
       `slice ${reject.slice_id} (base ${batch.base_id}, rung ${batch.rung}): ${truncate(reject.reasoning, 120)}`,
     );
-    const correction = await promptUser(reject, {
+    const correction = await effectivePromptUser(reject, {
       base_id: batch.base_id,
       rung: batch.rung ?? 0,
-      workspaceDir: join(input.basePath, "corrections"),
+      workspaceDir,
     });
     triples.push(buildTriple(reject, correction, now()));
   }
@@ -336,20 +491,26 @@ function truncate(s: string, n: number): string {
 // CLI entry
 // ---------------------------------------------------------------------------
 
-function parseArgs(argv: string[]): { batchPath: string; basePath: string } {
+export function parseSelfImproveCliArgs(argv: string[]): {
+  batchPath: string;
+  basePath: string;
+  strictStdinHitl: boolean;
+} {
   let batchPath: string | undefined;
   let basePath: string | undefined = process.env.AIRTABLE_BASE_CONTEXT_DIR;
+  let strictStdinHitl = false;
 
   const args = argv.slice(2);
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === "--base-path") basePath = args[++i];
+    else if (a === "--strict-stdin-hitl") strictStdinHitl = true;
     else if (!batchPath) batchPath = a;
   }
 
   if (!batchPath) {
     throw new Error(
-      "usage: self-improve.mts <reject-batch> --base-path <dir>",
+      "usage: self-improve.mts <reject-batch> --base-path <dir> [--strict-stdin-hitl]",
     );
   }
   if (!basePath) {
@@ -357,17 +518,33 @@ function parseArgs(argv: string[]): { batchPath: string; basePath: string } {
       "self-improve: --base-path or AIRTABLE_BASE_CONTEXT_DIR required",
     );
   }
-  return { batchPath, basePath };
+  return { batchPath, basePath, strictStdinHitl };
 }
 
 if (import.meta.main) {
   try {
-    const { batchPath, basePath } = parseArgs(process.argv);
+    const { batchPath, basePath, strictStdinHitl } = parseSelfImproveCliArgs(
+      process.argv,
+    );
     const raw = JSON.parse(readFileSync(batchPath, "utf8"));
-    const result = await selfImprove({ batch: raw, basePath });
+    const deps: SelfImproveDeps = strictStdinHitl
+      ? { promptUser: strictFilePollPromptUser }
+      : {};
+    const result = await selfImprove({ batch: raw, basePath }, deps);
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     process.exit(0);
   } catch (err) {
+    if (err instanceof HitlPendingError) {
+      process.stderr.write(
+        `self-improve: HITL needed — write decision files at:\n${err.neededPaths
+          .map(
+            (p) =>
+              `  ${p.replace("correction-needed-", "correction-decided-")}`,
+          )
+          .join("\n")}\nContext at:\n${err.neededPaths.map((p) => `  ${p}`).join("\n")}\n`,
+      );
+      process.exit(HITL_PENDING_EXIT_CODE);
+    }
     process.stderr.write(`self-improve: ${(err as Error).message}\n`);
     process.exit(1);
   }

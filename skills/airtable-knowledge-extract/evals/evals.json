@@ -74,6 +74,20 @@
         "Mentions --editor as the escape hatch for non-interactive contexts",
         "Notes that prompts write to stderr so the supaterm `> /dev/null` redirect on stdout doesn't hide the UI"
       ]
+    },
+    {
+      "id": 7,
+      "prompt": "How do re-anchor and self-improve handle HITL? Do they block on stdin?",
+      "expected_output": "No — both use the export-decision-and-exit pattern (issue #232). The worker writes a *-decision-needed.json file with review context, exits with code 42, and the orchestrator (run.mts) propagates that to state.phase='hitl-pending' and exits 42 itself with a one-line operator pointer. The agent (Claude in chat) reads the needed-file, drives a grill conversation with concrete examples, and writes the spec'd decision file (re-anchor: {verdict, notes, rewrites}; self-improve: {corrected, reason}). Operator re-runs the same supaterm chain — confirmed bases no-op fast, the paused base detects + consumes (deletes) its decision file and proceeds. selfImprove is atomic: if any reject lacks a decision, it writes needed-files only for missing ones without consuming existing decisions. Legacy stdin / file-poll behavior is opt-in via --strict-stdin-hitl.",
+      "expectations": [
+        "States the worker does NOT block on stdin or poll a file by default",
+        "Names the export-decision-and-exit pattern with exit code 42",
+        "Mentions decision-needed.json as the worker → agent payload",
+        "Mentions the agent (Claude in chat) drives the grill conversationally and writes the decision file",
+        "Mentions resume by re-running the same chain (worker consumes the decision file)",
+        "Notes that selfImprove is atomic — partial-decision case writes needed-files only for missing ones without consuming existing decisions",
+        "Mentions --strict-stdin-hitl as the opt-in flag for the legacy behavior"
+      ]
     }
   ]
 }

@@ -16,11 +16,14 @@ import {
   nextBaseToProcess,
   formatBaseSummaryJsonl,
   rejectsFromVerdict,
+  parseReAnchorSubprocessOutcome,
   type RunState,
   type RunDeps,
   type RunArgs,
   type BaseProgress,
+  type ReAnchorOutcome,
 } from "../scripts/run.mts";
+import { HitlPendingError } from "../scripts/hitl.mts";
 import {
   readStatus,
   formatStatusLine,
@@ -141,7 +144,13 @@ interface Harness {
 interface HarnessOpts {
   initialState?: RunState | null;
   seedsByBase: Record<string, SeedForReAnchor[]>;
-  reAnchorDecisions: Record<string, "approve" | "reject" | "no-op">;
+  reAnchorDecisions: Record<
+    string,
+    "approve" | "reject" | "no-op" | "hitl-pending"
+  >;
+  reAnchorNeededPaths?: Record<string, string[]>;
+  selfImproveBehavior?: Record<string, "ok" | "hitl-pending">;
+  selfImproveNeededPaths?: Record<string, string[]>;
   verdictsByBatch: BatchVerdict[];
   basesDir: string;
   metricsDir: string;
@@ -187,6 +196,13 @@ function makeHarness(opts: HarnessOpts): Harness {
         };
         return { kind: "approved", baseId };
       }
+      if (decision === "hitl-pending") {
+        const neededPaths =
+          opts.reAnchorNeededPaths?.[baseId] ?? [
+            join(opts.basesDir, baseId, "hitl", "re-anchor-decision-needed.json"),
+          ];
+        return { kind: "hitl-pending", baseId, neededPaths };
+      }
       state = { ...(cur as RunState), phase: "escalated" };
       return { kind: "rejected", baseId };
     },
@@ -210,6 +226,20 @@ function makeHarness(opts: HarnessOpts): Harness {
         baseId: batch.base_id,
         rejects: batch.rejects.length,
       });
+      const behavior = opts.selfImproveBehavior?.[batch.base_id];
+      if (behavior === "hitl-pending") {
+        const neededPaths =
+          opts.selfImproveNeededPaths?.[batch.base_id] ??
+          batch.rejects.map((r) =>
+            join(
+              opts.basesDir,
+              batch.base_id,
+              "corrections",
+              `correction-needed-${r.slice_id}.json`,
+            ),
+          );
+        throw new HitlPendingError(neededPaths);
+      }
       const result: SelfImproveResult = {
         base_id: batch.base_id,
         rung: batch.rung ?? 0,
@@ -693,6 +723,206 @@ describe("runOrchestrator — 2-base sequential", () => {
     expect(finalState.base_progress.appA.phase).toBe("done");
     expect(finalState.base_progress.appB.phase).toBe("done");
     expect(harness.metricsWritten).toHaveLength(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// runOrchestrator — HITL pending (issue #232)
+// ---------------------------------------------------------------------------
+
+describe("runOrchestrator — re-anchor hitl-pending", () => {
+  test("re-anchor returns hitl-pending → kind=hitl-pending, state.phase='hitl-pending', neededPaths surfaced; no batches processed", async () => {
+    const harness = makeHarness({
+      initialState: null,
+      seedsByBase: { appA: [seed("appA", "r1")] },
+      reAnchorDecisions: { appA: "hitl-pending" },
+      reAnchorNeededPaths: {
+        appA: ["/tmp/run-x/hitl/re-anchor-decision-needed.json"],
+      },
+      verdictsByBatch: [],
+      basesDir: join(tmp, "bases"),
+      metricsDir: join(tmp, "metrics"),
+    });
+
+    const result = await runOrchestrator(
+      defaultArgs({ baseId: "appA" }),
+      harness.deps,
+    );
+
+    expect(result.kind).toBe("hitl-pending");
+    expect(result.baseId).toBe("appA");
+    expect(result.neededPaths).toEqual([
+      "/tmp/run-x/hitl/re-anchor-decision-needed.json",
+    ]);
+    expect(harness.extractCalls).toHaveLength(0);
+    expect(harness.reviewCalls).toHaveLength(0);
+    expect(harness.selfImproveCalls).toHaveLength(0);
+    expect(harness.metricsWritten).toHaveLength(0);
+
+    const finalState = harness.loaded()!;
+    expect(finalState.phase).toBe("hitl-pending");
+  });
+});
+
+describe("runOrchestrator — resume from hitl-pending", () => {
+  test("re-anchor returns approved on resume (decision file consumed) → orchestrator advances to rung-1", async () => {
+    const seedsA = [seed("appA", "r1"), seed("appA", "r2")];
+    const v = batchVerdict("appA", [
+      passingVerdict("appA-r1"),
+      passingVerdict("appA-r2"),
+    ]);
+
+    const initial: RunState = {
+      run_id: "run-x",
+      start_ts: "2026-04-29T00:00:00Z",
+      last_updated_ts: "2026-04-29T00:30:00Z",
+      worker_pids: [],
+      guard_pid: 42,
+      confirmed_bases: [],
+      previous_base: null,
+      current_base: "appA",
+      phase: "hitl-pending",
+      processing_order: ["appA"],
+      base_progress: {},
+    };
+
+    const harness = makeHarness({
+      initialState: initial,
+      seedsByBase: { appA: seedsA },
+      reAnchorDecisions: { appA: "approve" },
+      verdictsByBatch: [v],
+      basesDir: join(tmp, "bases"),
+      metricsDir: join(tmp, "metrics"),
+    });
+
+    const result = await runOrchestrator(
+      defaultArgs({ baseId: "appA", parallelism: 2 }),
+      harness.deps,
+    );
+
+    expect(result.kind).toBe("paused");
+    expect(harness.reAnchorCalls).toHaveLength(1);
+    expect(harness.extractCalls).toHaveLength(2);
+
+    const finalState = harness.loaded()!;
+    expect(finalState.phase).toBe("paused");
+    expect(finalState.confirmed_bases).toEqual(["appA"]);
+    expect(finalState.base_progress.appA.phase).toBe("done");
+  });
+});
+
+describe("runOrchestrator — self-improve hitl-pending", () => {
+  test("self-improve throws HitlPendingError → kind=hitl-pending, state.phase='hitl-pending', neededPaths surfaced; no further batches", async () => {
+    const seedsA = [seed("appA", "r1"), seed("appA", "r2")];
+    const failV = batchVerdict("appA", [
+      failingVerdict("appA-r1"),
+      failingVerdict("appA-r2"),
+    ]);
+
+    const harness = makeHarness({
+      initialState: null,
+      seedsByBase: { appA: seedsA },
+      reAnchorDecisions: { appA: "approve" },
+      selfImproveBehavior: { appA: "hitl-pending" },
+      selfImproveNeededPaths: {
+        appA: [
+          "/tmp/appA/corrections/correction-needed-appA-r1.json",
+          "/tmp/appA/corrections/correction-needed-appA-r2.json",
+        ],
+      },
+      verdictsByBatch: [failV],
+      basesDir: join(tmp, "bases"),
+      metricsDir: join(tmp, "metrics"),
+    });
+
+    const result = await runOrchestrator(
+      defaultArgs({ baseId: "appA", parallelism: 2 }),
+      harness.deps,
+    );
+
+    expect(result.kind).toBe("hitl-pending");
+    expect(result.baseId).toBe("appA");
+    expect(result.neededPaths).toEqual([
+      "/tmp/appA/corrections/correction-needed-appA-r1.json",
+      "/tmp/appA/corrections/correction-needed-appA-r2.json",
+    ]);
+    expect(harness.selfImproveCalls).toHaveLength(1);
+    expect(harness.metricsWritten).toHaveLength(0);
+
+    const finalState = harness.loaded()!;
+    expect(finalState.phase).toBe("hitl-pending");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseReAnchorSubprocessOutcome — re-anchor.mts subprocess exit-code mapping
+// ---------------------------------------------------------------------------
+
+describe("parseReAnchorSubprocessOutcome", () => {
+  test("exit 0 + approved JSON → kind='approved'", () => {
+    const out: ReAnchorOutcome = parseReAnchorSubprocessOutcome({
+      code: 0,
+      stdout: JSON.stringify({ kind: "approved", baseId: "appA" }),
+      stderr: "",
+    });
+    expect(out.kind).toBe("approved");
+    expect(out.baseId).toBe("appA");
+  });
+
+  test("exit 0 + no-op JSON → kind='no-op'", () => {
+    const out = parseReAnchorSubprocessOutcome({
+      code: 0,
+      stdout: JSON.stringify({ kind: "no-op" }),
+      stderr: "",
+    });
+    expect(out.kind).toBe("no-op");
+  });
+
+  test("exit 1 + rejected JSON → kind='rejected'", () => {
+    const out = parseReAnchorSubprocessOutcome({
+      code: 1,
+      stdout: JSON.stringify({ kind: "rejected", baseId: "appA" }),
+      stderr: "",
+    });
+    expect(out.kind).toBe("rejected");
+    expect(out.baseId).toBe("appA");
+  });
+
+  test("exit 42 + hitl-pending JSON → kind='hitl-pending' with neededPaths", () => {
+    const out = parseReAnchorSubprocessOutcome({
+      code: 42,
+      stdout: JSON.stringify({
+        kind: "hitl-pending",
+        baseId: "appA",
+        neededPaths: ["/tmp/run-x/hitl/re-anchor-decision-needed.json"],
+      }),
+      stderr: "",
+    });
+    expect(out.kind).toBe("hitl-pending");
+    expect(out.baseId).toBe("appA");
+    expect(out.neededPaths).toEqual([
+      "/tmp/run-x/hitl/re-anchor-decision-needed.json",
+    ]);
+  });
+
+  test("empty stdout (any code) → throws with stderr surfaced", () => {
+    expect(() =>
+      parseReAnchorSubprocessOutcome({
+        code: 2,
+        stdout: "",
+        stderr: "fatal: state.json not found",
+      }),
+    ).toThrow(/state\.json not found/);
+  });
+
+  test("malformed JSON stdout → throws with raw snippet", () => {
+    expect(() =>
+      parseReAnchorSubprocessOutcome({
+        code: 0,
+        stdout: "{not-json",
+        stderr: "",
+      }),
+    ).toThrow(/parse|JSON/i);
   });
 });
 

@@ -43,6 +43,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
@@ -64,10 +65,17 @@ import {
   type SeedRecord,
 } from "./seed-selection.mts";
 import { extractSlice } from "./extract-slice.mts";
+import {
+  HITL_PENDING_EXIT_CODE,
+  HitlPendingError,
+  makeWakeToken,
+} from "./hitl.mts";
 
 export const DEFAULT_SEED_COUNT = 10;
 export const DEFAULT_THRESHOLD = 0.95;
 export const RUNG_0_REASON = "rung-0-anchor";
+export const DECISION_NEEDED_FILENAME = "re-anchor-decision-needed.json";
+export const DECISION_FILENAME = "re-anchor-decision.json";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -128,11 +136,34 @@ export interface ReAnchorDeps {
 }
 
 export interface ReAnchorResult {
-  kind: "approved" | "rejected" | "no-op";
+  kind: "approved" | "rejected" | "no-op" | "hitl-pending";
   baseId?: string;
   examplesPath?: string;
   escalationPath?: string;
   verdict?: BatchVerdict;
+  neededPaths?: string[];
+}
+
+export interface ReAnchorDecisionNeededPayload {
+  phase: "re-anchor";
+  run_id: string;
+  base_id: string;
+  context: {
+    slices: Array<{
+      slice_id: string;
+      cluster_id: string;
+      cluster_type: ClusterType;
+      entity_count: number;
+    }>;
+    verdict: {
+      pass_rate: number;
+      threshold: number;
+      slices: SliceVerdict[];
+    };
+    sample_entities: ExtractedEntity[];
+  };
+  decision_path: string;
+  wake_token: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -261,6 +292,92 @@ export function formatEscalationMd(ctx: {
   return lines.join("\n");
 }
 
+export function buildReAnchorDecisionNeeded(args: {
+  ctx: HitlContext;
+  decisionPath: string;
+  wakeToken: string;
+  sampleEntityCap?: number;
+}): ReAnchorDecisionNeededPayload {
+  const cap = args.sampleEntityCap ?? 5;
+  const sample: ExtractedEntity[] = [];
+  for (const s of args.ctx.slices) {
+    for (const e of s.entities) {
+      if (sample.length >= cap) break;
+      sample.push(e);
+    }
+    if (sample.length >= cap) break;
+  }
+  return {
+    phase: "re-anchor",
+    run_id: args.ctx.runId,
+    base_id: args.ctx.baseId,
+    context: {
+      slices: args.ctx.slices.map((s) => ({
+        slice_id: s.sliceId,
+        cluster_id: s.clusterId,
+        cluster_type: s.clusterType,
+        entity_count: s.entities.length,
+      })),
+      verdict: {
+        pass_rate: args.ctx.verdict.pass_rate,
+        threshold: args.ctx.verdict.threshold,
+        slices: args.ctx.verdict.slices,
+      },
+      sample_entities: sample,
+    },
+    decision_path: args.decisionPath,
+    wake_token: args.wakeToken,
+  };
+}
+
+export function parseReAnchorDecisionFile(raw: string): HitlDecision {
+  let obj: unknown;
+  try {
+    obj = JSON.parse(raw);
+  } catch (err) {
+    throw new Error(
+      `re-anchor decision file: JSON parse failed — ${(err as Error).message}`,
+    );
+  }
+  if (!obj || typeof obj !== "object") {
+    throw new Error("re-anchor decision file: must be a JSON object");
+  }
+  const o = obj as Record<string, unknown>;
+  if (o.verdict !== "approve" && o.verdict !== "reject") {
+    throw new Error(
+      `re-anchor decision file: verdict must be 'approve' or 'reject' (got ${JSON.stringify(o.verdict)})`,
+    );
+  }
+  const note =
+    typeof o.notes === "string" && o.notes.length > 0 ? o.notes : undefined;
+  return { decision: o.verdict, note };
+}
+
+export function defaultExportAndExitPrompt(opts: {
+  decisionDir: string;
+  uuid?: () => string;
+}): (ctx: HitlContext) => Promise<HitlDecision> {
+  const uuid = opts.uuid ?? makeWakeToken;
+  return async (ctx: HitlContext): Promise<HitlDecision> => {
+    const decisionPath = join(opts.decisionDir, DECISION_FILENAME);
+    if (existsSync(decisionPath)) {
+      const raw = readFileSync(decisionPath, "utf8");
+      const decision = parseReAnchorDecisionFile(raw);
+      unlinkSync(decisionPath);
+      return decision;
+    }
+    mkdirSync(opts.decisionDir, { recursive: true });
+    const neededPath = join(opts.decisionDir, DECISION_NEEDED_FILENAME);
+    const payload = buildReAnchorDecisionNeeded({
+      ctx,
+      decisionPath,
+      wakeToken: uuid(),
+    });
+    writeFileSync(neededPath, `${JSON.stringify(payload, null, 2)}\n`);
+    throw new HitlPendingError([neededPath]);
+  };
+}
+
 function toSliceForReview(e: ExtractResultLite): SliceForReview {
   return {
     slice_id: e.sliceId,
@@ -316,7 +433,23 @@ export async function runReAnchor(
   };
   const verdict = await deps.runReview(review);
 
-  const decision = await deps.prompt({ baseId, runId, slices, verdict });
+  let decision: HitlDecision;
+  try {
+    decision = await deps.prompt({ baseId, runId, slices, verdict });
+  } catch (err) {
+    if (err instanceof HitlPendingError) {
+      deps.log(
+        `[re-anchor ${runId}] HITL pending — needed: ${err.neededPaths.join(", ")}`,
+      );
+      return {
+        kind: "hitl-pending",
+        baseId,
+        verdict,
+        neededPaths: err.neededPaths,
+      };
+    }
+    throw err;
+  }
 
   if (decision.decision === "approve") {
     const ts = deps.now();
@@ -412,6 +545,7 @@ interface CacheLayout {
   runDir: string;
   statePath: string;
   basesDir: string;
+  hitlDir: string;
 }
 
 function resolveLayout(runId: string): CacheLayout {
@@ -420,6 +554,7 @@ function resolveLayout(runId: string): CacheLayout {
     runDir,
     statePath: join(runDir, "state.json"),
     basesDir: join(runDir, "bases"),
+    hitlDir: join(runDir, "hitl"),
   };
 }
 
@@ -516,7 +651,7 @@ async function defaultRunExtract(
   };
 }
 
-async function defaultPrompt(ctx: HitlContext): Promise<HitlDecision> {
+async function strictStdinPrompt(ctx: HitlContext): Promise<HitlDecision> {
   const { execFileSync } = await import("node:child_process");
   try {
     execFileSync(
@@ -611,8 +746,15 @@ function defaultNotify(title: string, body: string): void {
 // CLI entry
 // ---------------------------------------------------------------------------
 
-async function main(runId: string): Promise<number> {
+async function main(
+  runId: string,
+  opts: { strictStdinHitl: boolean },
+): Promise<number> {
   const layout = resolveLayout(runId);
+
+  const prompt = opts.strictStdinHitl
+    ? strictStdinPrompt
+    : defaultExportAndExitPrompt({ decisionDir: layout.hitlDir });
 
   const deps: ReAnchorDeps = {
     loadState: () => defaultLoadState(layout.statePath),
@@ -626,7 +768,7 @@ async function main(runId: string): Promise<number> {
         costMeterPath: join(layout.runDir, "cost-meter.jsonl"),
         threshold: DEFAULT_THRESHOLD,
       }),
-    prompt: defaultPrompt,
+    prompt,
     notify: defaultNotify,
     signal: (pid) => process.kill(pid, "SIGTERM"),
     writeExamples: (baseId, lines) =>
@@ -639,17 +781,52 @@ async function main(runId: string): Promise<number> {
 
   const result = await runReAnchor(runId, deps);
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-  return result.kind === "rejected" ? 1 : 0;
+  switch (result.kind) {
+    case "approved":
+    case "no-op":
+      return 0;
+    case "rejected":
+      return 1;
+    case "hitl-pending":
+      process.stderr.write(
+        `[re-anchor ${runId}] HITL needed — write decision to:\n  ${layout.hitlDir}/${DECISION_FILENAME}\n` +
+          `Context at:\n  ${result.neededPaths?.join("\n  ") ?? "(none)"}\n`,
+      );
+      return HITL_PENDING_EXIT_CODE;
+  }
+}
+
+interface ReAnchorCliArgs {
+  runId: string;
+  strictStdinHitl: boolean;
+}
+
+export function parseReAnchorCliArgs(argv: string[]): ReAnchorCliArgs {
+  const args = argv.slice(2);
+  let runId: string | undefined;
+  let strictStdinHitl = false;
+  for (const a of args) {
+    if (a === "--strict-stdin-hitl") strictStdinHitl = true;
+    else if (!runId) runId = a;
+  }
+  if (!runId) {
+    throw new Error("usage: re-anchor.mts <run-id> [--strict-stdin-hitl]");
+  }
+  return { runId, strictStdinHitl };
 }
 
 if (import.meta.main) {
-  const runId = process.argv[2];
-  if (!runId) {
-    process.stderr.write("usage: bun run re-anchor.mts <run-id>\n");
+  let parsed: ReAnchorCliArgs;
+  try {
+    parsed = parseReAnchorCliArgs(process.argv);
+  } catch (err) {
+    process.stderr.write(`${(err as Error).message}\n`);
     process.exit(2);
   }
   try {
-    const code = await main(runId);
+    const code = await main(parsed.runId, {
+      strictStdinHitl: parsed.strictStdinHitl,
+    });
     process.exit(code);
   } catch (err) {
     process.stderr.write(`re-anchor: ${(err as Error).message}\n`);

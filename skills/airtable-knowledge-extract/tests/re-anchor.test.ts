@@ -16,6 +16,9 @@ import {
   formatEscalationMd,
   mergeStateApprove,
   mergeStateReject,
+  buildReAnchorDecisionNeeded,
+  parseReAnchorDecisionFile,
+  defaultExportAndExitPrompt,
   type ReAnchorDeps,
   type ReAnchorState,
   type SeedForReAnchor,
@@ -23,6 +26,7 @@ import {
   type HitlContext,
   type HitlDecision,
 } from "../scripts/re-anchor.mts";
+import { HitlPendingError } from "../scripts/hitl.mts";
 import type { BatchVerdict, SliceVerdict } from "../scripts/review-slice.mts";
 import type { ExtractedEntity } from "../scripts/extract-slice.mts";
 
@@ -546,6 +550,223 @@ describe("runReAnchor — 2-base transition (acceptance path)", () => {
     expect(examplesA).not.toContain("appB-recB01");
     expect(examplesB).toContain("appB-recB01");
     expect(examplesB).not.toContain("appA-recA01");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Export-and-exit HITL pattern (issue #232)
+// ---------------------------------------------------------------------------
+
+describe("buildReAnchorDecisionNeeded", () => {
+  test("emits spec-shaped payload with phase, ids, decision_path, wake_token", () => {
+    const slice: ExtractResultLite = {
+      sliceId: "appA-rec01",
+      baseId: "appA",
+      clusterId: "appA-cluster-1",
+      clusterType: "crm",
+      subgraph: "### Contacts\n- record rec01",
+      entities: [entity("rec01")],
+    };
+    const verdict = batchVerdict({
+      baseId: "appA",
+      slices: [passingVerdict("appA-rec01"), failingVerdict("appA-rec02")],
+      threshold: 0.5,
+    });
+
+    const payload = buildReAnchorDecisionNeeded({
+      ctx: {
+        baseId: "appA",
+        runId: "run-x",
+        slices: [slice],
+        verdict,
+      },
+      decisionPath: "/tmp/hitl/re-anchor-decision.json",
+      wakeToken: "wt-fixed-123",
+    });
+
+    expect(payload.phase).toBe("re-anchor");
+    expect(payload.run_id).toBe("run-x");
+    expect(payload.base_id).toBe("appA");
+    expect(payload.decision_path).toBe("/tmp/hitl/re-anchor-decision.json");
+    expect(payload.wake_token).toBe("wt-fixed-123");
+    expect(payload.context.verdict.pass_rate).toBeCloseTo(0.5, 5);
+    expect(payload.context.verdict.threshold).toBe(0.5);
+    expect(payload.context.slices).toHaveLength(1);
+    expect(payload.context.slices[0].slice_id).toBe("appA-rec01");
+    expect(Array.isArray(payload.context.sample_entities)).toBe(true);
+  });
+});
+
+describe("parseReAnchorDecisionFile", () => {
+  test("maps {verdict: 'approve', notes} → {decision: 'approve', note}", () => {
+    const raw = JSON.stringify({ verdict: "approve", notes: "looks good" });
+    const d = parseReAnchorDecisionFile(raw);
+    expect(d.decision).toBe("approve");
+    expect(d.note).toBe("looks good");
+  });
+
+  test("maps {verdict: 'reject'} without notes", () => {
+    const raw = JSON.stringify({ verdict: "reject" });
+    const d = parseReAnchorDecisionFile(raw);
+    expect(d.decision).toBe("reject");
+    expect(d.note).toBeUndefined();
+  });
+
+  test("rejects malformed JSON", () => {
+    expect(() => parseReAnchorDecisionFile("not json")).toThrow(/parse|JSON/i);
+  });
+
+  test("rejects missing/invalid verdict", () => {
+    expect(() => parseReAnchorDecisionFile(JSON.stringify({}))).toThrow(/verdict/);
+    expect(() =>
+      parseReAnchorDecisionFile(JSON.stringify({ verdict: "maybe" })),
+    ).toThrow(/verdict/);
+  });
+
+  test("rewrites field tolerated (not consumed in Phase-1 mapping)", () => {
+    const raw = JSON.stringify({
+      verdict: "approve",
+      notes: "n",
+      rewrites: { "appA-rec01": { name: "Foo" } },
+    });
+    const d = parseReAnchorDecisionFile(raw);
+    expect(d.decision).toBe("approve");
+  });
+});
+
+describe("defaultExportAndExitPrompt", () => {
+  test("no decision file → writes needed-file + throws HitlPendingError", async () => {
+    const decisionDir = join(tmp, "hitl");
+    const prompt = defaultExportAndExitPrompt({
+      decisionDir,
+      uuid: () => "wt-fixed-test",
+    });
+
+    const ctx: HitlContext = {
+      baseId: "appA",
+      runId: "run-x",
+      slices: [extractResult("rec01", "appA")],
+      verdict: batchVerdict({
+        baseId: "appA",
+        slices: [passingVerdict("appA-rec01")],
+      }),
+    };
+
+    let caught: HitlPendingError | null = null;
+    try {
+      await prompt(ctx);
+    } catch (err) {
+      caught = err as HitlPendingError;
+    }
+    expect(caught).toBeInstanceOf(HitlPendingError);
+    expect(caught!.neededPaths).toHaveLength(1);
+
+    const neededPath = join(decisionDir, "re-anchor-decision-needed.json");
+    expect(caught!.neededPaths[0]).toBe(neededPath);
+    expect(existsSync(neededPath)).toBe(true);
+
+    const persisted = JSON.parse(readFileSync(neededPath, "utf8"));
+    expect(persisted.phase).toBe("re-anchor");
+    expect(persisted.base_id).toBe("appA");
+    expect(persisted.wake_token).toBe("wt-fixed-test");
+    expect(persisted.decision_path).toBe(
+      join(decisionDir, "re-anchor-decision.json"),
+    );
+  });
+
+  test("decision file present → returns parsed decision + deletes file", async () => {
+    const decisionDir = join(tmp, "hitl");
+    mkdirSync(decisionDir, { recursive: true });
+    const decisionPath = join(decisionDir, "re-anchor-decision.json");
+    writeFileSync(
+      decisionPath,
+      JSON.stringify({ verdict: "approve", notes: "ok" }),
+    );
+
+    const prompt = defaultExportAndExitPrompt({
+      decisionDir,
+      uuid: () => "wt-x",
+    });
+
+    const ctx: HitlContext = {
+      baseId: "appA",
+      runId: "run-x",
+      slices: [extractResult("rec01", "appA")],
+      verdict: batchVerdict({
+        baseId: "appA",
+        slices: [passingVerdict("appA-rec01")],
+      }),
+    };
+
+    const decision = await prompt(ctx);
+    expect(decision.decision).toBe("approve");
+    expect(decision.note).toBe("ok");
+    expect(existsSync(decisionPath)).toBe(false);
+  });
+
+  test("decision file present with verdict=reject → returns reject; file deleted", async () => {
+    const decisionDir = join(tmp, "hitl");
+    mkdirSync(decisionDir, { recursive: true });
+    const decisionPath = join(decisionDir, "re-anchor-decision.json");
+    writeFileSync(
+      decisionPath,
+      JSON.stringify({ verdict: "reject", notes: "names look invented" }),
+    );
+
+    const prompt = defaultExportAndExitPrompt({
+      decisionDir,
+      uuid: () => "wt-x",
+    });
+
+    const decision = await prompt({
+      baseId: "appA",
+      runId: "run-x",
+      slices: [extractResult("rec01", "appA")],
+      verdict: batchVerdict({
+        baseId: "appA",
+        slices: [passingVerdict("appA-rec01")],
+      }),
+    });
+    expect(decision.decision).toBe("reject");
+    expect(decision.note).toBe("names look invented");
+    expect(existsSync(decisionPath)).toBe(false);
+  });
+});
+
+describe("runReAnchor — hitl-pending branch", () => {
+  test("prompt throws HitlPendingError → kind=hitl-pending; no examples/escalation/signal", async () => {
+    const seedsA = [seed("appA", "rec01")];
+    const verdict = batchVerdict({
+      baseId: "appA",
+      slices: [passingVerdict("appA-rec01")],
+    });
+
+    const neededPath = join(tmp, "hitl", "re-anchor-decision-needed.json");
+    const { deps, signals, reads } = makeDeps({
+      state: {
+        start_ts: "2026-04-29T00:00:00Z",
+        worker_pids: [4242],
+        current_base: "appA",
+        previous_base: null,
+        confirmed_bases: [],
+      },
+      seedsByBase: { appA: seedsA },
+      decisions: [],
+      verdictByBase: { appA: verdict },
+      basesDir: tmp,
+      prompt: async () => {
+        throw new HitlPendingError([neededPath]);
+      },
+    });
+
+    const result = await runReAnchor("run-x", deps);
+
+    expect(result.kind).toBe("hitl-pending");
+    expect(result.baseId).toBe("appA");
+    expect(result.neededPaths).toEqual([neededPath]);
+    // No escalation written (workers stay alive)
+    expect(signals).toHaveLength(0);
+    expect(reads.saved).toHaveLength(0);
   });
 });
 

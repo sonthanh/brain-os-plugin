@@ -50,6 +50,31 @@ For the first run on a new base, keep `-P 1` so re-anchor's rung-0' shallow slic
 
 `rubric-author.mts` defaults to an interactive readline grill — one question at a time with a concrete sample record, accepting `k`/`d`/rewrite/`+`/batch shortcuts. Prompts go to stderr so the `> /dev/null` redirect on stdout doesn't suppress the UI; the operator switches to the supaterm tab when it pauses on input. Pass `--editor` to fall back to the original `$EDITOR`-based flow for non-interactive contexts. Full shortcut table + plumbing notes: `references/rubric-author-flow.md`.
 
+### HITL — export-decision-and-exit (re-anchor + self-improve)
+
+Both `re-anchor.mts` and `self-improve.mts` use the **export-decision-and-exit** pattern (issue #232). Workers do NOT block on stdin or poll a file mid-run. Instead:
+
+1. Worker computes its decision context (slices, verdict, sample entities for re-anchor; raw + reasoning for self-improve).
+2. Worker writes the context to a known JSON path.
+3. Worker EXITS with code **42** (`HITL_PENDING_EXIT_CODE`).
+4. `run.mts` propagates exit 42 → updates `state.json` `phase=hitl-pending` → exits 42 itself with a one-line operator pointer.
+5. `set -euo pipefail` in the supaterm bash chain bails the for-loop.
+6. **Agent (Claude in chat)** detects the `*-decision-needed.json` file, reads context, drives a grill conversation with concrete examples (per the `rubric-author` #228 pattern), and writes the decision JSON to the spec'd `decision_path`.
+7. Operator re-runs the same supaterm chain; the for-loop walks confirmed bases (no-op fast-paths) until it reaches the paused base; the worker detects the decision file, consumes (and deletes) it, and proceeds.
+
+Decision file paths and shapes:
+
+| Phase | Needed file (worker → agent) | Decision file (agent → worker) |
+|-------|------------------------------|--------------------------------|
+| `re-anchor` | `<runDir>/hitl/re-anchor-decision-needed.json` | `<runDir>/hitl/re-anchor-decision.json` — `{verdict: "approve"\|"reject", notes, rewrites?}` |
+| `self-improve` (per slice) | `<basePath>/corrections/correction-needed-<slice_id>.json` | `<basePath>/corrections/correction-decided-<slice_id>.json` — `{corrected, reason}` |
+
+Notes:
+
+- The needed-file payload includes a `wake_token` (uuid). It is informational; the decision file does not need to echo it.
+- For self-improve, `selfImprove` is **atomic** in two-pass mode: if any reject lacks a decision file, it writes needed-files for the missing ones only and throws `HitlPendingError` without consuming any decisions that are already present.
+- For non-interactive contexts (CI smoke runs, scripted tests) where the legacy stdin / file-poll behavior is required, pass `--strict-stdin-hitl` to `re-anchor.mts` or `self-improve.mts`.
+
 ## Status & analysis
 
 Both are read-only one-shots — safe to Bash from a session when the user asks "how's it going?".

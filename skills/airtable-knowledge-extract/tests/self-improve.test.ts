@@ -14,12 +14,18 @@ import {
   parseRejectBatch,
   buildTriple,
   appendTriples,
+  buildSelfImproveDecisionNeeded,
+  parseSelfImproveDecisionFile,
+  defaultExportAndExitPromptUser,
+  correctionNeededPathFor,
+  correctionDecidedPathFor,
   type RejectBatch,
   type RejectedSlice,
   type UserCorrection,
   type UserPromptFn,
   type ExampleTriple,
 } from "../scripts/self-improve.mts";
+import { HitlPendingError } from "../scripts/hitl.mts";
 
 let tmp: string;
 beforeEach(() => {
@@ -456,6 +462,248 @@ describe("selfImprove", () => {
       ),
     ).rejects.toThrow(/basePath/);
     expect(callLog).toHaveLength(0);
+  });
+
+  // -------------------------------------------------------------------------
+  // Export-and-exit HITL pattern (issue #232)
+  // -------------------------------------------------------------------------
+
+  test("default flow: no decision files → throws HitlPendingError listing all rejects' needed-paths; examples.jsonl untouched", async () => {
+    const basePath = makeBaseDir("appA");
+    const rejects = [makeReject("s1", { slug: "a" }), makeReject("s2", { slug: "b" })];
+
+    let caught: HitlPendingError | null = null;
+    try {
+      await selfImprove(
+        {
+          batch: { base_id: "appA", rung: 0, rejects },
+          basePath,
+        },
+        // no promptUser override → uses defaultExportAndExitPromptUser
+        { now: fixedNow(["2026-04-29T00:00:00Z"]) },
+      );
+    } catch (err) {
+      caught = err as HitlPendingError;
+    }
+    expect(caught).toBeInstanceOf(HitlPendingError);
+    expect(caught!.neededPaths).toHaveLength(2);
+
+    const correctionsDir = join(basePath, "corrections");
+    expect(caught!.neededPaths[0]).toBe(
+      join(correctionsDir, "correction-needed-s1.json"),
+    );
+    expect(caught!.neededPaths[1]).toBe(
+      join(correctionsDir, "correction-needed-s2.json"),
+    );
+
+    for (const p of caught!.neededPaths) {
+      expect(existsSync(p)).toBe(true);
+      const obj = JSON.parse(readFileSync(p, "utf8"));
+      expect(obj.phase).toBe("self-improve");
+      expect(obj.base_id).toBe("appA");
+      expect(typeof obj.wake_token).toBe("string");
+      expect(obj.wake_token.length).toBeGreaterThan(0);
+    }
+
+    expect(existsSync(join(basePath, "examples.jsonl"))).toBe(false);
+  });
+
+  test("default flow: all decision files present → reads them, writes triples, deletes decision files", async () => {
+    const basePath = makeBaseDir("appA");
+    const correctionsDir = join(basePath, "corrections");
+    mkdirSync(correctionsDir, { recursive: true });
+    const rejects = [
+      makeReject("s1", { slug: "a" }),
+      makeReject("s2", { slug: "b" }),
+    ];
+    writeFileSync(
+      correctionDecidedPathFor(basePath, "s1"),
+      JSON.stringify({ corrected: { slug: "a-fixed" }, reason: "r1" }),
+    );
+    writeFileSync(
+      correctionDecidedPathFor(basePath, "s2"),
+      JSON.stringify({ corrected: { slug: "b-fixed" }, reason: "r2" }),
+    );
+
+    const result = await selfImprove(
+      {
+        batch: { base_id: "appA", rung: 0, rejects },
+        basePath,
+      },
+      { now: fixedNow(["t1", "t2"]) },
+    );
+
+    expect(result.appended).toBe(2);
+    expect(existsSync(correctionDecidedPathFor(basePath, "s1"))).toBe(false);
+    expect(existsSync(correctionDecidedPathFor(basePath, "s2"))).toBe(false);
+    const lines = readFileSync(result.examples_path, "utf8").trim().split("\n");
+    expect(lines).toHaveLength(2);
+    expect(JSON.parse(lines[0]).slice_id).toBe("s1");
+    expect(JSON.parse(lines[0]).corrected).toEqual({ slug: "a-fixed" });
+    expect(JSON.parse(lines[1]).slice_id).toBe("s2");
+  });
+
+  test("default flow: partial decisions present → throws with paths for the MISSING ones only; existing decisions not consumed", async () => {
+    const basePath = makeBaseDir("appA");
+    const correctionsDir = join(basePath, "corrections");
+    mkdirSync(correctionsDir, { recursive: true });
+    const rejects = [
+      makeReject("s1"),
+      makeReject("s2"),
+      makeReject("s3"),
+    ];
+    writeFileSync(
+      correctionDecidedPathFor(basePath, "s2"),
+      JSON.stringify({ corrected: { slug: "fixed" }, reason: "r" }),
+    );
+
+    let caught: HitlPendingError | null = null;
+    try {
+      await selfImprove(
+        {
+          batch: { base_id: "appA", rung: 0, rejects },
+          basePath,
+        },
+        { now: fixedNow(["t1"]) },
+      );
+    } catch (err) {
+      caught = err as HitlPendingError;
+    }
+    expect(caught).toBeInstanceOf(HitlPendingError);
+    expect(caught!.neededPaths).toHaveLength(2);
+    expect(caught!.neededPaths).toContain(
+      correctionNeededPathFor(basePath, "s1"),
+    );
+    expect(caught!.neededPaths).toContain(
+      correctionNeededPathFor(basePath, "s3"),
+    );
+    // Existing decision file for s2 is not consumed yet (atomic two-pass).
+    expect(existsSync(correctionDecidedPathFor(basePath, "s2"))).toBe(true);
+    expect(existsSync(join(basePath, "examples.jsonl"))).toBe(false);
+  });
+
+  test("default flow: malformed decision file → throws (not silently treated as missing)", async () => {
+    const basePath = makeBaseDir("appA");
+    const correctionsDir = join(basePath, "corrections");
+    mkdirSync(correctionsDir, { recursive: true });
+    writeFileSync(correctionDecidedPathFor(basePath, "s1"), "not-json");
+
+    await expect(
+      selfImprove(
+        {
+          batch: { base_id: "appA", rung: 0, rejects: [makeReject("s1")] },
+          basePath,
+        },
+        { now: fixedNow(["t1"]) },
+      ),
+    ).rejects.toThrow(/parse|JSON/i);
+  });
+
+  test("default flow: decision missing reason → throws (validation)", async () => {
+    const basePath = makeBaseDir("appA");
+    const correctionsDir = join(basePath, "corrections");
+    mkdirSync(correctionsDir, { recursive: true });
+    writeFileSync(
+      correctionDecidedPathFor(basePath, "s1"),
+      JSON.stringify({ corrected: { slug: "x" } }),
+    );
+
+    await expect(
+      selfImprove(
+        {
+          batch: { base_id: "appA", rung: 0, rejects: [makeReject("s1")] },
+          basePath,
+        },
+        { now: fixedNow(["t1"]) },
+      ),
+    ).rejects.toThrow(/reason/);
+  });
+
+  test("buildSelfImproveDecisionNeeded shape includes phase, slice_id, raw, reasoning, fail_modes, decision_path, wake_token", () => {
+    const reject = makeReject("s1", { slug: "x", entities: ["a", "b"] });
+    const payload = buildSelfImproveDecisionNeeded({
+      reject,
+      baseId: "appA",
+      rung: 1,
+      decisionPath: "/tmp/c/correction-decided-s1.json",
+      wakeToken: "wt-fixed-77",
+    });
+    expect(payload.phase).toBe("self-improve");
+    expect(payload.base_id).toBe("appA");
+    expect(payload.rung).toBe(1);
+    expect(payload.slice_id).toBe("s1");
+    expect(payload.raw).toEqual({ slug: "x", entities: ["a", "b"] });
+    expect(payload.reasoning).toBe(reject.reasoning);
+    expect(payload.fail_modes).toEqual(["link-mismatch"]);
+    expect(payload.decision_path).toBe("/tmp/c/correction-decided-s1.json");
+    expect(payload.wake_token).toBe("wt-fixed-77");
+  });
+
+  test("parseSelfImproveDecisionFile maps {corrected, reason} → UserCorrection", () => {
+    const c = parseSelfImproveDecisionFile(
+      JSON.stringify({ corrected: { slug: "x-fixed" }, reason: "slug-collision" }),
+    );
+    expect(c.corrected).toEqual({ slug: "x-fixed" });
+    expect(c.reason).toBe("slug-collision");
+  });
+
+  test("parseSelfImproveDecisionFile rejects non-string reason", () => {
+    expect(() =>
+      parseSelfImproveDecisionFile(
+        JSON.stringify({ corrected: {}, reason: 42 }),
+      ),
+    ).toThrow(/reason/);
+  });
+
+  test("parseSelfImproveDecisionFile rejects missing corrected key", () => {
+    expect(() =>
+      parseSelfImproveDecisionFile(JSON.stringify({ reason: "x" })),
+    ).toThrow(/corrected/);
+  });
+
+  test("defaultExportAndExitPromptUser direct: writes needed file + throws", async () => {
+    const basePath = makeBaseDir("appA");
+    const correctionsDir = join(basePath, "corrections");
+    const promptUser = defaultExportAndExitPromptUser({ uuid: () => "wt-1" });
+    const reject = makeReject("s1", { slug: "x" });
+
+    let caught: HitlPendingError | null = null;
+    try {
+      await promptUser(reject, {
+        base_id: "appA",
+        rung: 0,
+        workspaceDir: correctionsDir,
+      });
+    } catch (err) {
+      caught = err as HitlPendingError;
+    }
+    expect(caught).toBeInstanceOf(HitlPendingError);
+    const neededPath = correctionNeededPathFor(basePath, "s1");
+    expect(caught!.neededPaths).toEqual([neededPath]);
+    expect(existsSync(neededPath)).toBe(true);
+    const obj = JSON.parse(readFileSync(neededPath, "utf8"));
+    expect(obj.wake_token).toBe("wt-1");
+  });
+
+  test("defaultExportAndExitPromptUser direct: decision file present → returns parsed correction; file deleted", async () => {
+    const basePath = makeBaseDir("appA");
+    const correctionsDir = join(basePath, "corrections");
+    mkdirSync(correctionsDir, { recursive: true });
+    const decisionPath = correctionDecidedPathFor(basePath, "s1");
+    writeFileSync(
+      decisionPath,
+      JSON.stringify({ corrected: { slug: "fixed" }, reason: "r" }),
+    );
+
+    const promptUser = defaultExportAndExitPromptUser({});
+    const c = await promptUser(makeReject("s1"), {
+      base_id: "appA",
+      rung: 0,
+      workspaceDir: correctionsDir,
+    });
+    expect(c.corrected).toEqual({ slug: "fixed" });
+    expect(c.reason).toBe("r");
+    expect(existsSync(decisionPath)).toBe(false);
   });
 
   test("promptUser returning invalid correction (missing reason) rejects", async () => {

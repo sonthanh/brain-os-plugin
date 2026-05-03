@@ -60,6 +60,10 @@ import type {
 } from "./re-anchor.mts";
 import { extractSlice } from "./extract-slice.mts";
 import { appendOutcomeLog } from "./outcome-log.mts";
+import {
+  HITL_PENDING_EXIT_CODE,
+  HitlPendingError,
+} from "./hitl.mts";
 
 export const DEFAULT_PARALLELISM = 5;
 export const DEFAULT_THRESHOLD = 0.95;
@@ -75,7 +79,8 @@ export type RunPhase =
   | "rung-1"
   | "paused"
   | "done"
-  | "escalated";
+  | "escalated"
+  | "hitl-pending";
 
 export interface BatchResult {
   batch_id: string;
@@ -123,8 +128,9 @@ export interface RunArgs {
 }
 
 export interface ReAnchorOutcome {
-  kind: "approved" | "rejected" | "no-op";
+  kind: "approved" | "rejected" | "no-op" | "hitl-pending";
   baseId?: string;
+  neededPaths?: string[];
 }
 
 export interface RunDeps {
@@ -149,11 +155,17 @@ export interface RunDeps {
 }
 
 export interface RunResult {
-  kind: "paused" | "no-bases" | "escalated-re-anchor" | "escalated-batch";
+  kind:
+    | "paused"
+    | "no-bases"
+    | "escalated-re-anchor"
+    | "escalated-batch"
+    | "hitl-pending";
   baseId?: string;
   state: RunState;
   metricsPath?: string;
   reason?: string;
+  neededPaths?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -295,6 +307,24 @@ export async function runOrchestrator(
       reason: "re-anchor rejected",
     };
   }
+  if (reAnchorResult.kind === "hitl-pending") {
+    state = {
+      ...state,
+      phase: "hitl-pending",
+      last_updated_ts: deps.now(),
+    };
+    deps.saveState(state);
+    deps.log(
+      `[run ${args.runId}] re-anchor HITL pending for ${baseId} — needed: ${(reAnchorResult.neededPaths ?? []).join(", ")}`,
+    );
+    return {
+      kind: "hitl-pending",
+      baseId,
+      state,
+      reason: "re-anchor needs human decision",
+      neededPaths: reAnchorResult.neededPaths,
+    };
+  }
 
   const seeds = await deps.getSeedsForBase(baseId);
   const allBatches = chunk(seeds, args.parallelism);
@@ -356,10 +386,32 @@ export async function runOrchestrator(
     } else {
       const rejects = rejectsFromVerdict(sliceReviews, verdict);
       if (rejects.length > 0) {
-        await deps.runSelfImprove({
-          batch: { base_id: baseId, rung: 1, rejects },
-          basePath: deps.basePathFor(baseId),
-        });
+        try {
+          await deps.runSelfImprove({
+            batch: { base_id: baseId, rung: 1, rejects },
+            basePath: deps.basePathFor(baseId),
+          });
+        } catch (err) {
+          if (err instanceof HitlPendingError) {
+            state = {
+              ...state,
+              phase: "hitl-pending",
+              last_updated_ts: deps.now(),
+            };
+            deps.saveState(state);
+            deps.log(
+              `[run ${args.runId}] self-improve HITL pending for ${baseId} — needed: ${err.neededPaths.join(", ")}`,
+            );
+            return {
+              kind: "hitl-pending",
+              baseId,
+              state,
+              reason: "self-improve needs human corrections",
+              neededPaths: err.neededPaths,
+            };
+          }
+          throw err;
+        }
       }
       const halfP = Math.max(1, Math.floor(args.parallelism / 2));
       parallelismUsed = halfP;
@@ -558,8 +610,37 @@ function defaultUuid(): string {
 
 // re-anchor.mts owns its own state-file I/O. CLI shells out to it and
 // maps the JSON result on stdout back to ReAnchorOutcome. Exit codes:
-// 0 = approved or no-op, 1 = rejected, 2 = FATAL (no stdout). On 2 we
-// surface the stderr in the thrown error.
+// 0 = approved or no-op, 1 = rejected, 42 = hitl-pending (issue #232),
+// 2 = FATAL (no stdout). On 2 we surface the stderr in the thrown error.
+export function parseReAnchorSubprocessOutcome(input: {
+  code: number | null;
+  stdout: string;
+  stderr: string;
+}): ReAnchorOutcome {
+  const trimmed = input.stdout.trim();
+  if (!trimmed) {
+    throw new Error(
+      `re-anchor exited ${input.code} with empty stdout: ${input.stderr.trim().slice(-400)}`,
+    );
+  }
+  let obj: Record<string, unknown>;
+  try {
+    obj = JSON.parse(trimmed) as Record<string, unknown>;
+  } catch (err) {
+    throw new Error(
+      `re-anchor stdout parse failed (exit=${input.code}): ${(err as Error).message}; raw=${trimmed.slice(0, 200)}`,
+    );
+  }
+  const kind = obj.kind as ReAnchorOutcome["kind"];
+  return {
+    kind,
+    baseId: typeof obj.baseId === "string" ? obj.baseId : undefined,
+    neededPaths: Array.isArray(obj.neededPaths)
+      ? (obj.neededPaths as string[])
+      : undefined,
+  };
+}
+
 async function defaultRunReAnchor(runId: string): Promise<ReAnchorOutcome> {
   return await new Promise<ReAnchorOutcome>((resolve, reject) => {
     const here = dirname(fileURLToPath(import.meta.url));
@@ -577,27 +658,10 @@ async function defaultRunReAnchor(runId: string): Promise<ReAnchorOutcome> {
     });
     child.on("error", reject);
     child.on("close", (code) => {
-      const trimmed = stdout.trim();
-      if (!trimmed) {
-        reject(
-          new Error(
-            `re-anchor exited ${code} with empty stdout: ${stderr.trim().slice(-400)}`,
-          ),
-        );
-        return;
-      }
       try {
-        const obj = JSON.parse(trimmed);
-        resolve({
-          kind: obj.kind as ReAnchorOutcome["kind"],
-          baseId: obj.baseId,
-        });
+        resolve(parseReAnchorSubprocessOutcome({ code, stdout, stderr }));
       } catch (err) {
-        reject(
-          new Error(
-            `re-anchor stdout parse failed (exit=${code}): ${(err as Error).message}; raw=${trimmed.slice(0, 200)}`,
-          ),
-        );
+        reject(err);
       }
     });
   });
@@ -779,6 +843,13 @@ async function main(parsed: ParsedArgs): Promise<number> {
     case "escalated-re-anchor":
     case "escalated-batch":
       return 1;
+    case "hitl-pending":
+      process.stderr.write(
+        `[run ${parsed.runId}] HITL pending — write decision to:\n` +
+          `${(result.neededPaths ?? []).map((p) => `  ${p}`).join("\n")}\n` +
+          `Then re-run: bun run run.mts --run-id ${parsed.runId} --base ${result.baseId}\n`,
+      );
+      return HITL_PENDING_EXIT_CODE;
   }
 }
 
@@ -790,12 +861,15 @@ function writeSkillOutcomeLog(result: RunResult, runId: string): void {
   const outResult: "pass" | "partial" | "fail" =
     result.kind === "paused" || result.kind === "no-bases"
       ? "pass"
-      : "fail";
+      : result.kind === "hitl-pending"
+        ? "partial"
+        : "fail";
 
   const fields: Record<string, string | number> = { run_id: runId };
   if (result.baseId) fields.base_id = result.baseId;
   if (result.kind === "escalated-batch") fields.escalation = "batch";
   if (result.kind === "escalated-re-anchor") fields.escalation = "re-anchor";
+  if (result.kind === "hitl-pending") fields.escalation = "hitl-pending";
 
   if (result.baseId) {
     const progress = result.state.base_progress[result.baseId];
