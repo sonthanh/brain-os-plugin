@@ -12,6 +12,7 @@ import { join } from "node:path";
 import {
   computeDelta,
   evaluateDelta,
+  cliExitCode,
   runRubricAuthor,
   type ClaudeRunner,
   type RubricAuthorOptions,
@@ -132,6 +133,27 @@ describe("evaluateDelta", () => {
     const r = evaluateDelta(baseMetrics(1));
     expect(r.verdict).toBe("reject");
     expect(r.exitCode).toBe(1);
+  });
+});
+
+describe("cliExitCode", () => {
+  test("default (strict=false): pass → 0", () => {
+    expect(cliExitCode("pass", false)).toBe(0);
+  });
+  test("default: pass-with-improve → 0", () => {
+    expect(cliExitCode("pass-with-improve", false)).toBe(0);
+  });
+  test("default: reject → 0 (signal not halt — operator-curated divergence is legitimate)", () => {
+    expect(cliExitCode("reject", false)).toBe(0);
+  });
+  test("strict=true: pass → 0", () => {
+    expect(cliExitCode("pass", true)).toBe(0);
+  });
+  test("strict=true: pass-with-improve → 0", () => {
+    expect(cliExitCode("pass-with-improve", true)).toBe(0);
+  });
+  test("strict=true: reject → 1 (preserves CI-gate halt behavior)", () => {
+    expect(cliExitCode("reject", true)).toBe(1);
   });
 });
 
@@ -315,7 +337,7 @@ describe("runRubricAuthor", () => {
     expect(r.evaluate.exitCode).toBe(0);
   });
 
-  test("ratio > 70%: reject, exit 1, metrics still written", async () => {
+  test("ratio > 70%: reject verdict, signal exitCode=1, metrics still written (CLI exit gated by --strict separately)", async () => {
     const opts = commonOpts({
       openEditor: async (filePath) => {
         const lines = readFileSync(filePath, "utf8").split("\n");

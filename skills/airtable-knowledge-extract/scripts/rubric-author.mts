@@ -189,6 +189,14 @@ export function evaluateDelta(m: DeltaMetrics): EvaluateResult {
   return { verdict: "reject", exitCode: 1 };
 }
 
+// `reject` is a SIGNAL for /improve to fix the AI drafting prompt, not a control
+// instruction to halt the pipeline — operator-curated divergence is legitimate.
+// `--strict` opts into the historical halt-on-reject behavior for CI gates.
+export function cliExitCode(verdict: Verdict, strict: boolean): 0 | 1 {
+  if (!strict) return 0;
+  return verdict === "reject" ? 1 : 0;
+}
+
 // ---------- Token resolution (mirrors list-bases.mts) ------------------------
 
 function resolveToken(
@@ -569,9 +577,12 @@ export async function runRubricAuthor(
 // ---------- CLI --------------------------------------------------------------
 
 if (import.meta.main) {
-  const baseId = process.argv[2];
+  const args = process.argv.slice(2);
+  const strict = args.includes("--strict");
+  const positional = args.filter((a) => !a.startsWith("--"));
+  const baseId = positional[0];
   if (!baseId) {
-    process.stderr.write("usage: rubric-author.mts <base-id>\n");
+    process.stderr.write("usage: rubric-author.mts <base-id> [--strict]\n");
     process.exit(2);
   }
   const vaultRoot = process.env.BRAIN_VAULT ?? join(homedir(), "work", "brain");
@@ -593,7 +604,7 @@ if (import.meta.main) {
         2,
       ) + "\n",
     );
-    process.exit(result.evaluate.exitCode);
+    process.exit(cliExitCode(result.evaluate.verdict, strict));
   } catch (err) {
     process.stderr.write(`rubric-author: ${(err as Error).message}\n`);
     process.exit(1);
