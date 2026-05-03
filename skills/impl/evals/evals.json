@@ -331,6 +331,43 @@
         "Mentions the four CLI subcommands or a representative subset (classify, parent, handoff-comment, record-result)",
         "Articulates the no-duplication discipline (prose does not inline regex)"
       ]
+    },
+    {
+      "id": 31,
+      "prompt": "After `close-issue.sh` succeeds on a child issue with a `## Covers AC` section, what does /impl post on the parent and where is the format anchored?",
+      "expected_output": "Step 6 (Post-close) parses the child's `## Covers AC` section using the per-line regex `^- AC#(\\d+)\\s*$` from `references/ac-coverage-spec.md` § 3.2, and posts ONE comment to the parent per AC#M of the form `Acceptance verified: AC#${m} — ${evidence}` matching the line-anchored regex `^Acceptance verified: AC#(\\d+) — (.+)$` (the SSOT is `PARENT_COMMENT_EVIDENCE_RE` at `scripts/run-story.ts:220` and § 3.3 of the spec). The em-dash is U+2014 literal (not ASCII `-`, not U+2013 `–`). Evidence text is composed from the just-completed /tdd cycle: bun test / pytest stdout (test names + pass/fail counts), file inspection (paths + byte sizes), grep counts, or commit SHA + diff stat. Posted via `gh issue comment \"$parent_n\" -R <tracker-repo> --body-file -` with an unquoted heredoc so backticks / `$(...)` / shell metacharacters in evidence are treated as literal payload (`<<'EOF'` would block the `${m}` / `${evidence}` interpolation and is wrong). Empty / absent `## Covers AC` (pure-component child) skips evidence emission silently — no parent comments posted.",
+      "expectations": [
+        "Mentions the `Acceptance verified: AC#N — <evidence>` comment format",
+        "Cites `PARENT_COMMENT_EVIDENCE_RE` at run-story.ts:220 OR ac-coverage-spec.md § 3.3 as the regex SSOT",
+        "Names the em-dash as U+2014 literal",
+        "Mentions parsing `## Covers AC` per ac-coverage-spec.md § 3.2",
+        "Says evidence text is concrete (test names + pass counts, byte sizes, grep counts, commit SHA, etc.)",
+        "Mentions `--body-file -` with an unquoted heredoc for shell-safety with backticks / `$(...)`",
+        "Says pure-component children (empty `## Covers AC`) skip evidence emission silently"
+      ]
+    },
+    {
+      "id": 32,
+      "prompt": "How does /impl detect that the just-closed child was the last open sub-issue, and what does it do in each branch?",
+      "expected_output": "Step 6.3 (parent close-trigger) queries the parent's `subIssuesSummary` via `gh api graphql` — selecting `{completed total}` — and compares the two integers. If `completed == total` (every sub-issue is now CLOSED, including the just-closed child) → spawn `/impl story <parent_n>` background using the same `nohup bun run \"$PLUGIN_ROOT/scripts/run-story.ts\" \"$parent_n\" -p 3 >> ~/.local/state/impl-story/<parent_n>.log 2>&1 &` launcher as story mode (with the sleep-5 + ps verify block); the orchestrator runs Gate C (AC evidence check) + parent close. If `completed < total` (siblings still OPEN) → skip spawn; sibling /impl <N> runs hit the same trigger on their own close, and only the last one to close drains the parent. If the GraphQL summary query fails (network blip, rate limit) → log + skip spawn; the parent stays OPEN and manual `/impl story <parent_n>` recovers. Race note: two siblings closing near-simultaneously can both observe `completed == total` and both spawn — benign, because run-story.ts exits cleanly on an already-CLOSED parent and the second nohup instance does no work. No spawn-deduplication needed.",
+      "expectations": [
+        "Names `subIssuesSummary` GraphQL field with `completed` and `total` sub-fields",
+        "Says `completed == total` triggers `/impl story <parent_n>` spawn via nohup",
+        "Says `completed < total` skips spawn (last child to close drains the parent)",
+        "Says GraphQL fault skips spawn with manual /impl story as recovery",
+        "Mentions the simultaneous-close race is benign (run-story exits clean on already-CLOSED parent)"
+      ]
+    },
+    {
+      "id": 33,
+      "prompt": "What does /impl do when the just-closed issue has no native parent (orphan issue / leaf issue with no parent story)?",
+      "expected_output": "Step 6.1 (Resolve parent) issues a `gh api graphql` query for `repository.issue.parent.number` with the `// empty` jq fallback collapsing `null` to `\"\"`. If `parent_n` is empty, /impl skips §§ 6.2 and 6.3 entirely — no comment posts on any parent, no `subIssuesSummary` query, no `/impl story` spawn. The exit path is byte-identical to pre-Phase-2 behavior. This is the contract for legacy issues filed before native sub-issue links were introduced (Phase 2 #219) AND for one-off issues with no parent story. Step 6.4 (Skip-on-orphan idempotence) codifies this contract so the next reader of SKILL.md sees the legacy-compatibility guarantee without inferring it from the absence of action.",
+      "expectations": [
+        "Says step 6.1 returns empty `parent_n` for orphan / leaf issues via `// empty` jq fallback",
+        "Says §§ 6.2 (evidence emission) and 6.3 (close-trigger) are skipped silently",
+        "No comment posts and no /impl story spawn happen for orphan issues",
+        "Mentions the byte-identical pre-Phase-2 exit path / legacy-compatibility contract"
+      ]
     }
   ]
 }

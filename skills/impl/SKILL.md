@@ -140,7 +140,75 @@ bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/close-issue.sh" <N>
 
 `git pull --rebase` is mandatory before push because the CI auto-release pipeline runs on each push and may have bumped `plugin.json`.
 
-### 6. Outcome log
+### 6. Post-close: parent evidence emission + parent close-trigger
+
+After `close-issue.sh` succeeds (issue CLOSED, `status:*` labels stripped) and BEFORE the outcome-log row in step 7, run two GraphQL-driven sub-steps. Both no-op silently for orphan issues (no native parent) and for pure-component children (empty or absent `## Covers AC`); they only fire when the just-closed child has a native parent AND claims at least one parent AC.
+
+Wire-level constants used below:
+
+- `<tracker-repo>` is the tracker repo (e.g. `sonthanh/ai-brain`) — split into `<owner>/<name>` for `gh api graphql`'s `-F` args.
+- The em-dash in `Acceptance verified: AC#N — <evidence>` is U+2014 (literal `—`, not ASCII `-` or U+2013 `–`). Source of truth: `PARENT_COMMENT_EVIDENCE_RE` at `scripts/run-story.ts:220` and `references/ac-coverage-spec.md` § 3.3.
+
+#### 6.1. Resolve parent
+
+```bash
+parent_n=$(gh api graphql \
+  -f query='query($owner:String!,$name:String!,$num:Int!){repository(owner:$owner,name:$name){issue(number:$num){parent{number}}}}' \
+  -F owner=<owner> -F name=<name> -F num=<N> \
+  --jq '.data.repository.issue.parent.number // empty')
+```
+
+`gh api graphql --jq` returns `"null"` for a `null` field unless the `// empty` fallback collapses it to `""`, so the bash existence check is a clean `[ -z "$parent_n" ]`. If `parent_n` is empty, the just-closed child is an orphan or a leaf — skip §§ 6.2 + 6.3 entirely and proceed to step 7. The skip-on-orphan path is what makes `/impl` idempotent against legacy issues filed before native sub-issue links (Phase 2 #219) AND against one-off issues with no parent story.
+
+#### 6.2. Evidence emission
+
+Parse the just-closed child's `## Covers AC` section (per-line regex `^- AC#(\d+)\s*$` applied inside the section, per `references/ac-coverage-spec.md` § 3.2). For each AC#M listed:
+
+- Compose evidence text from the just-completed `/tdd` cycle. Concrete sources, in priority order:
+  - `bun test` / `pytest` / artifact-runner stdout: test names + pass/fail counts (e.g. `bun test scripts/run-story.test.ts: 47 pass, 0 fail`)
+  - File inspection: paths verified + byte sizes (e.g. `skills/impl/SKILL.md: 44321 bytes`)
+  - grep counts (e.g. `grep -c "Acceptance verified: AC#" skills/impl/SKILL.md → 4`)
+  - Commit SHA + diff stat (e.g. `commit abc1234 — 1 file changed, +120/-3`)
+
+  Mix-and-match as the AC demands. Evidence MUST be a single non-empty line so the line-anchored regex matches.
+
+- Post one comment per AC#M to the parent. Use `--body-file -` with an unquoted heredoc so evidence text containing backticks, `$(...)`, or shell metacharacters is treated as literal payload (bash expands `${m}` and `${evidence}` once when parsing the heredoc body; the expanded values are NOT re-parsed for further substitution, so embedded `$(...)` survives as text). Inline `--body "…"` would have the same expansion semantics but is harder to extend to multi-line evidence; heredoc + body-file is the gh idiom for multi-line comments:
+
+```bash
+gh issue comment "$parent_n" -R <tracker-repo> --body-file - <<EOF
+Acceptance verified: AC#${m} — ${evidence}
+EOF
+```
+
+Quoted heredoc (`<<'EOF'`) would block `${m}` / `${evidence}` expansion entirely — DO NOT use it; the AC ID and evidence text MUST be interpolated.
+
+Empty / absent `## Covers AC` (pure-component child) → skip evidence emission silently. The parent's evidence trail is reserved for live-AC criteria; pure-component children leave none.
+
+If a `gh issue comment` call fails (network blip, rate limit, label/permission fault), log the failure and continue with the remaining AC#M and §§ 6.3. Don't abort post-close — partial-evidence is recoverable on the next `/impl story <parent_n>` run; raising an exception here would leave the issue closed with no trace of the post-close attempt.
+
+#### 6.3. Parent close-trigger
+
+Query the parent's `subIssuesSummary` to detect "this child was the last open sub-issue":
+
+```bash
+summary_json=$(gh api graphql \
+  -f query='query($owner:String!,$name:String!,$num:Int!){repository(owner:$owner,name:$name){issue(number:$num){subIssuesSummary{completed total}}}}' \
+  -F owner=<owner> -F name=<name> -F num="$parent_n")
+completed=$(jq -r '.data.repository.issue.subIssuesSummary.completed' <<<"$summary_json")
+total=$(jq -r '.data.repository.issue.subIssuesSummary.total' <<<"$summary_json")
+```
+
+- `completed == total` → spawn `/impl story <parent_n>` background. Use the same `nohup bun run "$PLUGIN_ROOT/scripts/run-story.ts" "$parent_n" -p 3 >> ~/.local/state/impl-story/<parent_n>.log 2>&1 &` launcher as § Workflow — `story` mode → "Invocation" (and the same sleep-5 + `ps` verify block); substitute `"$parent_n"` for the parent arg. The orchestrator runs Gate C (AC evidence check) + parent close.
+- `completed < total` → skip spawn. Sibling `/impl <N>` runs hit the same trigger on their own close; only the last one to close drains the parent.
+- GraphQL fault on the summary query → log + skip spawn. The parent stays OPEN; manual `/impl story <parent_n>` recovers.
+
+Race note: two siblings closing near-simultaneously can both observe `completed == total` and both spawn `/impl story`. The race is benign — `run-story.ts` exits cleanly on an already-CLOSED parent and the second `nohup` instance does no work. No spawn-deduplication needed.
+
+#### 6.4. Skip-on-orphan idempotence
+
+If § 6.1 returned no parent, §§ 6.2 + 6.3 do not run. No comment posts, no spawn — `/impl <N>` exit is byte-identical to pre-Phase-2 behavior. This is the contract for legacy issues filed before native sub-issue links AND for one-off issues with no parent story.
+
+### 7. Outcome log
 
 Append one line to `{vault}/daily/skill-outcomes/impl.log` (see § Outcome log below).
 
@@ -159,6 +227,7 @@ Append one line to `{vault}/daily/skill-outcomes/impl.log` (see § Outcome log b
 | /tdd | Single pass | Wrapped in child-level ralph + advisor (max 3 iters) — see below |
 | Commit | `git commit ...` | `git commit ...` |
 | Push + close | Same | Same |
+| Post-close (§ 6) | Per § 6 | Same |
 
 ### Child-level ralph + advisor wrapper
 
