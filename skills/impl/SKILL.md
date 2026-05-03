@@ -182,9 +182,17 @@ EOF
 
 Quoted heredoc (`<<'EOF'`) would block `${m}` / `${evidence}` expansion entirely — DO NOT use it; the AC ID and evidence text MUST be interpolated.
 
-Empty / absent `## Covers AC` (pure-component child) → skip evidence emission silently. The parent's evidence trail is reserved for live-AC criteria; pure-component children leave none.
+- Immediately after the comment lands, tick the matching parent body bullet so form-(ii) evidence and form-(ii) tick stay co-located in the same write path. The CLI imports `tickAcceptance` from `scripts/run-story.ts` (single SSOT for the U+2014 em-dash + bold AC bullet regex per `references/ac-coverage-spec.md` § 3.1):
 
-If a `gh issue comment` call fails (network blip, rate limit, label/permission fault), log the failure and continue with the remaining AC#M and §§ 6.3. Don't abort post-close — partial-evidence is recoverable on the next `/impl story <parent_n>` run; raising an exception here would leave the issue closed with no trace of the post-close attempt.
+```bash
+bun run "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/tick-parent-ac.ts" "$parent_n" "${m}"
+```
+
+The CLI is idempotent — already-ticked AC is a silent no-op; missing `**AC#${m}**` bullet in the parent body emits a stderr WARN and exits 0 (the parent body may have been edited after the child filed; not a fatal error). Per-AC-tick races between sibling `/impl <N>` workers closing simultaneously are anticipated: the parent close-trigger spawn (`§ 6.3`) re-runs Gate C's `tickAcceptance` as the second-line idempotent safety net. Operators recovering a parent whose evidence comments landed but whose ticks were missed (e.g. self-bootstrapping orchestrator runs that shipped `tickAcceptance` mid-flight) can run `bun run "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/tick-parent-ac-from-comments.ts" <parent-N>` to backfill from existing comments.
+
+Empty / absent `## Covers AC` (pure-component child) → skip evidence emission AND tick silently. The parent's evidence trail is reserved for live-AC criteria; pure-component children leave none.
+
+If a `gh issue comment` or `tick-parent-ac.ts` call fails (network blip, rate limit, label/permission fault), log the failure and continue with the remaining AC#M and §§ 6.3. Don't abort post-close — partial-evidence is recoverable on the next `/impl story <parent_n>` run (Gate C re-ticks); raising an exception here would leave the issue closed with no trace of the post-close attempt.
 
 #### 6.3. Parent close-trigger
 

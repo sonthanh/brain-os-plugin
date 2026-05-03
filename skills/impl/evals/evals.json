@@ -334,8 +334,8 @@
     },
     {
       "id": 31,
-      "prompt": "After `close-issue.sh` succeeds on a child issue with a `## Covers AC` section, what does /impl post on the parent and where is the format anchored?",
-      "expected_output": "Step 6 (Post-close) parses the child's `## Covers AC` section using the per-line regex `^- AC#(\\d+)\\s*$` from `references/ac-coverage-spec.md` § 3.2, and posts ONE comment to the parent per AC#M of the form `Acceptance verified: AC#${m} — ${evidence}` matching the line-anchored regex `^Acceptance verified: AC#(\\d+) — (.+)$` (the SSOT is `PARENT_COMMENT_EVIDENCE_RE` at `scripts/run-story.ts:220` and § 3.3 of the spec). The em-dash is U+2014 literal (not ASCII `-`, not U+2013 `–`). Evidence text is composed from the just-completed /tdd cycle: bun test / pytest stdout (test names + pass/fail counts), file inspection (paths + byte sizes), grep counts, or commit SHA + diff stat. Posted via `gh issue comment \"$parent_n\" -R <tracker-repo> --body-file -` with an unquoted heredoc so backticks / `$(...)` / shell metacharacters in evidence are treated as literal payload (`<<'EOF'` would block the `${m}` / `${evidence}` interpolation and is wrong). Empty / absent `## Covers AC` (pure-component child) skips evidence emission silently — no parent comments posted.",
+      "prompt": "After `close-issue.sh` succeeds on a child issue with a `## Covers AC` section, what does /impl post on the parent AND what does it do to the parent body, and where are these anchored?",
+      "expected_output": "Step 6 (Post-close) parses the child's `## Covers AC` section using the per-line regex `^- AC#(\\d+)\\s*$` from `references/ac-coverage-spec.md` § 3.2. For each AC#M two writes happen, in order: (1) post one comment to the parent of the form `Acceptance verified: AC#${m} — ${evidence}` matching the line-anchored regex `^Acceptance verified: AC#(\\d+) — (.+)$` (SSOT is `PARENT_COMMENT_EVIDENCE_RE` at `scripts/run-story.ts:220` and § 3.3 of the spec; em-dash is U+2014 literal, not ASCII `-`, not U+2013 `–`). Evidence text is composed from the just-completed /tdd cycle: bun test / pytest stdout (test names + pass/fail counts), file inspection (paths + byte sizes), grep counts, or commit SHA + diff stat. Posted via `gh issue comment \"$parent_n\" -R <tracker-repo> --body-file -` with an unquoted heredoc (`<<'EOF'` would block `${m}` / `${evidence}` interpolation and is wrong). (2) Immediately after the comment lands, invoke `bun run \"$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/tick-parent-ac.ts\" \"$parent_n\" \"${m}\"` so the parent body bullet `- [ ] **AC#M** —` flips to `- [x] **AC#M** —`. The CLI imports `tickAcceptance` from `scripts/run-story.ts` (single SSOT for the em-dash + bold AC bullet regex per § 3.1). Form-(ii) evidence and form-(ii) tick stay co-located in the same write path. The tick CLI is idempotent (already-ticked is a silent no-op; missing AC#M emits stderr WARN and exits 0). Sibling-worker tick races are anticipated and handled by the parent close-trigger spawn (§ 6.3) re-running Gate C's `tickAcceptance` as the second-line idempotent safety net. Empty / absent `## Covers AC` (pure-component child) skips both the evidence post AND the tick silently.",
       "expectations": [
         "Mentions the `Acceptance verified: AC#N — <evidence>` comment format",
         "Cites `PARENT_COMMENT_EVIDENCE_RE` at run-story.ts:220 OR ac-coverage-spec.md § 3.3 as the regex SSOT",
@@ -343,7 +343,25 @@
         "Mentions parsing `## Covers AC` per ac-coverage-spec.md § 3.2",
         "Says evidence text is concrete (test names + pass counts, byte sizes, grep counts, commit SHA, etc.)",
         "Mentions `--body-file -` with an unquoted heredoc for shell-safety with backticks / `$(...)`",
-        "Says pure-component children (empty `## Covers AC`) skip evidence emission silently"
+        "Mentions the `tick-parent-ac.ts` CLI invocation per AC#M (post-comment, same write path)",
+        "Says the tick CLI is idempotent (already-ticked is no-op; missing AC#M is stderr WARN + exit 0)",
+        "Mentions Gate C as the second-line safety net for sibling-worker tick races",
+        "Says pure-component children skip BOTH evidence emission AND tick silently"
+      ]
+    },
+    {
+      "id": 34,
+      "prompt": "A parent story has `Acceptance verified: AC#N — …` evidence comments but its body checkboxes are still `- [ ]` (e.g. a self-bootstrapping `/impl story` run shipped `tickAcceptance` mid-flight and its bun process couldn't pick up the new function). How do you backfill the ticks without re-running the orchestrator?",
+      "expected_output": "Run `bun run \"$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/tick-parent-ac-from-comments.ts\" <parent-N>`. The CLI fetches the parent body + comments via `gh issue view --json body,comments`, scans every comment for the `^Acceptance verified: AC#(\\d+) — (.+)$` regex (`PARENT_COMMENT_EVIDENCE_RE` at scripts/run-story.ts:220, U+2014 em-dash literal per ac-coverage-spec.md § 3.3), aggregates the AC IDs into a unique sorted set, and for each ID calls `tickAcceptance(body, acId)` — same single SSOT helper that `/impl <child>` per-close uses, imported from run-story.ts. One body update is posted via `gh issue edit --body-file -` covering all aggregated ticks. Idempotent: re-running on already-ticked bullets is a silent no-op; AC IDs that appear in comments but have no matching `**AC#N**` bullet in the body emit a stderr WARN line `WARN: #<P>: AC IDs in comments but absent from body: [<list>]` and exit 0 (not fatal — the parent body may have been edited after evidence was posted). This is the recovery path for stories where evidence comments landed but parent ticks were missed, and is also why per-child tick races (sibling /impl workers clobbering each other's body update) are tolerated — Gate C inside `/impl story <P>` plays the same role as a second-line safety net.",
+      "expectations": [
+        "Names `scripts/gh-tasks/tick-parent-ac-from-comments.ts <parent-N>` as the recovery CLI",
+        "Says it fetches body + comments via `gh issue view --json body,comments`",
+        "Cites `PARENT_COMMENT_EVIDENCE_RE` at run-story.ts:220 OR ac-coverage-spec.md § 3.3 as the comment regex SSOT",
+        "Says it imports `tickAcceptance` from run-story.ts (single SSOT, no regex duplication)",
+        "Says one body update covers all aggregated ticks (not one edit per AC)",
+        "Says idempotent on already-ticked AC bullets",
+        "Says missing AC#N in body emits stderr WARN + exit 0 (not fatal)",
+        "Mentions Gate C inside /impl story as the equivalent safety-net for sibling-tick races"
       ]
     },
     {
