@@ -55,6 +55,8 @@ Fully autonomous mode — reads needs-reply queue, generates drafts, creates the
 
 The triage workflow appends a `## Meetings — missing-on-calendar` section to the human-summary MD whenever a personal forwarded/plain-text meeting is detected that isn't already on the user's Google Calendar. (Direct `.ics` invites are auto-processed by Google — never appear here.)
 
+The workflow also adds the `IMPORTANT` Gmail label to each missing-event email so the user can filter `is:important` in Gmail mobile to find what needs calendar attention. Each entry in the section also includes the email's `From`, `Subject`, and a `mail.google.com#search/rfc822msgid:` link that deep-links to the Gmail app on mobile (when Gmail is the default mail handler).
+
 When the user says **`/gmail create <descriptor>`** (e.g. `/gmail create carrosserie`):
 
 1. Find the latest triage MD in `{vault}/daily/gmail-triage/`.
