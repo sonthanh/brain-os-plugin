@@ -9,6 +9,7 @@
     "gmail:setup": "tsx skills/gmail/scripts/setup-oauth.ts"
   },
   "dependencies": {
+    "@googleapis/calendar": "^14.2.0",
     "@googleapis/gmail": "^8.0.0",
     "google-auth-library": "^9.0.0"
   },
