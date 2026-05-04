@@ -479,6 +479,138 @@ describe("runOrchestrator — happy path", () => {
 });
 
 // ---------------------------------------------------------------------------
+// runOrchestrator — emit-edges hook (#241, parent #237 AC#11)
+// ---------------------------------------------------------------------------
+
+describe("runOrchestrator — emit-edges hook (#241)", () => {
+  test("invokes emitInteractionEdges with the current base id, before extraction", async () => {
+    const seedsA = [seed("appA", "r1")];
+    const v1 = batchVerdict("appA", [passingVerdict("appA-r1")]);
+    const harness = makeHarness({
+      initialState: null,
+      seedsByBase: { appA: seedsA },
+      reAnchorDecisions: { appA: "approve" },
+      verdictsByBatch: [v1],
+      basesDir: join(tmp, "bases"),
+      metricsDir: join(tmp, "metrics"),
+    });
+
+    const order: string[] = [];
+    const emitCalls: string[] = [];
+    const originalExtract = harness.deps.runExtract;
+    harness.deps.emitInteractionEdges = async (baseId: string) => {
+      emitCalls.push(baseId);
+      order.push(`emit:${baseId}`);
+      return {
+        baseId,
+        tablesProcessed: ["tblPay"],
+        edgesWritten: 5,
+        edgesAdded: 5,
+        edgesUpdated: 0,
+        outputPath: "/tmp/edges.jsonl",
+        skipped: false,
+        recordsSkipped: [],
+      };
+    };
+    harness.deps.runExtract = async (s) => {
+      order.push(`extract:${s.recordId}`);
+      return originalExtract(s);
+    };
+
+    const result = await runOrchestrator(
+      defaultArgs({ baseId: "appA", parallelism: 1 }),
+      harness.deps,
+    );
+    expect(result.kind).toBe("paused");
+    expect(emitCalls).toEqual(["appA"]);
+    // emit-edges must run before any extract call so the JSONL channel
+    // settles before entity extraction reads its outputs (rollup #245).
+    expect(order[0]).toBe("emit:appA");
+    expect(order.slice(1).every((s) => s.startsWith("extract:"))).toBe(true);
+  });
+
+  test("skipped=true (no Stage 0 cache) does NOT abort the run", async () => {
+    const seedsA = [seed("appA", "r1")];
+    const v1 = batchVerdict("appA", [passingVerdict("appA-r1")]);
+    const harness = makeHarness({
+      initialState: null,
+      seedsByBase: { appA: seedsA },
+      reAnchorDecisions: { appA: "approve" },
+      verdictsByBatch: [v1],
+      basesDir: join(tmp, "bases"),
+      metricsDir: join(tmp, "metrics"),
+    });
+
+    harness.deps.emitInteractionEdges = async (baseId: string) => ({
+      baseId,
+      tablesProcessed: [],
+      edgesWritten: 0,
+      edgesAdded: 0,
+      edgesUpdated: 0,
+      outputPath: null,
+      skipped: true,
+      reason: "Stage 0 cache absent",
+      recordsSkipped: [],
+    });
+
+    const result = await runOrchestrator(
+      defaultArgs({ baseId: "appA", parallelism: 1 }),
+      harness.deps,
+    );
+    expect(result.kind).toBe("paused");
+    expect(harness.extractCalls).toHaveLength(1);
+  });
+
+  test("emitInteractionEdges throwing is logged but does NOT abort the run", async () => {
+    const seedsA = [seed("appA", "r1")];
+    const v1 = batchVerdict("appA", [passingVerdict("appA-r1")]);
+    const logs: string[] = [];
+    const harness = makeHarness({
+      initialState: null,
+      seedsByBase: { appA: seedsA },
+      reAnchorDecisions: { appA: "approve" },
+      verdictsByBatch: [v1],
+      basesDir: join(tmp, "bases"),
+      metricsDir: join(tmp, "metrics"),
+    });
+    harness.deps.log = (m: string) => logs.push(m);
+    harness.deps.emitInteractionEdges = async () => {
+      throw new Error("Airtable Records API 500");
+    };
+
+    const result = await runOrchestrator(
+      defaultArgs({ baseId: "appA", parallelism: 1 }),
+      harness.deps,
+    );
+    expect(result.kind).toBe("paused");
+    expect(harness.extractCalls).toHaveLength(1);
+    expect(logs.some((l) => /emit-edges failed/.test(l))).toBe(true);
+  });
+
+  test("omitting emitInteractionEdges from deps is permitted (back-compat with pre-#241 callers)", async () => {
+    // The base happy-path test in this file already exercises the deps
+    // without an emit-edges hook; this test makes the contract explicit.
+    const seedsA = [seed("appA", "r1")];
+    const v1 = batchVerdict("appA", [passingVerdict("appA-r1")]);
+    const harness = makeHarness({
+      initialState: null,
+      seedsByBase: { appA: seedsA },
+      reAnchorDecisions: { appA: "approve" },
+      verdictsByBatch: [v1],
+      basesDir: join(tmp, "bases"),
+      metricsDir: join(tmp, "metrics"),
+    });
+    expect(harness.deps.emitInteractionEdges).toBeUndefined();
+
+    const result = await runOrchestrator(
+      defaultArgs({ baseId: "appA", parallelism: 1 }),
+      harness.deps,
+    );
+    expect(result.kind).toBe("paused");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // runOrchestrator — reviewer fail + retry path
 // ---------------------------------------------------------------------------
 

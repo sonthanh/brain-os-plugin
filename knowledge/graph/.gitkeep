@@ -1,0 +1,12 @@
+# `knowledge/graph/` — runtime SSOT directory marker
+#
+# This `.gitkeep` is a no-op marker matching the literal Files list in
+# ai-brain#241. The runtime path for `edges.jsonl` is the **vault**'s
+# `knowledge/graph/edges.jsonl`, not the plugin repo's. The vault is
+# resolved per-run via `brain-os.config.md` → `vault_path`, and
+# `emit-edges.mts` calls `mkdirSync({recursive:true})` to create the
+# directory at runtime (see `tests/emit-edges.test.ts → "creates
+# knowledge/graph directory at runtime if absent"`).
+#
+# This file exists in the plugin repo only so the Files list in #241 has
+# a concrete artifact. It MUST NOT be relied on by any code path.

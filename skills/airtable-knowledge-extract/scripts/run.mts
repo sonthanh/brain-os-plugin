@@ -64,6 +64,7 @@ import {
   HITL_PENDING_EXIT_CODE,
   HitlPendingError,
 } from "./hitl.mts";
+import { emitEdges, type EmitEdgesResult } from "./emit-edges.mts";
 
 export const DEFAULT_PARALLELISM = 5;
 export const DEFAULT_THRESHOLD = 0.95;
@@ -152,6 +153,11 @@ export interface RunDeps {
   now: () => string;
   log: (msg: string) => void;
   uuid: () => string;
+  // Optional — Phase-1 architecture-correction hook (#241, parent #237 AC#11).
+  // Called after re-anchor approves and before seed-based extraction. Skips
+  // silently when Stage 0 cache (#238) is absent for the base. Replaced by
+  // the full dispatcher (#242) once that lands.
+  emitInteractionEdges?: (baseId: string) => Promise<EmitEdgesResult>;
 }
 
 export interface RunResult {
@@ -324,6 +330,28 @@ export async function runOrchestrator(
       reason: "re-anchor needs human decision",
       neededPaths: reAnchorResult.neededPaths,
     };
+  }
+
+  if (deps.emitInteractionEdges) {
+    try {
+      const edgeResult = await deps.emitInteractionEdges(baseId);
+      if (edgeResult.skipped) {
+        deps.log(
+          `[run ${args.runId}] emit-edges skipped for ${baseId}: ${edgeResult.reason ?? "(no reason)"}`,
+        );
+      } else {
+        deps.log(
+          `[run ${args.runId}] emit-edges ${baseId}: ${edgeResult.edgesAdded} added, ${edgeResult.edgesUpdated} updated across ${edgeResult.tablesProcessed.length} interaction table(s) → ${edgeResult.outputPath}`,
+        );
+      }
+    } catch (err) {
+      // Non-fatal: edge emission is a side-channel SSOT (#176/#237). The
+      // entity-extraction batch loop is the authoritative AC for Phase-1
+      // pass — degraded edges produce a missing rollup, not a wrong vault.
+      deps.log(
+        `[run ${args.runId}] emit-edges failed for ${baseId}: ${(err as Error).message ?? err}`,
+      );
+    }
   }
 
   const seeds = await deps.getSeedsForBase(baseId);
@@ -825,6 +853,7 @@ async function main(parsed: ParsedArgs): Promise<number> {
     now: () => new Date().toISOString(),
     log: (msg) => process.stderr.write(`${msg}\n`),
     uuid: defaultUuid,
+    emitInteractionEdges: (baseId) => emitEdges(baseId),
   };
 
   const args: RunArgs = {
