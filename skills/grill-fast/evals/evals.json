@@ -1,0 +1,125 @@
+{
+  "skill_name": "grill-fast",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "How does grill-fast differ from /grill in how it asks the user?",
+      "expected_output": "Pre-grills internally then renders 3 candidate decision-tree architectures side-by-side as ASCII for the user to pick — instead of asking question-by-question linearly.",
+      "expectations": [
+        "Mentions 3 candidate architectures or trees rendered side-by-side",
+        "Mentions ASCII diagrams as the rendering format",
+        "Contrasts with linear question-by-question march"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "What does grill-fast do with each decision in the topic?",
+      "expected_output": "Partitions decisions as ARCH (branches the architecture, goes into the trees) or PARAM (single value pick, goes in a batched parameter block).",
+      "expectations": [
+        "Mentions partitioning decisions",
+        "Mentions ARCH vs PARAM categorization",
+        "ARCH go into trees, PARAM batched into a single block"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "How many candidate architecture trees does grill-fast render?",
+      "expected_output": "Three candidate architectures spanning the real design space — each internally consistent and defensible, not 1 good plus 2 strawmen.",
+      "expectations": [
+        "Mentions 3 candidate trees",
+        "Mentions trees must be defensible (not strawmen)",
+        "Mentions trees should span the design space"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "When should grill-fast abort and recommend /grill instead?",
+      "expected_output": "When fewer than 3 ARCH decisions exist (single-decision topic), when vault context is too thin to sketch any candidate, or when decisions are PARAM-heavy with only 1-2 architectural branches.",
+      "expectations": [
+        "Mentions <3 ARCH decisions abort condition",
+        "Mentions thin vault context abort condition",
+        "Mentions PARAM-heavy or single-decision abort"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Where does grill-fast save its output?",
+      "expected_output": "{vault}/daily/grill-sessions/YYYY-MM-DD-<topic-slug>.md — same path as /grill, distinguished by frontmatter tag grill-fast or mode-b.",
+      "expectations": [
+        "Mentions daily/grill-sessions/ path",
+        "Mentions YYYY-MM-DD topic slug naming",
+        "Mentions tag or frontmatter distinguishes from /grill"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "What sections must the grill-fast output file contain?",
+      "expected_output": "Frame, The 3 candidate architectures (ASCII), Key deltas, Cost / risk per tree, Parameter picks, Recommended pick, Failure mode call-outs, Status gate.",
+      "expectations": [
+        "Lists candidate architectures section with ASCII",
+        "Lists key deltas section",
+        "Lists cost/risk per tree section",
+        "Lists parameter picks section",
+        "Lists recommended pick section"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "How does grill-fast highlight differences between the 3 candidate trees?",
+      "expected_output": "ASCII trees include header strips with each tree's ARCH picks plus inline arrow callouts (e.g. ◄──) marking where trees differ, and a delta table with one row per ARCH decision showing per-tree picks.",
+      "expectations": [
+        "Mentions header strip showing each tree's ARCH picks",
+        "Mentions inline arrow callouts for differences",
+        "Mentions delta table with per-tree picks"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "Does grill-fast end with 'you decide' or with a recommendation?",
+      "expected_output": "Recommendation — picks ONE tree (A/B/C) with rationale. Decide-and-recommend rule applies; never end with multiple-choice ask.",
+      "expectations": [
+        "Mentions ONE pick / recommendation at the end",
+        "Mentions Decide-and-recommend rule",
+        "Says NOT 'you decide' style ending"
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "What does grill-fast do for non-recommended trees?",
+      "expected_output": "Lists failure-mode call-outs for each non-recommended tree — what to flag if user picks it anyway (e.g. spec violation, regression risk, scope blow-out).",
+      "expectations": [
+        "Mentions failure-mode call-outs per non-recommended tree",
+        "Mentions flagging risks if user picks differently"
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "What target lock-time does grill-fast aim for?",
+      "expected_output": "Lock in 2-3 user turns total — one turn from skill (3 trees + tables + recommendation) plus 1-2 from user picking and resolving any flagged trade-offs.",
+      "expectations": [
+        "Mentions 2-3 user turns to lock",
+        "Contrasts with linear question-by-question count"
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "What must grill-fast do before pre-grilling internally?",
+      "expected_output": "Vault research first — check RESOLVER.md and relevant zone READMEs and prior grills/research. Same vault-first protocol as /grill.",
+      "expectations": [
+        "Mentions vault research before pre-grilling",
+        "Mentions RESOLVER.md or zone READMEs",
+        "Mentions reuse of /grill vault-first protocol"
+      ]
+    },
+    {
+      "id": 12,
+      "prompt": "What special fields does grill-fast log to its outcome log beyond the standard skill-spec § 11 fields?",
+      "expected_output": "turns_to_lock=N (count user turns from invocation to lock — success metric, target ≤3) and pick=A|B|C|hybrid|none (which tree user selected).",
+      "expectations": [
+        "Mentions turns_to_lock metric",
+        "Mentions pick field with A/B/C/hybrid/none values",
+        "Mentions ≤3 turns target"
+      ]
+    }
+  ]
+}
