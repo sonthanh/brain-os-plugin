@@ -6,3 +6,5 @@ out/
 .env.local
 bun.lockb
 tests/fixtures/judge-fidelity-prompt.md
+cache/table-types/*.json
+!cache/table-types/.gitkeep

@@ -1,0 +1,415 @@
+{
+  "_comment": "Golden-set fixture for Stage 0 table-type classifier (ai-brain#238). Each entry mirrors a known table shape from the 5 tested bases analysed in knowledge/research/reports/2026-05-03-airtable-schema-driven-extraction-dispatch.md. Records are synthesised: real records would leak customer/finance data and the fixture must remain in git. Entries cover all three classes (entity / interaction / reject) plus the trap class (#236-style low-unique-primary). The live-mode test (AIRTABLE_TABLE_TYPE_LIVE=1) feeds these entries directly to claude -p — no Airtable network call required.",
+  "entries": [
+    {
+      "id": "people-contacts",
+      "table": {
+        "id": "tblPeople",
+        "name": "People",
+        "fields": [
+          { "id": "fld001", "name": "Full Name", "type": "singleLineText" },
+          { "id": "fld002", "name": "Email", "type": "email" },
+          { "id": "fld003", "name": "Role", "type": "singleLineText" },
+          { "id": "fld004", "name": "Company", "type": "multipleRecordLinks", "options": { "linkedTableId": "tblCompanies" } }
+        ]
+      },
+      "sample_records": [
+        { "id": "rec001", "fields": { "Full Name": "Alice Nguyen", "Email": "alice@example.com", "Role": "Engineer", "Company": ["recCo1"] } },
+        { "id": "rec002", "fields": { "Full Name": "Bao Tran", "Email": "bao@example.com", "Role": "Designer", "Company": ["recCo2"] } },
+        { "id": "rec003", "fields": { "Full Name": "Chi Le", "Email": "chi@example.com", "Role": "PM", "Company": ["recCo1"] } },
+        { "id": "rec004", "fields": { "Full Name": "Duy Pham", "Email": "duy@example.com", "Role": "Engineer", "Company": ["recCo3"] } },
+        { "id": "rec005", "fields": { "Full Name": "Em Vu", "Email": "em@example.com", "Role": "CEO", "Company": ["recCo2"] } }
+      ],
+      "expected_type": "entity"
+    },
+    {
+      "id": "companies",
+      "table": {
+        "id": "tblCompanies",
+        "name": "Companies",
+        "fields": [
+          { "id": "fld010", "name": "Name", "type": "singleLineText" },
+          { "id": "fld011", "name": "Industry", "type": "singleSelect" },
+          { "id": "fld012", "name": "Stage", "type": "singleSelect" },
+          { "id": "fld013", "name": "People", "type": "multipleRecordLinks", "options": { "linkedTableId": "tblPeople" } }
+        ]
+      },
+      "sample_records": [
+        { "id": "recCo1", "fields": { "Name": "Acme Corp", "Industry": "Software", "Stage": "Series A" } },
+        { "id": "recCo2", "fields": { "Name": "Globex Inc", "Industry": "Finance", "Stage": "Seed" } },
+        { "id": "recCo3", "fields": { "Name": "Initech", "Industry": "Hardware", "Stage": "Series B" } },
+        { "id": "recCo4", "fields": { "Name": "Umbrella LLC", "Industry": "Health", "Stage": "Pre-seed" } },
+        { "id": "recCo5", "fields": { "Name": "Hooli Ltd", "Industry": "Software", "Stage": "Series C" } }
+      ],
+      "expected_type": "entity"
+    },
+    {
+      "id": "okr-objectives",
+      "table": {
+        "id": "tblObjectives",
+        "name": "Objectives",
+        "fields": [
+          { "id": "fld020", "name": "Objective", "type": "singleLineText" },
+          { "id": "fld021", "name": "Period", "type": "singleSelect" },
+          { "id": "fld022", "name": "Owner", "type": "multipleRecordLinks", "options": { "linkedTableId": "tblPeople" } },
+          { "id": "fld023", "name": "Key Results", "type": "multipleRecordLinks", "options": { "linkedTableId": "tblKeyResults" } }
+        ]
+      },
+      "sample_records": [
+        { "id": "recObj1", "fields": { "Objective": "Launch MVP", "Period": "2026 Q2", "Owner": ["rec005"] } },
+        { "id": "recObj2", "fields": { "Objective": "Hit 1M ARR", "Period": "2026 Q2", "Owner": ["rec005"] } },
+        { "id": "recObj3", "fields": { "Objective": "Improve onboarding", "Period": "2026 Q3", "Owner": ["rec003"] } },
+        { "id": "recObj4", "fields": { "Objective": "Reduce churn", "Period": "2026 Q3", "Owner": ["rec005"] } },
+        { "id": "recObj5", "fields": { "Objective": "Open APAC region", "Period": "2026 Q4", "Owner": ["rec005"] } }
+      ],
+      "expected_type": "entity"
+    },
+    {
+      "id": "key-results",
+      "table": {
+        "id": "tblKeyResults",
+        "name": "Key Results",
+        "fields": [
+          { "id": "fld030", "name": "KR Title", "type": "singleLineText" },
+          { "id": "fld031", "name": "Target", "type": "number" },
+          { "id": "fld032", "name": "Current", "type": "number" },
+          { "id": "fld033", "name": "Objective", "type": "multipleRecordLinks", "options": { "linkedTableId": "tblObjectives" } }
+        ]
+      },
+      "sample_records": [
+        { "id": "recKR1", "fields": { "KR Title": "Sign 10 paying customers", "Target": 10, "Current": 3, "Objective": ["recObj1"] } },
+        { "id": "recKR2", "fields": { "KR Title": "Hit $50k MRR", "Target": 50000, "Current": 12000, "Objective": ["recObj2"] } },
+        { "id": "recKR3", "fields": { "KR Title": "Activation rate >40%", "Target": 40, "Current": 28, "Objective": ["recObj3"] } },
+        { "id": "recKR4", "fields": { "KR Title": "Churn <5%", "Target": 5, "Current": 7, "Objective": ["recObj4"] } },
+        { "id": "recKR5", "fields": { "KR Title": "Sign 3 APAC partners", "Target": 3, "Current": 0, "Objective": ["recObj5"] } }
+      ],
+      "expected_type": "entity"
+    },
+    {
+      "id": "decisions-adr",
+      "table": {
+        "id": "tblDecisions",
+        "name": "Decisions",
+        "fields": [
+          { "id": "fld040", "name": "Title", "type": "singleLineText" },
+          { "id": "fld041", "name": "Date", "type": "date" },
+          { "id": "fld042", "name": "Status", "type": "singleSelect" },
+          { "id": "fld043", "name": "Rationale", "type": "multilineText" }
+        ]
+      },
+      "sample_records": [
+        { "id": "recDec1", "fields": { "Title": "Adopt Bun runtime", "Date": "2026-04-01", "Status": "accepted", "Rationale": "Faster than node, native TS." } },
+        { "id": "recDec2", "fields": { "Title": "Use Postgres for OLTP", "Date": "2026-03-15", "Status": "accepted", "Rationale": "Familiar, mature." } },
+        { "id": "recDec3", "fields": { "Title": "Ship as plugin not standalone", "Date": "2026-02-20", "Status": "accepted", "Rationale": "Composable with claude code." } },
+        { "id": "recDec4", "fields": { "Title": "Drop legacy gem", "Date": "2026-01-10", "Status": "superseded", "Rationale": "Replaced by typescript port." } },
+        { "id": "recDec5", "fields": { "Title": "Adopt monorepo", "Date": "2026-04-22", "Status": "proposed", "Rationale": "Reduce repo sprawl." } }
+      ],
+      "expected_type": "entity"
+    },
+    {
+      "id": "projects",
+      "table": {
+        "id": "tblProjects",
+        "name": "Projects",
+        "fields": [
+          { "id": "fld050", "name": "Project Name", "type": "singleLineText" },
+          { "id": "fld051", "name": "Status", "type": "singleSelect" },
+          { "id": "fld052", "name": "Owner", "type": "multipleRecordLinks", "options": { "linkedTableId": "tblPeople" } },
+          { "id": "fld053", "name": "Tasks", "type": "multipleRecordLinks", "options": { "linkedTableId": "tblTasks" } }
+        ]
+      },
+      "sample_records": [
+        { "id": "recProj1", "fields": { "Project Name": "Vault Importer", "Status": "active", "Owner": ["rec001"] } },
+        { "id": "recProj2", "fields": { "Project Name": "Plugin Marketplace", "Status": "active", "Owner": ["rec003"] } },
+        { "id": "recProj3", "fields": { "Project Name": "Onboarding Refresh", "Status": "planned", "Owner": ["rec002"] } },
+        { "id": "recProj4", "fields": { "Project Name": "Pricing Page Redesign", "Status": "done", "Owner": ["rec002"] } },
+        { "id": "recProj5", "fields": { "Project Name": "APAC Launch", "Status": "active", "Owner": ["rec005"] } }
+      ],
+      "expected_type": "entity"
+    },
+    {
+      "id": "products",
+      "table": {
+        "id": "tblProducts",
+        "name": "Products",
+        "fields": [
+          { "id": "fld060", "name": "SKU", "type": "singleLineText" },
+          { "id": "fld061", "name": "Description", "type": "multilineText" },
+          { "id": "fld062", "name": "List Price", "type": "currency" }
+        ]
+      },
+      "sample_records": [
+        { "id": "recPrd1", "fields": { "SKU": "WIDGET-001", "Description": "Standard widget", "List Price": 19.99 } },
+        { "id": "recPrd2", "fields": { "SKU": "WIDGET-002", "Description": "Premium widget", "List Price": 39.99 } },
+        { "id": "recPrd3", "fields": { "SKU": "GADGET-001", "Description": "Standard gadget", "List Price": 29.99 } },
+        { "id": "recPrd4", "fields": { "SKU": "BUNDLE-01", "Description": "Widget + gadget bundle", "List Price": 49.99 } },
+        { "id": "recPrd5", "fields": { "SKU": "ENTERPRISE-001", "Description": "Enterprise SKU", "List Price": 999.0 } }
+      ],
+      "expected_type": "entity"
+    },
+    {
+      "id": "knowledge-notes",
+      "table": {
+        "id": "tblNotes",
+        "name": "Knowledge Notes",
+        "fields": [
+          { "id": "fld070", "name": "Title", "type": "singleLineText" },
+          { "id": "fld071", "name": "Tags", "type": "multipleSelects" },
+          { "id": "fld072", "name": "Body", "type": "multilineText" }
+        ]
+      },
+      "sample_records": [
+        { "id": "recNote1", "fields": { "Title": "How to deploy bun apps", "Tags": ["deploy", "bun"], "Body": "Steps: ..." } },
+        { "id": "recNote2", "fields": { "Title": "Postgres connection pooling", "Tags": ["db"], "Body": "Use pgbouncer." } },
+        { "id": "recNote3", "fields": { "Title": "On-call rotation rules", "Tags": ["ops"], "Body": "Weekly rotation, 1 primary 1 backup." } },
+        { "id": "recNote4", "fields": { "Title": "Pricing tier ladder", "Tags": ["sales"], "Body": "Free, Pro, Enterprise." } },
+        { "id": "recNote5", "fields": { "Title": "Hiring rubric for engineers", "Tags": ["hiring"], "Body": "Loop: phone, take-home, on-site." } }
+      ],
+      "expected_type": "entity"
+    },
+    {
+      "id": "payments",
+      "table": {
+        "id": "tblPayments",
+        "name": "Payments",
+        "fields": [
+          { "id": "fld080", "name": "Reference Number", "type": "singleLineText" },
+          { "id": "fld081", "name": "Payer Name", "type": "singleLineText" },
+          { "id": "fld082", "name": "Amount", "type": "currency" },
+          { "id": "fld083", "name": "Date", "type": "date" },
+          { "id": "fld084", "name": "Cashflow", "type": "multipleRecordLinks", "options": { "linkedTableId": "tblCashflows" } }
+        ]
+      },
+      "sample_records": [
+        { "id": "recPay1", "fields": { "Reference Number": "BT-001", "Payer Name": "Acme Corp", "Amount": 5000, "Date": "2026-04-01", "Cashflow": ["recCash1"] } },
+        { "id": "recPay2", "fields": { "Reference Number": "BT-002", "Payer Name": "Acme Corp", "Amount": 5000, "Date": "2026-04-15", "Cashflow": ["recCash1"] } },
+        { "id": "recPay3", "fields": { "Reference Number": "BT-003", "Payer Name": "Globex Inc", "Amount": 2500, "Date": "2026-04-15", "Cashflow": ["recCash2"] } },
+        { "id": "recPay4", "fields": { "Reference Number": "BT-004", "Payer Name": "Initech", "Amount": 1200, "Date": "2026-04-20", "Cashflow": ["recCash2"] } },
+        { "id": "recPay5", "fields": { "Reference Number": "BT-005", "Payer Name": "Acme Corp", "Amount": 5000, "Date": "2026-05-01", "Cashflow": ["recCash3"] } }
+      ],
+      "expected_type": "interaction"
+    },
+    {
+      "id": "cashflows",
+      "table": {
+        "id": "tblCashflows",
+        "name": "Cashflows",
+        "fields": [
+          { "id": "fld090", "name": "Name", "type": "singleLineText" },
+          { "id": "fld091", "name": "Period", "type": "date" },
+          { "id": "fld092", "name": "Inflow", "type": "currency" },
+          { "id": "fld093", "name": "Outflow", "type": "currency" },
+          { "id": "fld094", "name": "Payments", "type": "multipleRecordLinks", "options": { "linkedTableId": "tblPayments" } }
+        ]
+      },
+      "sample_records": [
+        { "id": "recCash1", "fields": { "Name": "April 2026 inflow", "Period": "2026-04-01", "Inflow": 50000, "Outflow": 32000 } },
+        { "id": "recCash2", "fields": { "Name": "April 2026 outflow", "Period": "2026-04-15", "Inflow": 0, "Outflow": 12000 } },
+        { "id": "recCash3", "fields": { "Name": "May 2026 inflow", "Period": "2026-05-01", "Inflow": 60000, "Outflow": 25000 } },
+        { "id": "recCash4", "fields": { "Name": "May 2026 outflow", "Period": "2026-05-15", "Inflow": 0, "Outflow": 8000 } },
+        { "id": "recCash5", "fields": { "Name": "June 2026 inflow", "Period": "2026-06-01", "Inflow": 70000, "Outflow": 30000 } }
+      ],
+      "expected_type": "interaction"
+    },
+    {
+      "id": "meetings",
+      "table": {
+        "id": "tblMeetings",
+        "name": "Meetings",
+        "fields": [
+          { "id": "fld100", "name": "Topic", "type": "singleLineText" },
+          { "id": "fld101", "name": "Date", "type": "dateTime" },
+          { "id": "fld102", "name": "Attendees", "type": "multipleRecordLinks", "options": { "linkedTableId": "tblPeople" } },
+          { "id": "fld103", "name": "Notes", "type": "multilineText" }
+        ]
+      },
+      "sample_records": [
+        { "id": "recMtg1", "fields": { "Topic": "Q2 strategy review", "Date": "2026-04-29T14:00:00", "Attendees": ["rec001", "rec005"], "Notes": "Discussed APAC expansion." } },
+        { "id": "recMtg2", "fields": { "Topic": "Pricing alignment", "Date": "2026-04-30T10:00:00", "Attendees": ["rec002", "rec003"], "Notes": "Agreed on enterprise tier." } },
+        { "id": "recMtg3", "fields": { "Topic": "Engineering all-hands", "Date": "2026-05-01T09:00:00", "Attendees": ["rec001", "rec004"], "Notes": "Sprint review." } },
+        { "id": "recMtg4", "fields": { "Topic": "Customer call: Acme", "Date": "2026-05-02T15:00:00", "Attendees": ["rec005"], "Notes": "Renewal locked." } },
+        { "id": "recMtg5", "fields": { "Topic": "Hiring sync", "Date": "2026-05-03T11:00:00", "Attendees": ["rec003"], "Notes": "2 engineering offers out." } }
+      ],
+      "expected_type": "interaction"
+    },
+    {
+      "id": "sales-activities",
+      "table": {
+        "id": "tblSalesActivity",
+        "name": "Sales Activities",
+        "fields": [
+          { "id": "fld110", "name": "Activity Type", "type": "singleSelect" },
+          { "id": "fld111", "name": "Date", "type": "dateTime" },
+          { "id": "fld112", "name": "Lead", "type": "multipleRecordLinks", "options": { "linkedTableId": "tblPeople" } },
+          { "id": "fld113", "name": "Owner", "type": "multipleRecordLinks", "options": { "linkedTableId": "tblPeople" } },
+          { "id": "fld114", "name": "Outcome Notes", "type": "multilineText" }
+        ]
+      },
+      "sample_records": [
+        { "id": "recAct1", "fields": { "Activity Type": "Discovery call", "Date": "2026-04-29T10:00:00", "Lead": ["rec002"], "Owner": ["rec005"] } },
+        { "id": "recAct2", "fields": { "Activity Type": "Demo", "Date": "2026-04-30T14:00:00", "Lead": ["rec002"], "Owner": ["rec005"] } },
+        { "id": "recAct3", "fields": { "Activity Type": "Discovery call", "Date": "2026-05-01T11:00:00", "Lead": ["rec004"], "Owner": ["rec005"] } },
+        { "id": "recAct4", "fields": { "Activity Type": "Follow-up", "Date": "2026-05-02T09:00:00", "Lead": ["rec002"], "Owner": ["rec003"] } },
+        { "id": "recAct5", "fields": { "Activity Type": "Demo", "Date": "2026-05-03T15:00:00", "Lead": ["rec001"], "Owner": ["rec005"] } }
+      ],
+      "expected_type": "interaction"
+    },
+    {
+      "id": "transactions",
+      "table": {
+        "id": "tblTxn",
+        "name": "Transactions",
+        "fields": [
+          { "id": "fld120", "name": "Txn ID", "type": "singleLineText" },
+          { "id": "fld121", "name": "Amount", "type": "currency" },
+          { "id": "fld122", "name": "Date", "type": "dateTime" },
+          { "id": "fld123", "name": "From Account", "type": "multipleRecordLinks", "options": { "linkedTableId": "tblAccounts" } },
+          { "id": "fld124", "name": "To Account", "type": "multipleRecordLinks", "options": { "linkedTableId": "tblAccounts" } }
+        ]
+      },
+      "sample_records": [
+        { "id": "recTxn1", "fields": { "Txn ID": "TXN-0001", "Amount": 1000, "Date": "2026-04-01T10:00:00", "From Account": ["recAcc1"], "To Account": ["recAcc2"] } },
+        { "id": "recTxn2", "fields": { "Txn ID": "TXN-0002", "Amount": 250, "Date": "2026-04-02T11:00:00", "From Account": ["recAcc1"], "To Account": ["recAcc3"] } },
+        { "id": "recTxn3", "fields": { "Txn ID": "TXN-0003", "Amount": 5000, "Date": "2026-04-03T09:00:00", "From Account": ["recAcc2"], "To Account": ["recAcc4"] } },
+        { "id": "recTxn4", "fields": { "Txn ID": "TXN-0004", "Amount": 75, "Date": "2026-04-04T13:00:00", "From Account": ["recAcc3"], "To Account": ["recAcc1"] } },
+        { "id": "recTxn5", "fields": { "Txn ID": "TXN-0005", "Amount": 1200, "Date": "2026-04-05T16:00:00", "From Account": ["recAcc4"], "To Account": ["recAcc2"] } }
+      ],
+      "expected_type": "interaction"
+    },
+    {
+      "id": "tasks",
+      "table": {
+        "id": "tblTasks",
+        "name": "Tasks",
+        "fields": [
+          { "id": "fld130", "name": "Title", "type": "singleLineText" },
+          { "id": "fld131", "name": "Status", "type": "singleSelect" },
+          { "id": "fld132", "name": "Assignee", "type": "multipleRecordLinks", "options": { "linkedTableId": "tblPeople" } },
+          { "id": "fld133", "name": "Project", "type": "multipleRecordLinks", "options": { "linkedTableId": "tblProjects" } }
+        ]
+      },
+      "sample_records": [
+        { "id": "recTsk1", "fields": { "Title": "Wire up auth", "Status": "in-progress", "Assignee": ["rec001"], "Project": ["recProj1"] } },
+        { "id": "recTsk2", "fields": { "Title": "Design pricing page", "Status": "todo", "Assignee": ["rec002"], "Project": ["recProj4"] } },
+        { "id": "recTsk3", "fields": { "Title": "Audit deps", "Status": "done", "Assignee": ["rec001"], "Project": ["recProj1"] } },
+        { "id": "recTsk4", "fields": { "Title": "Spec the importer", "Status": "in-progress", "Assignee": ["rec003"], "Project": ["recProj1"] } },
+        { "id": "recTsk5", "fields": { "Title": "Hire APAC lead", "Status": "todo", "Assignee": ["rec005"], "Project": ["recProj5"] } }
+      ],
+      "expected_type": "entity"
+    },
+    {
+      "id": "pnl-reports",
+      "table": {
+        "id": "tblPnL",
+        "name": "PnL Reports",
+        "fields": [
+          { "id": "fld140", "name": "Report Name", "type": "singleLineText" },
+          { "id": "fld141", "name": "Period", "type": "date" },
+          { "id": "fld142", "name": "Revenue", "type": "currency" },
+          { "id": "fld143", "name": "Expenses", "type": "currency" },
+          { "id": "fld144", "name": "Net", "type": "currency" }
+        ]
+      },
+      "sample_records": [
+        { "id": "recPnL1", "fields": { "Report Name": "Q1 2026 PnL", "Period": "2026-03-31", "Revenue": 150000, "Expenses": 90000, "Net": 60000 } },
+        { "id": "recPnL2", "fields": { "Report Name": "Q2 2026 PnL", "Period": "2026-06-30", "Revenue": 180000, "Expenses": 100000, "Net": 80000 } },
+        { "id": "recPnL3", "fields": { "Report Name": "Q3 2026 PnL", "Period": "2026-09-30", "Revenue": 200000, "Expenses": 110000, "Net": 90000 } },
+        { "id": "recPnL4", "fields": { "Report Name": "Q4 2026 PnL", "Period": "2026-12-31", "Revenue": 250000, "Expenses": 130000, "Net": 120000 } },
+        { "id": "recPnL5", "fields": { "Report Name": "FY 2026 PnL", "Period": "2026-12-31", "Revenue": 780000, "Expenses": 430000, "Net": 350000 } }
+      ],
+      "expected_type": "interaction"
+    },
+    {
+      "id": "log-events",
+      "table": {
+        "id": "tblLog",
+        "name": "Event Log",
+        "fields": [
+          { "id": "fld150", "name": "Event", "type": "singleLineText" },
+          { "id": "fld151", "name": "Timestamp", "type": "dateTime" },
+          { "id": "fld152", "name": "User", "type": "multipleRecordLinks", "options": { "linkedTableId": "tblPeople" } },
+          { "id": "fld153", "name": "Severity", "type": "singleSelect" }
+        ]
+      },
+      "sample_records": [
+        { "id": "recLog1", "fields": { "Event": "login", "Timestamp": "2026-05-01T08:00:00", "User": ["rec001"], "Severity": "info" } },
+        { "id": "recLog2", "fields": { "Event": "logout", "Timestamp": "2026-05-01T17:00:00", "User": ["rec001"], "Severity": "info" } },
+        { "id": "recLog3", "fields": { "Event": "login", "Timestamp": "2026-05-02T08:30:00", "User": ["rec002"], "Severity": "info" } },
+        { "id": "recLog4", "fields": { "Event": "failed-login", "Timestamp": "2026-05-02T09:00:00", "User": ["rec002"], "Severity": "warn" } },
+        { "id": "recLog5", "fields": { "Event": "password-reset", "Timestamp": "2026-05-02T09:05:00", "User": ["rec002"], "Severity": "info" } }
+      ],
+      "expected_type": "interaction"
+    },
+    {
+      "id": "junk-no-primary-signal",
+      "table": {
+        "id": "tblJunk",
+        "name": "Untitled Table",
+        "fields": [
+          { "id": "fld160", "name": "Field 1", "type": "singleLineText" },
+          { "id": "fld161", "name": "Field 2", "type": "singleLineText" }
+        ]
+      },
+      "sample_records": [
+        { "id": "recJ1", "fields": { "Field 1": "asdf", "Field 2": "qwer" } },
+        { "id": "recJ2", "fields": { "Field 1": "test", "Field 2": "test" } },
+        { "id": "recJ3", "fields": { "Field 1": "x", "Field 2": "y" } }
+      ],
+      "expected_type": "reject"
+    },
+    {
+      "id": "empty-shell",
+      "table": {
+        "id": "tblEmpty",
+        "name": "Sandbox",
+        "fields": [
+          { "id": "fld170", "name": "Name", "type": "singleLineText" }
+        ]
+      },
+      "sample_records": [],
+      "expected_type": "reject"
+    },
+    {
+      "id": "composite-key-customer-success",
+      "table": {
+        "id": "tblCS",
+        "name": "Customer Success",
+        "fields": [
+          { "id": "fld180", "name": "Personal Name/Company Name", "type": "singleLineText" },
+          { "id": "fld181", "name": "Tier", "type": "singleSelect" },
+          { "id": "fld182", "name": "Renewal Date", "type": "date" }
+        ]
+      },
+      "sample_records": [
+        { "id": "recCS1", "fields": { "Personal Name/Company Name": "Acme Corp", "Tier": "Enterprise", "Renewal Date": "2026-12-31" } },
+        { "id": "recCS2", "fields": { "Personal Name/Company Name": "Acme Corp", "Tier": "Enterprise", "Renewal Date": "2027-12-31" } },
+        { "id": "recCS3", "fields": { "Personal Name/Company Name": "Globex Inc", "Tier": "Pro", "Renewal Date": "2026-09-30" } },
+        { "id": "recCS4", "fields": { "Personal Name/Company Name": "Acme Corp", "Tier": "Pro", "Renewal Date": "2026-08-15" } },
+        { "id": "recCS5", "fields": { "Personal Name/Company Name": "Initech", "Tier": "Enterprise", "Renewal Date": "2026-11-30" } }
+      ],
+      "expected_type": "reject"
+    },
+    {
+      "id": "invoice-edges",
+      "table": {
+        "id": "tblInvoices",
+        "name": "Invoices",
+        "fields": [
+          { "id": "fld190", "name": "Invoice Number", "type": "singleLineText" },
+          { "id": "fld191", "name": "Customer", "type": "multipleRecordLinks", "options": { "linkedTableId": "tblCompanies" } },
+          { "id": "fld192", "name": "Amount", "type": "currency" },
+          { "id": "fld193", "name": "Issued", "type": "date" },
+          { "id": "fld194", "name": "Status", "type": "singleSelect" }
+        ]
+      },
+      "sample_records": [
+        { "id": "recInv1", "fields": { "Invoice Number": "INV-2026-001", "Customer": ["recCo1"], "Amount": 5000, "Issued": "2026-04-01", "Status": "paid" } },
+        { "id": "recInv2", "fields": { "Invoice Number": "INV-2026-002", "Customer": ["recCo2"], "Amount": 2500, "Issued": "2026-04-15", "Status": "open" } },
+        { "id": "recInv3", "fields": { "Invoice Number": "INV-2026-003", "Customer": ["recCo3"], "Amount": 1200, "Issued": "2026-04-20", "Status": "paid" } },
+        { "id": "recInv4", "fields": { "Invoice Number": "INV-2026-004", "Customer": ["recCo1"], "Amount": 5000, "Issued": "2026-05-01", "Status": "open" } },
+        { "id": "recInv5", "fields": { "Invoice Number": "INV-2026-005", "Customer": ["recCo4"], "Amount": 800, "Issued": "2026-05-05", "Status": "open" } }
+      ],
+      "expected_type": "interaction"
+    }
+  ]
+}
