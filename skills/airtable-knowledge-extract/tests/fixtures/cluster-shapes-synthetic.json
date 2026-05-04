@@ -1,0 +1,151 @@
+{
+  "_comment": "Synthetic shape fixtures for cluster-classifier (ai-brain#240). One canonical example per shape in the locked vocabulary (orphan|pair|chain|tree|hub-spoke|graph). Each fixture is a flat list of Airtable Meta API tables — `id`, `name`, plus `fields` containing only `multipleRecordLinks` entries (the classifier ignores other field types). Loaded directly into `buildLinkGraph` via the live test runner; no Meta API call needed.",
+  "fixtures": [
+    {
+      "name": "orphan",
+      "expected_shape": "orphan",
+      "expected_size": 1,
+      "tables": [
+        { "id": "tA", "name": "Lone Table", "fields": [] }
+      ]
+    },
+    {
+      "name": "pair",
+      "expected_shape": "pair",
+      "expected_size": 2,
+      "tables": [
+        {
+          "id": "tA",
+          "name": "Left",
+          "fields": [
+            { "id": "fL", "name": "link", "type": "multipleRecordLinks", "options": { "linkedTableId": "tB" } }
+          ]
+        },
+        { "id": "tB", "name": "Right", "fields": [] }
+      ]
+    },
+    {
+      "name": "chain",
+      "expected_shape": "chain",
+      "expected_size": 5,
+      "tables": [
+        {
+          "id": "tA",
+          "name": "A",
+          "fields": [
+            { "id": "fA", "name": "next", "type": "multipleRecordLinks", "options": { "linkedTableId": "tB" } }
+          ]
+        },
+        {
+          "id": "tB",
+          "name": "B",
+          "fields": [
+            { "id": "fB", "name": "next", "type": "multipleRecordLinks", "options": { "linkedTableId": "tC" } }
+          ]
+        },
+        {
+          "id": "tC",
+          "name": "C",
+          "fields": [
+            { "id": "fC", "name": "next", "type": "multipleRecordLinks", "options": { "linkedTableId": "tD" } }
+          ]
+        },
+        {
+          "id": "tD",
+          "name": "D",
+          "fields": [
+            { "id": "fD", "name": "next", "type": "multipleRecordLinks", "options": { "linkedTableId": "tE" } }
+          ]
+        },
+        { "id": "tE", "name": "E", "fields": [] }
+      ]
+    },
+    {
+      "name": "tree",
+      "expected_shape": "tree",
+      "expected_size": 6,
+      "_topology": "Y-shape: A-B, B-C, B-D, D-E, D-F. B has degree 3 (branch), D has degree 3 (branch), so it's general acyclic with branching — not a star (no node has degree N-1=5), not a chain (max_degree=3 > 2).",
+      "tables": [
+        {
+          "id": "tA",
+          "name": "A",
+          "fields": [
+            { "id": "fA", "name": "to_b", "type": "multipleRecordLinks", "options": { "linkedTableId": "tB" } }
+          ]
+        },
+        {
+          "id": "tB",
+          "name": "B",
+          "fields": [
+            { "id": "fBC", "name": "to_c", "type": "multipleRecordLinks", "options": { "linkedTableId": "tC" } },
+            { "id": "fBD", "name": "to_d", "type": "multipleRecordLinks", "options": { "linkedTableId": "tD" } }
+          ]
+        },
+        { "id": "tC", "name": "C", "fields": [] },
+        {
+          "id": "tD",
+          "name": "D",
+          "fields": [
+            { "id": "fDE", "name": "to_e", "type": "multipleRecordLinks", "options": { "linkedTableId": "tE" } },
+            { "id": "fDF", "name": "to_f", "type": "multipleRecordLinks", "options": { "linkedTableId": "tF" } }
+          ]
+        },
+        { "id": "tE", "name": "E", "fields": [] },
+        { "id": "tF", "name": "F", "fields": [] }
+      ]
+    },
+    {
+      "name": "hub-spoke",
+      "expected_shape": "hub-spoke",
+      "expected_size": 5,
+      "_topology": "Star: center A connected to B, C, D, E. A has degree 4 = N-1; all spokes have degree 1.",
+      "tables": [
+        {
+          "id": "tA",
+          "name": "Hub",
+          "fields": [
+            { "id": "fAB", "name": "to_b", "type": "multipleRecordLinks", "options": { "linkedTableId": "tB" } },
+            { "id": "fAC", "name": "to_c", "type": "multipleRecordLinks", "options": { "linkedTableId": "tC" } },
+            { "id": "fAD", "name": "to_d", "type": "multipleRecordLinks", "options": { "linkedTableId": "tD" } },
+            { "id": "fAE", "name": "to_e", "type": "multipleRecordLinks", "options": { "linkedTableId": "tE" } }
+          ]
+        },
+        { "id": "tB", "name": "Spoke B", "fields": [] },
+        { "id": "tC", "name": "Spoke C", "fields": [] },
+        { "id": "tD", "name": "Spoke D", "fields": [] },
+        { "id": "tE", "name": "Spoke E", "fields": [] }
+      ]
+    },
+    {
+      "name": "graph",
+      "expected_shape": "graph",
+      "expected_size": 4,
+      "_topology": "4-cycle: A-B-C-D-A. E = N = 4 (one more edge than a tree), every node has degree 2.",
+      "tables": [
+        {
+          "id": "tA",
+          "name": "A",
+          "fields": [
+            { "id": "fAB", "name": "to_b", "type": "multipleRecordLinks", "options": { "linkedTableId": "tB" } },
+            { "id": "fAD", "name": "to_d", "type": "multipleRecordLinks", "options": { "linkedTableId": "tD" } }
+          ]
+        },
+        {
+          "id": "tB",
+          "name": "B",
+          "fields": [
+            { "id": "fBC", "name": "to_c", "type": "multipleRecordLinks", "options": { "linkedTableId": "tC" } }
+          ]
+        },
+        {
+          "id": "tC",
+          "name": "C",
+          "fields": [
+            { "id": "fCD", "name": "to_d", "type": "multipleRecordLinks", "options": { "linkedTableId": "tD" } }
+          ]
+        },
+        { "id": "tD", "name": "D", "fields": [] }
+      ]
+    }
+  ]
+}
