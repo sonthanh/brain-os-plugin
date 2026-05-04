@@ -51,6 +51,33 @@ Fully autonomous mode — reads needs-reply queue, generates drafts, creates the
 3. All drafts must use **Reply All** (include CC) and set **From** to the receiving address
 4. Report results when done
 
+### `/gmail create <descriptor>` — Backfill a missing calendar event
+
+The triage workflow appends a `## Meetings — missing-on-calendar` section to the human-summary MD whenever a personal forwarded/plain-text meeting is detected that isn't already on the user's Google Calendar. (Direct `.ics` invites are auto-processed by Google — never appear here.)
+
+When the user says **`/gmail create <descriptor>`** (e.g. `/gmail create carrosserie`):
+
+1. Find the latest triage MD in `{vault}/daily/gmail-triage/`.
+2. Locate the `## Meetings — missing-on-calendar` section.
+3. Match `<descriptor>` against entry titles + locations (case-insensitive substring; ask the user if multiple match).
+4. Extract: `title`, `datetime_iso`, `timezone`, `duration_min`, `location`, `description` (build from `Source:` line + Gmail thread link in the entry).
+5. **For physical meetings, enrich `location` with a real address via web search** if the entry's location is incomplete (e.g. just a business name). Online meetings already carry the URL — skip enrichment.
+6. Run:
+
+   ```bash
+   bun ${CLAUDE_PLUGIN_ROOT}/skills/gmail/scripts/calendar-create.ts \
+     --title "<title>" \
+     --start "<datetime_iso>" \
+     --end "<datetime_iso + duration>" \
+     --tz "<timezone>" \
+     --location "<enriched_location>" \
+     --description "<description>"
+   ```
+
+7. The script returns the event URL. Edit the matching entry in the triage MD: replace the leading `- ` with `- [x] ` and append `→ Created: <event_url>` to the title line so future re-checks are idempotent (the workflow's existence-check skips when `## Meetings —` is already present).
+
+The script reuses the plugin's `.credentials.json` — must have `calendar.events` scope. Run `tsx ${CLAUDE_PLUGIN_ROOT}/skills/gmail/scripts/setup-oauth.ts` once to grant it.
+
 ### `/gmail status` — Show pending actions + SLA state
 
 1. List all triage reports in `{vault}/daily/gmail-triage/`

@@ -1,0 +1,53 @@
+[
+  {
+    "name": "create-flow-documented",
+    "description": "/gmail create <descriptor> must be documented as the natural-language path to backfill missing calendar events",
+    "expected_in_skill": [
+      "/gmail create <descriptor>",
+      "## Meetings — missing-on-calendar",
+      "scripts/calendar-create.ts"
+    ],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "physical-meeting-address-enrichment",
+    "description": "Physical meetings must trigger location enrichment via web search; online meetings skipped",
+    "expected_in_skill": [
+      "physical meetings",
+      "enrich",
+      "web search",
+      "Online meetings already carry the URL"
+    ],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "calendar-create-cli-args",
+    "description": "Documented invocation must include the required CLI flags",
+    "expected_in_skill": [
+      "--title",
+      "--start",
+      "--end",
+      "--tz"
+    ],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "idempotency-tick",
+    "description": "After event creation the SKILL must tick the entry in the triage MD so re-runs don't duplicate",
+    "expected_in_skill": [
+      "- [x] ",
+      "Created:",
+      "idempotent"
+    ],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "calendar-events-scope-required",
+    "description": "Must reference calendar.events scope + setup-oauth.ts re-auth",
+    "expected_in_skill": [
+      "calendar.events",
+      "setup-oauth.ts"
+    ],
+    "type": "skill-content-check"
+  }
+]
