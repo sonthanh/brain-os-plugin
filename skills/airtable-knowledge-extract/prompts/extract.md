@@ -176,3 +176,25 @@ Subgraph (cluster {{cluster_id}}, seed {{seed_record_id}}):
 {{subgraph}}
 
 Output strict JSON only.
+
+## single-pass
+
+Schema-driven cluster extraction (no anchor / no seed) — used by `extract-single-pass.mts` for entity-table clusters routed through the S4 dispatcher per parent ai-brain#237 / #243.
+
+The subgraph below is the FULL connected component, partitioned into entity tables (which produce one entity per record) and interaction tables (context-only — emit zero entities for these; their records flow through the deterministic edge emitter downstream).
+
+Conventions:
+
+- One entity per entity-table record. Every entity-table record listed under "Entity tables" below MUST appear as `source_record_ids: [<that-record-id>]` on exactly one entity.
+- `slug`: kebab-case of the record's primary field (Name / Title / similar). Avoid stamping the seed — there is no seed in this mode.
+- Pick `type` from the record's table semantics (person, company, project, meeting, decision, …). Generic `entity` is the fallback when nothing else fits.
+- Use `[[other-slug]]` in body / frontmatter for cross-record links (e.g. a person's `WorksAt` link → `[[company-slug]]`).
+- Interaction-table records are context only. Do NOT emit entities for them — they will be re-processed by the edge emitter as graph rows.
+
+Component: {{cluster_id}}
+
+Subgraph (entity + interaction tables, full cluster — no truncation):
+
+{{subgraph}}
+
+Output strict JSON only per the global schema above. The runtime will reverse-lookup each entity's slug against the entity-table records and stamp `source_record_id` from that match — wrong slugs trigger SliceRejectedError.

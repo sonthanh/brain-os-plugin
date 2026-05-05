@@ -1,0 +1,85 @@
+{
+  "_comment": "Staronline 3-table entity cluster fixture for ai-brain#243. Models the entity-table partition of a Staronline-shaped connected component (post-Stage 0 classification): People + Companies + Projects (3 entity tables, 12 records). Excludes the interaction-table partition (Cashflows / Payments / PnL Reports) which routes through edge-emit per parent #237. Cross-table link fields: People.WorksAt → Companies; Companies.Projects ↔ Projects.Companies. Each record's primary field is unique within its table so single-pass reverse-lookup (slug → source_record_id) is unambiguous.",
+  "baseId": "appUV3hAWcRzrGjqK",
+  "componentId": "comp-staronline-people-companies-projects",
+  "entityTables": ["tblPeople", "tblCompanies", "tblProjects"],
+  "interactionTables": [],
+  "tables": [
+    {
+      "id": "tblPeople",
+      "name": "People",
+      "fields": [
+        { "id": "fldPplName", "name": "Name", "type": "singleLineText" },
+        { "id": "fldPplRole", "name": "Role", "type": "singleLineText" },
+        {
+          "id": "fldPplWorksAt",
+          "name": "WorksAt",
+          "type": "multipleRecordLinks",
+          "options": { "linkedTableId": "tblCompanies" }
+        }
+      ]
+    },
+    {
+      "id": "tblCompanies",
+      "name": "Companies",
+      "fields": [
+        { "id": "fldCoName", "name": "Name", "type": "singleLineText" },
+        { "id": "fldCoIndustry", "name": "Industry", "type": "singleLineText" },
+        {
+          "id": "fldCoProjects",
+          "name": "Projects",
+          "type": "multipleRecordLinks",
+          "options": { "linkedTableId": "tblProjects" }
+        }
+      ]
+    },
+    {
+      "id": "tblProjects",
+      "name": "Projects",
+      "fields": [
+        { "id": "fldPrjTitle", "name": "Title", "type": "singleLineText" },
+        { "id": "fldPrjStatus", "name": "Status", "type": "singleLineText" },
+        {
+          "id": "fldPrjCompanies",
+          "name": "Companies",
+          "type": "multipleRecordLinks",
+          "options": { "linkedTableId": "tblCompanies" }
+        }
+      ]
+    }
+  ],
+  "recordsByTable": {
+    "tblPeople": [
+      { "id": "recPpl001", "fields": { "Name": "Alice Tran", "Role": "CEO", "WorksAt": ["recCo001"] }, "createdTime": "2025-01-01T00:00:00.000Z" },
+      { "id": "recPpl002", "fields": { "Name": "Bao Nguyen", "Role": "CTO", "WorksAt": ["recCo001"] }, "createdTime": "2025-01-01T00:00:00.000Z" },
+      { "id": "recPpl003", "fields": { "Name": "Chau Le", "Role": "Designer", "WorksAt": ["recCo002"] }, "createdTime": "2025-01-01T00:00:00.000Z" },
+      { "id": "recPpl004", "fields": { "Name": "Duc Pham", "Role": "Engineer", "WorksAt": ["recCo003"] }, "createdTime": "2025-01-01T00:00:00.000Z" },
+      { "id": "recPpl005", "fields": { "Name": "Emi Hoang", "Role": "Operator", "WorksAt": ["recCo004"] }, "createdTime": "2025-01-01T00:00:00.000Z" }
+    ],
+    "tblCompanies": [
+      { "id": "recCo001", "fields": { "Name": "Staronline Holdings", "Industry": "Investment", "Projects": ["recPrj001", "recPrj002"] }, "createdTime": "2025-01-01T00:00:00.000Z" },
+      { "id": "recCo002", "fields": { "Name": "Sao Mai Studio", "Industry": "Design", "Projects": ["recPrj002"] }, "createdTime": "2025-01-01T00:00:00.000Z" },
+      { "id": "recCo003", "fields": { "Name": "Bach Khoa Tech", "Industry": "Software", "Projects": ["recPrj003"] }, "createdTime": "2025-01-01T00:00:00.000Z" },
+      { "id": "recCo004", "fields": { "Name": "Hoa Sen Operations", "Industry": "Logistics", "Projects": [] }, "createdTime": "2025-01-01T00:00:00.000Z" }
+    ],
+    "tblProjects": [
+      { "id": "recPrj001", "fields": { "Title": "Lumen Migration", "Status": "Active", "Companies": ["recCo001"] }, "createdTime": "2025-01-01T00:00:00.000Z" },
+      { "id": "recPrj002", "fields": { "Title": "Brand Refresh 2026", "Status": "Active", "Companies": ["recCo001", "recCo002"] }, "createdTime": "2025-01-01T00:00:00.000Z" },
+      { "id": "recPrj003", "fields": { "Title": "Internal Devops Platform", "Status": "Planning", "Companies": ["recCo003"] }, "createdTime": "2025-01-01T00:00:00.000Z" }
+    ]
+  },
+  "expectedEntities": [
+    { "type": "person", "slug": "alice-tran", "expectedSourceRecordId": "recPpl001" },
+    { "type": "person", "slug": "bao-nguyen", "expectedSourceRecordId": "recPpl002" },
+    { "type": "person", "slug": "chau-le", "expectedSourceRecordId": "recPpl003" },
+    { "type": "person", "slug": "duc-pham", "expectedSourceRecordId": "recPpl004" },
+    { "type": "person", "slug": "emi-hoang", "expectedSourceRecordId": "recPpl005" },
+    { "type": "company", "slug": "staronline-holdings", "expectedSourceRecordId": "recCo001" },
+    { "type": "company", "slug": "sao-mai-studio", "expectedSourceRecordId": "recCo002" },
+    { "type": "company", "slug": "bach-khoa-tech", "expectedSourceRecordId": "recCo003" },
+    { "type": "company", "slug": "hoa-sen-operations", "expectedSourceRecordId": "recCo004" },
+    { "type": "project", "slug": "lumen-migration", "expectedSourceRecordId": "recPrj001" },
+    { "type": "project", "slug": "brand-refresh-2026", "expectedSourceRecordId": "recPrj002" },
+    { "type": "project", "slug": "internal-devops-platform", "expectedSourceRecordId": "recPrj003" }
+  ]
+}
