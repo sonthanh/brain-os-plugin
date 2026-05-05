@@ -611,6 +611,147 @@ describe("runOrchestrator — emit-edges hook (#241)", () => {
 });
 
 // ---------------------------------------------------------------------------
+// runOrchestrator — rollup-edges hook (#245, parent #237 AC#12)
+// ---------------------------------------------------------------------------
+
+describe("runOrchestrator — rollup-edges hook (#245)", () => {
+  test("invokes runEdgesRollup AFTER the extraction loop, AFTER metrics, BEFORE notify", async () => {
+    const seedsA = [seed("appA", "r1")];
+    const v1 = batchVerdict("appA", [passingVerdict("appA-r1")]);
+    const harness = makeHarness({
+      initialState: null,
+      seedsByBase: { appA: seedsA },
+      reAnchorDecisions: { appA: "approve" },
+      verdictsByBatch: [v1],
+      basesDir: join(tmp, "bases"),
+      metricsDir: join(tmp, "metrics"),
+    });
+
+    const order: string[] = [];
+    const originalExtract = harness.deps.runExtract;
+    const originalNotify = harness.deps.notify;
+    harness.deps.runExtract = async (s) => {
+      order.push(`extract:${s.recordId}`);
+      return originalExtract(s);
+    };
+    harness.deps.notify = (title, body) => {
+      order.push(`notify:${title}`);
+      originalNotify(title, body);
+    };
+    harness.deps.runEdgesRollup = async () => {
+      order.push("rollup");
+      return {
+        vaultPath: "/tmp/vault",
+        edgesPath: "/tmp/vault/knowledge/graph/edges.jsonl",
+        edgesPathExists: true,
+        entityPagesScanned: 2,
+        pagesUpdated: 2,
+        pagesUntouched: 0,
+        pagesSkipped: 0,
+        edgesIncomingTotal: 1,
+        edgesOutgoingTotal: 2,
+        unresolvedCounterparties: 0,
+        skipped: false,
+      };
+    };
+
+    const result = await runOrchestrator(
+      defaultArgs({ baseId: "appA", parallelism: 1 }),
+      harness.deps,
+    );
+    expect(result.kind).toBe("paused");
+
+    const extractIdx = order.findIndex((s) => s.startsWith("extract:"));
+    const rollupIdx = order.indexOf("rollup");
+    const notifyIdx = order.findIndex((s) => s.startsWith("notify:"));
+    expect(extractIdx).toBeGreaterThanOrEqual(0);
+    expect(rollupIdx).toBeGreaterThan(extractIdx);
+    expect(notifyIdx).toBeGreaterThan(rollupIdx);
+  });
+
+  test("skipped=true (no edges.jsonl) is logged and does NOT abort the run", async () => {
+    const seedsA = [seed("appA", "r1")];
+    const v1 = batchVerdict("appA", [passingVerdict("appA-r1")]);
+    const logs: string[] = [];
+    const harness = makeHarness({
+      initialState: null,
+      seedsByBase: { appA: seedsA },
+      reAnchorDecisions: { appA: "approve" },
+      verdictsByBatch: [v1],
+      basesDir: join(tmp, "bases"),
+      metricsDir: join(tmp, "metrics"),
+    });
+    harness.deps.log = (m: string) => logs.push(m);
+    harness.deps.runEdgesRollup = async () => ({
+      vaultPath: "/tmp/vault",
+      edgesPath: "/tmp/vault/knowledge/graph/edges.jsonl",
+      edgesPathExists: false,
+      entityPagesScanned: 0,
+      pagesUpdated: 0,
+      pagesUntouched: 0,
+      pagesSkipped: 0,
+      edgesIncomingTotal: 0,
+      edgesOutgoingTotal: 0,
+      unresolvedCounterparties: 0,
+      skipped: true,
+      reason: "edges.jsonl not found",
+    });
+
+    const result = await runOrchestrator(
+      defaultArgs({ baseId: "appA", parallelism: 1 }),
+      harness.deps,
+    );
+    expect(result.kind).toBe("paused");
+    expect(logs.some((l) => /rollup-edges skipped/.test(l))).toBe(true);
+  });
+
+  test("runEdgesRollup throwing is logged but does NOT abort the run", async () => {
+    const seedsA = [seed("appA", "r1")];
+    const v1 = batchVerdict("appA", [passingVerdict("appA-r1")]);
+    const logs: string[] = [];
+    const harness = makeHarness({
+      initialState: null,
+      seedsByBase: { appA: seedsA },
+      reAnchorDecisions: { appA: "approve" },
+      verdictsByBatch: [v1],
+      basesDir: join(tmp, "bases"),
+      metricsDir: join(tmp, "metrics"),
+    });
+    harness.deps.log = (m: string) => logs.push(m);
+    harness.deps.runEdgesRollup = async () => {
+      throw new Error("disk full");
+    };
+
+    const result = await runOrchestrator(
+      defaultArgs({ baseId: "appA", parallelism: 1 }),
+      harness.deps,
+    );
+    expect(result.kind).toBe("paused");
+    expect(logs.some((l) => /rollup-edges failed/.test(l))).toBe(true);
+  });
+
+  test("omitting runEdgesRollup from deps is permitted (back-compat with pre-#245 callers)", async () => {
+    const seedsA = [seed("appA", "r1")];
+    const v1 = batchVerdict("appA", [passingVerdict("appA-r1")]);
+    const harness = makeHarness({
+      initialState: null,
+      seedsByBase: { appA: seedsA },
+      reAnchorDecisions: { appA: "approve" },
+      verdictsByBatch: [v1],
+      basesDir: join(tmp, "bases"),
+      metricsDir: join(tmp, "metrics"),
+    });
+    expect(harness.deps.runEdgesRollup).toBeUndefined();
+
+    const result = await runOrchestrator(
+      defaultArgs({ baseId: "appA", parallelism: 1 }),
+      harness.deps,
+    );
+    expect(result.kind).toBe("paused");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // runOrchestrator — reviewer fail + retry path
 // ---------------------------------------------------------------------------
 

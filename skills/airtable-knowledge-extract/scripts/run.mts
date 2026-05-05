@@ -65,6 +65,7 @@ import {
   HitlPendingError,
 } from "./hitl.mts";
 import { emitEdges, type EmitEdgesResult } from "./emit-edges.mts";
+import { rollupEdges, type RollupResult } from "./rollup-edges.mts";
 
 export const DEFAULT_PARALLELISM = 5;
 export const DEFAULT_THRESHOLD = 0.95;
@@ -158,6 +159,12 @@ export interface RunDeps {
   // silently when Stage 0 cache (#238) is absent for the base. Replaced by
   // the full dispatcher (#242) once that lands.
   emitInteractionEdges?: (baseId: string) => Promise<EmitEdgesResult>;
+  // Optional — Phase-1 architecture-correction hook (#245, parent #237 AC#12).
+  // Called after the per-base extraction loop completes successfully so the
+  // entity pages produced by extract + the edges produced by emit-edges land
+  // together. Skips silently when edges.jsonl is absent. Idempotent on
+  // identical input.
+  runEdgesRollup?: () => Promise<RollupResult>;
 }
 
 export interface RunResult {
@@ -541,6 +548,28 @@ export async function runOrchestrator(
   const summary = formatBaseSummaryJsonl(progress);
   const metricsPath = deps.writeMetrics(baseId, 1, [summary]);
 
+  if (deps.runEdgesRollup) {
+    try {
+      const rollup = await deps.runEdgesRollup();
+      if (rollup.skipped) {
+        deps.log(
+          `[run ${args.runId}] rollup-edges skipped: ${rollup.reason ?? "(no reason)"}`,
+        );
+      } else {
+        deps.log(
+          `[run ${args.runId}] rollup-edges: ${rollup.pagesUpdated} pages updated, ${rollup.pagesUntouched} untouched, ${rollup.pagesSkipped} skipped (no record id); ${rollup.edgesIncomingTotal} incoming + ${rollup.edgesOutgoingTotal} outgoing rendered`,
+        );
+      }
+    } catch (err) {
+      // Non-fatal: rollup is presentation only. A degraded rollup hides the
+      // edge-table sections; the underlying entity-page extraction is the
+      // authoritative AC for Phase-1 pass.
+      deps.log(
+        `[run ${args.runId}] rollup-edges failed: ${(err as Error).message ?? err}`,
+      );
+    }
+  }
+
   deps.notify(
     "airtable-knowledge-extract: base done",
     `base ${baseId} rung-1 ${progress.batches_done}/${progress.total_batches} batches; pause for scale decision`,
@@ -854,6 +883,7 @@ async function main(parsed: ParsedArgs): Promise<number> {
     log: (msg) => process.stderr.write(`${msg}\n`),
     uuid: defaultUuid,
     emitInteractionEdges: (baseId) => emitEdges(baseId),
+    runEdgesRollup: () => Promise.resolve(rollupEdges()),
   };
 
   const args: RunArgs = {
