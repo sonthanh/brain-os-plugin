@@ -1,0 +1,74 @@
+{
+  "_comment": "Synthetic Procurement-shape orphan fixture for the record-by-record extractor (ai-brain#244, parent #237 AC#9). Models a real-world Procurement-shape orphan entity-table cluster — single-table cluster, no link fields, low-but-≥0.95 unique_rate primary (description unique_rate=0.99 from the 2026-05-03 research report). PRODUCTION CLASSIFICATION NOTE: per the 2026-05-05 reframe (#237 grill), procurement-shaped tables are classified as `interaction` in production and routed to emit-edges (#241), NOT to this extractor. This fixture exists to test the record-by-record extractor's SHAPE BEHAVIOR on orphan-shaped data. The fixture deliberately includes one COLLISION pair (rec03/rec04 share NK value) so the extractor's slug-disambiguation invariant (slug bakes record_id) is covered by an assertion. Records and field values are SYNTHESISED.",
+  "base_id": "appProcOrphanFixture",
+  "table": {
+    "id": "tblProcurement",
+    "name": "Procurement",
+    "fields": [
+      { "id": "fldProc01", "name": "description", "type": "singleLineText" },
+      { "id": "fldProc02", "name": "amount", "type": "currency" },
+      { "id": "fldProc03", "name": "paid_on", "type": "date" },
+      { "id": "fldProc04", "name": "category", "type": "singleSelect" },
+      { "id": "fldProc05", "name": "notes", "type": "multilineText" }
+    ]
+  },
+  "natural_key_field": "description",
+  "records": [
+    {
+      "id": "recProc01",
+      "fields": {
+        "description": "Office electricity Jan 2026",
+        "amount": 4500000,
+        "paid_on": "2026-01-31",
+        "category": "Operating",
+        "notes": "Utility bill, January 2026 cycle."
+      }
+    },
+    {
+      "id": "recProc02",
+      "fields": {
+        "description": "Office rent Q1 2026",
+        "amount": 90000000,
+        "paid_on": "2026-01-05",
+        "category": "Operating",
+        "notes": "Tower ABC, quarterly lease payment."
+      }
+    },
+    {
+      "id": "recProc03",
+      "fields": {
+        "description": "Office printer purchase",
+        "amount": 12000000,
+        "paid_on": "2026-02-10",
+        "category": "Capex",
+        "notes": "One laser printer, model XYZ."
+      }
+    },
+    {
+      "id": "recProc04",
+      "fields": {
+        "description": "Office printer purchase",
+        "amount": 12000000,
+        "paid_on": "2026-02-12",
+        "category": "Capex",
+        "notes": "Second printer for accounting team — collision case (same NK as recProc03)."
+      }
+    },
+    {
+      "id": "recProc05",
+      "fields": {
+        "description": "Office internet Feb 2026",
+        "amount": 1800000,
+        "paid_on": "2026-02-28",
+        "category": "Operating",
+        "notes": "ISP bill, February 2026 cycle."
+      }
+    }
+  ],
+  "expected": {
+    "entity_count": 5,
+    "entity_type": "procurement",
+    "natural_key_unique_rate": 0.8,
+    "collision_pair": ["recProc03", "recProc04"]
+  }
+}
