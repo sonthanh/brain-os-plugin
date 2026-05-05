@@ -66,6 +66,7 @@ import {
 } from "./hitl.mts";
 import { emitEdges, type EmitEdgesResult } from "./emit-edges.mts";
 import { rollupEdges, type RollupResult } from "./rollup-edges.mts";
+import { dispatchBase, type DispatchResult } from "./dispatcher.mts";
 
 export const DEFAULT_PARALLELISM = 5;
 export const DEFAULT_THRESHOLD = 0.95;
@@ -159,6 +160,14 @@ export interface RunDeps {
   // silently when Stage 0 cache (#238) is absent for the base. Replaced by
   // the full dispatcher (#242) once that lands.
   emitInteractionEdges?: (baseId: string) => Promise<EmitEdgesResult>;
+  // Optional — Phase-1 schema-driven dispatcher hook (#242, parent #237 AC#7).
+  // Called after edge emission. Computes per-component routing decisions and
+  // appends one outcome-log row per component. Aborts loudly if upstream
+  // caches (S0 / S3 / D1) are absent — the dispatcher cannot run without all
+  // three. The legacy seed-based extract loop continues unchanged for now;
+  // the strategies it dispatches to (single-pass / record-by-record /
+  // chunked-by-AP) ship in #243 / #244.
+  dispatchPerBase?: (baseId: string) => Promise<DispatchResult>;
   // Optional — Phase-1 architecture-correction hook (#245, parent #237 AC#12).
   // Called after the per-base extraction loop completes successfully so the
   // entity pages produced by extract + the edges produced by emit-edges land
@@ -357,6 +366,34 @@ export async function runOrchestrator(
       // pass — degraded edges produce a missing rollup, not a wrong vault.
       deps.log(
         `[run ${args.runId}] emit-edges failed for ${baseId}: ${(err as Error).message ?? err}`,
+      );
+    }
+  }
+
+  if (deps.dispatchPerBase) {
+    try {
+      const dispatchResult = await deps.dispatchPerBase(baseId);
+      const histogram = dispatchResult.components.reduce<Record<string, number>>(
+        (acc, c) => {
+          const k =
+            c.entity_strategy !== "none" ? c.entity_strategy : c.interaction_handler;
+          acc[k] = (acc[k] ?? 0) + 1;
+          return acc;
+        },
+        {},
+      );
+      const histStr = Object.entries(histogram)
+        .map(([k, v]) => `${k}:${v}`)
+        .join(",");
+      deps.log(
+        `[run ${args.runId}] dispatch ${baseId}: ${dispatchResult.components.length} component(s) — ${histStr || "empty"} → ${dispatchResult.cachePath}`,
+      );
+    } catch (err) {
+      // Non-fatal at the orchestrator level: the legacy seed loop still runs.
+      // Missing upstream caches abort here loudly so the operator notices, but
+      // we don't tear down the run.
+      deps.log(
+        `[run ${args.runId}] dispatch failed for ${baseId}: ${(err as Error).message ?? err}`,
       );
     }
   }
@@ -883,6 +920,7 @@ async function main(parsed: ParsedArgs): Promise<number> {
     log: (msg) => process.stderr.write(`${msg}\n`),
     uuid: defaultUuid,
     emitInteractionEdges: (baseId) => emitEdges(baseId),
+    dispatchPerBase: (baseId) => dispatchBase(baseId, { runId: parsed.runId }),
     runEdgesRollup: () => Promise.resolve(rollupEdges()),
   };
 
