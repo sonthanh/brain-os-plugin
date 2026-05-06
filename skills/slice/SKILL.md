@@ -29,7 +29,7 @@ Adapted from [@mattpocockuk/skills/to-issues](https://github.com/mattpocock/skil
 
 **DO NOT silently re-grill.** If decisions in the grill-session aren't settled (questions unanswered, RESET sections still active, status frontmatter missing or `status: working`), STOP and tell the user to finish /grill first. Inferring missing decisions is how reactive-patch loops start.
 
-**DO NOT skip the P1/P2 audit gates (Steps 1.5 + 2.4).** The gates exist to stop premature-optimization theater — ideas that mass-touch workflow/vault without a real problem to solve. PASS-only continues; FLAG and FAIL both abort, no override flag, no `--force-no-audit` shortcut. Settled in `daily/grill-sessions/2026-04-27-slice-audit-gate-p1-p2.md`. Bypassing either gate (commenting out the Skill invocation, ignoring the verdict, advancing past abort) is the same failure mode that produced 14+ closed meta-refactor issues in 48h while real backlog sat untouched.
+**DO NOT slice grills that haven't been audited at /grill end-step.** The story-tier defensibility model relies on /grill's end-step audit recommendation menu (D1 of grill `daily/grill-sessions/2026-05-06-pre-grill-defensibility.md`, child #3 of ai-brain#253) to catch principle violations BEFORE the source enters /slice. Slicing an unaudited grill — one whose lock did not display the `Audit recommendation: /audit --all` menu and require explicit acknowledgement — re-creates the failure mode that produced 14+ closed meta-refactor issues in 48h under the OLD P1+P2 hard-gate-here regime (retired 2026-05-06, see `## Changelog`). If the source grill predates the end-step audit menu, run `/audit --all` on it manually before invoking /slice; if /audit flags FAIL on any principle, re-grill or amend before slicing. Trust shifted upstream — /slice now consumes audited grills, it does not re-audit them.
 
 ## Workflow
 
@@ -38,45 +38,49 @@ Adapted from [@mattpocockuk/skills/to-issues](https://github.com/mattpocock/skil
 Determine the input source:
 
 - **Grill-session file path** (most common): `daily/grill-sessions/<date>-<slug>.md`. Read it. Check `status:` frontmatter — must be `pass` / `settled` / `shipped` (not `working` / `draft`). If unsettled, STOP and ask the user to finish /grill.
-- **Existing parent story issue number**: `gh issue view <N> -R sonthanh/ai-brain --json title,body,labels,comments`. Treat issue body + comments as the PRD; **skip Step 2.5 + 2.7** (parent already exists and is approved) and go straight to drafting children with `Parent: ai-brain#<N>` set to this number. **Verify `type:plan` is in the returned labels list — if missing, auto-add it via `gh issue edit <N> -R sonthanh/ai-brain --add-label "type:plan"` and surface a one-line note to the user.** No prompt, no flag — auto-add is the default. Rationale: `/impl story` (orchestrator at `scripts/run-story.ts`) refuses to drain any parent that lacks `type:plan` (`ERROR: parent #N lacks type:plan label`). Slice's whole job on this branch is preparing the parent for `/impl story` consumption; the label is a hard downstream requirement and slice is the seam where it gets attached. Manually-filed parents (filed without `create-task-issue.sh --type plan`) routinely lack the label — the new-parent path in Step 2.5 already passes `--type plan` to the central filer, so this verification is needed only on the existing-parent branch.
+- **Existing parent story issue number**: `gh issue view <N> -R sonthanh/ai-brain --json title,body,labels,comments`. Treat issue body + comments as the PRD; **skip Step 2.4 + 2.6** (parent already exists and is approved) and go straight to drafting children with `Parent: ai-brain#<N>` set to this number. **Verify `type:plan` is in the returned labels list — if missing, auto-add it via `gh issue edit <N> -R sonthanh/ai-brain --add-label "type:plan"` and surface a one-line note to the user.** No prompt, no flag — auto-add is the default. Rationale: `/impl story` (orchestrator at `scripts/run-story.ts`) refuses to drain any parent that lacks `type:plan` (`ERROR: parent #N lacks type:plan label`). Slice's whole job on this branch is preparing the parent for `/impl story` consumption; the label is a hard downstream requirement and slice is the seam where it gets attached. Manually-filed parents (filed without `create-task-issue.sh --type plan`) routinely lack the label — the new-parent path in Step 2.4 already passes `--type plan` to the central filer, so this verification is needed only on the existing-parent branch.
 - **In-context plan**: if the conversation already contains a settled plan from this session, work from context. Confirm with the user that nothing earlier needs re-reading.
 
 If the user passes neither a file path nor an issue number, ask which one. Do NOT guess.
 
-### 1.5. P2 audit gate — Start with Why [deterministic]
+### 1.6. E2E AC existence guardrail [deterministic]
 
-**Purpose.** Stop premature-optimization theater at the source: ideas filed because tooling could be tweaked, not because a real user-observable problem broke. P2 (Start with Why) requires a named past incident or explicit current pain — forward-looking "pattern will repeat" framing fails this gate.
+**Purpose.** Story-tier grills must produce ≥1 live e2e acceptance criterion — a "runs against real test data, output empirically validated" bullet. Slicing a grill without any e2e AC is slicing alongside an unfalsifiable spec; downstream /impl story drains GREEN and the parent CLOSEs without ever executing the most architectural assumption. D7 (child #3 of ai-brain#253) puts this enforcement at /grill close-step; this guardrail is the slice-side belt-and-braces — catches grills that predate the /grill enforcement OR that bypass it via direct issue creation.
 
-**Mechanism.** Step 1 already loaded source content (grill-session body OR existing parent issue body OR in-context plan) into conversation. Invoke `/audit p2` via the Skill tool — `/audit` reads conversation context per its own SKILL.md, so it operates on what Step 1 loaded. Audits run unconditionally across all 3 input modes (no skip conditions — in-context-plan is not an escape valve).
-
-```
-Skill: audit
-args: p2
-```
-
-**Verdict handling (deterministic, no LLM judgment).** `/audit` emits a markdown summary table:
-
-```
-## Audit Summary
-| Principle | Verdict | Key Finding |
-|-----------|---------|-------------|
-| P2 | PASS|FLAG|FAIL | … |
-```
-
-Detection:
+**Mechanism.** Step 1 already loaded source content (grill-session body OR existing parent issue body OR in-context plan) into conversation. Locate the source's `## Acceptance criteria` section (grill-session) or `## Acceptance` section (existing parent issue body). Count bullets carrying the `(LIVE E2E)` suffix or equivalent live-data marker. Canonical markers: `(LIVE E2E)`, `(integration)`, `(real data validation)`. Count detection is deterministic — match the markers literally; no LLM judgment.
 
 ```bash
-echo "$AUDIT_OUTPUT" | grep -E '^\| P[0-9]+ \| (FAIL|FLAG) \|' && AUDIT_BLOCK=1
+e2e_count=$(echo "$ACCEPTANCE_SECTION" \
+  | grep -cE '\(LIVE E2E\)|\(integration\)|\(real data validation\)')
 ```
 
-If any P2 row matches FAIL or FLAG → ABORT. Surface the table verbatim to the user, list the finding, and STOP. User options:
-1. Re-grill the source to add a named historical incident in `## Why`.
-2. Amend the source to remove the forward-looking framing.
-3. Add explicit `## P2 — pre-positioning` admission section to the source declaring "no incident, accepting risk" (legitimate pre-positioning work like geo-prep, capability gaps surfaced by audit). Then re-run /slice.
+**Verdict handling (deterministic).**
 
-PASS only → continue to Step 2. No override flag.
+- **e2e_count ≥ 1** → continue to Step 2.
+- **e2e_count == 0** AND source carries no bypass label → ABORT with the surfaced message:
 
-**Why hard block on FLAG too.** FLAG is "non-fatal concern, take action if applicable" — under load, FLAGs get rationalized into PASSes silently. Ternary collapses to binary at this gate. Hard rule, no exceptions.
+```
+ABORT: story-tier grill missing e2e AC — re-grill or label NOT-architectural to bypass.
+```
+
+**Bypass labels.** Two equivalent forms — either is sufficient:
+
+1. `NOT-architectural` — grill-session frontmatter or label list explicitly declaring the grill has no architectural surface (pure reflection / strategic thinking / capability mapping).
+2. `status:reflection` — grill frontmatter status per D7's enforcement format, equivalent to NOT-architectural for this gate's purposes.
+
+Bypass detection:
+
+```bash
+echo "$SOURCE_FRONTMATTER_AND_LABELS" \
+  | grep -qE 'NOT-architectural|status:\s*reflection'
+```
+
+User options on ABORT (re-run /slice after action):
+1. Re-grill the source to add a `(LIVE E2E)` AC — smallest real test data, output empirically validated, not just spec-checked.
+2. Add `NOT-architectural` to the grill frontmatter (legitimate for pure-reflection grills with no implementation surface) and re-run.
+3. If the grill is post-D7 and is genuinely reflection-only, confirm `status:reflection` is in the frontmatter; the bypass should already be present.
+
+PASS only continues. No `--force-no-e2e` override flag. The gate exists because story-tier work without empirical validation produced the 2026-05-04 Mode B replay miss (parent #237 / 8 children shipped on broken Stage-0 classifier assumption — caught only because the user manually replayed against live data).
 
 ### 2. Synthesize PRD [latent]
 
@@ -91,34 +95,7 @@ In conversation context — extract from the source:
 
 If you cannot extract User Story / Settled Decisions / Acceptance / Out of Scope, the source is not settled enough → STOP and ask user to finish /grill.
 
-### 2.4. P1 audit gate — First Principles [deterministic]
-
-**Purpose.** Stop overcomplicated PRDs at the synthesis seam. P1 (First Principles / Simple scales) asks: (1) Is this the real problem or a symptom? (2) Does a solution already exist? (3) What's the simplest version? PRDs that propose new mechanisms when existing ones cover the failure mode, or stack layers anticipating edge cases that haven't happened, fail this gate.
-
-**Mechanism.** PRD draft already lives in conversation context from Step 2 synthesis. Invoke `/audit p1` via the Skill tool.
-
-```
-Skill: audit
-args: p1
-```
-
-**Verdict handling.** Same ternary-to-binary contract as Step 1.5:
-
-```bash
-echo "$AUDIT_OUTPUT" | grep -E '^\| P[0-9]+ \| (FAIL|FLAG) \|' && AUDIT_BLOCK=1
-```
-
-FAIL or FLAG → ABORT. Surface the table verbatim, list the finding, STOP. User amends the draft (collapse touch points, drop premature layers, cite existing mechanism) and re-runs /slice. PASS → continue to Step 2.5.
-
-**Common P1 failure modes (calibrated by tracker history):**
-- New mechanism wrapping an existing skill (build `audit-gate.ts` when `/audit` already does the work — tracker line 65 / this very session)
-- Anticipated edge cases without a current incident (3-layer hybrid trunk gate when 2 false-positives both resolvable by Layer 2 alone — Story #154)
-- Refactor scope ballooning from a single root-cause fix (label taxonomy 6-children when fixing #137 alone sufficed — Story #153)
-- Path-list / namespace expansion duplicating existing rubric (depth:leaf|trunk new label namespace when `owner:bot|human` already gates 80% — tracker line 64, killed by P1 mid-grill)
-
-If the PRD draft fits any of these patterns, FLAG/FAIL is the expected verdict. Amend or split before proceeding.
-
-### 2.5. File parent story issue [deterministic]
+### 2.4. File parent story issue [deterministic]
 
 File the parent story issue on `sonthanh/ai-brain` with the synthesized PRD as the body via the central filer (`create-task-issue.sh`), then flip to `status:in-progress` via the central transitioner (`transition-status.sh`). Two calls because the helper rejects `in-progress` as a creation status (creation accepts `ready|blocked|backlog`); a fresh parent enters active state the moment it's filed because work begins immediately on PRD approval. Labels carried: `type:plan`, `owner:human`, `status:in-progress` (after flip), area inherited from the grill scope (e.g. `plugin-brain-os`), priority + weight inherited from the grill's overall framing.
 
@@ -170,21 +147,21 @@ bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/transition-status.sh" "$PARENT_N" --t
 PARENT_NODE_ID=$(gh issue view "$PARENT_N" -R sonthanh/ai-brain --json id --jq .id)
 ```
 
-Capture the returned parent URL + issue number AND `PARENT_NODE_ID` — needed for Step 2.7 (surface to user), Step 6 (child `## Parent` references AND `addSubIssue` mutation parent input), and Step 7 (parent body amend).
+Capture the returned parent URL + issue number AND `PARENT_NODE_ID` — needed for Step 2.6 (surface to user), Step 6 (child `## Parent` references AND `addSubIssue` mutation parent input), and Step 7 (parent body amend).
 
-Acceptance bullets are emitted in the canonical bullet-AC + evidence-link format (`- [ ] **AC#N** — <criterion> — [evidence ↗](#issuecomment-PLACEHOLDER)`). The `#issuecomment-PLACEHOLDER` anchor stays in place until `/impl <N>` per-child posts the `Acceptance verified: AC#N — <evidence>` comment and Gate C in `scripts/run-story.ts` rewrites the URL. Format aligns with `references/ac-coverage-spec.md` § 3.1 — same regex (`ACCEPTANCE_AC_RE`) drives Step 2.6 coverage gate, Gate B/C parsing, and `tickAcceptance`.
+Acceptance bullets are emitted in the canonical bullet-AC + evidence-link format (`- [ ] **AC#N** — <criterion> — [evidence ↗](#issuecomment-PLACEHOLDER)`). The `#issuecomment-PLACEHOLDER` anchor stays in place until `/impl <N>` per-child posts the `Acceptance verified: AC#N — <evidence>` comment and Gate C in `scripts/run-story.ts` rewrites the URL. Format aligns with `references/ac-coverage-spec.md` § 3.1 — same regex (`ACCEPTANCE_AC_RE`) drives Step 2.5 coverage gate, Gate B/C parsing, and `tickAcceptance`.
 
-### 2.6. AC coverage gate [deterministic]
+### 2.5. AC coverage gate [deterministic]
 
 **Purpose.** Prevent the parent story from shipping fake-done — children all CLOSED + tests green, but parent `## Acceptance` bullets literally never executed. The pre-rule failure mode (one prior story closed with all 13 children green but 6 parent AC bullets unverified — caches absent, integration tests SKIPPED) broke trust in the AFK pipeline. This gate is the design-time anchor of the three-gate doctrine (Gate A here; Gate B at `scripts/run-story.ts` `runPreCheck()`; Gate C at `scripts/run-story.ts` close-time).
 
 **Required child shape.** Every child draft produced in Step 3 MUST carry a `## Covers AC` H2 section enumerating the parent AC bullet IDs it satisfies. Pure-component children (scaffolding, refactor, build wiring) carry the section with NO bullets — the empty form asserts intent per `references/ac-coverage-spec.md` § 1.1, distinguishing "this child is component" from "the filer forgot the section".
 
-**When the gate fires.** At the Step 5 → Step 6 boundary — after the user has approved the slice breakdown via the quiz step and BEFORE any child issue is filed via `create-task-issue.sh`. Section is numbered 2.6 to group with the other deterministic gates (1.5, 2.4); the actual check requires drafts to exist, so it runs at the file-time boundary. Step 6 carries a forward reference back to this section.
+**When the gate fires.** At the Step 5 → Step 6 boundary — after the user has approved the slice breakdown via the quiz step and BEFORE any child issue is filed via `create-task-issue.sh`. The check requires drafts to exist, so it runs at the file-time boundary; Step 6 carries a forward reference back to this section.
 
 **Mechanism.** Two regexes drive the check — both live in `references/ac-coverage-spec.md` § 3 and MUST NOT be duplicated here:
 
-1. Parent body is already in conversation context from Step 2.5 / 2.7. Apply the **parent-AC regex** (`references/ac-coverage-spec.md` § 3.1) line-by-line to the parent body. Collect `parent_ac_set` = set of integer IDs and remember each ID's description (regex group 2) for the ABORT table.
+1. Parent body is already in conversation context from Step 2.4 / 2.6. Apply the **parent-AC regex** (`references/ac-coverage-spec.md` § 3.1) line-by-line to the parent body. Collect `parent_ac_set` = set of integer IDs and remember each ID's description (regex group 2) for the ABORT table.
 2. For each approved child draft in conversation context, locate its `## Covers AC` section (header line `## Covers AC` until next `## ` H2 header or EOF). Apply the **child Covers-AC regex** (`references/ac-coverage-spec.md` § 3.2) line-by-line inside that section. Collect that child's `covers_set`. Empty section is legal and contributes the empty set.
 3. Compute `covered = union(child.covers_set for child in drafts)`.
 4. Compute `uncovered = parent_ac_set - covered`.
@@ -193,7 +170,7 @@ Acceptance bullets are emitted in the canonical bullet-AC + evidence-link format
 **ABORT output.** Print to the user with the exact shape:
 
 ```
-ABORT: Step 2.6 AC coverage gate failed.
+ABORT: Step 2.5 AC coverage gate failed.
 
 Uncovered parent ## Acceptance bullets:
 
@@ -210,9 +187,9 @@ User options (re-run /slice after action):
 
 The three options come straight from the parent-story settled decisions (`references/ac-coverage-spec.md` cross-references). They are the only legitimate paths forward — there is no `--force-no-coverage` override flag, no advisory soft-fail, no "we'll cover it later" promise. The gate exists because trust was broken; an override re-creates the failure surface.
 
-**Why mechanical, not advisory.** Asking the LLM "is each parent AC covered by some child?" papers over the check at slice-time when many drafts are in flight and easy to miscount. Two regexes plus a set difference are the deterministic pre-Step-6 contract — same pattern as the audit gates (§§ 1.5, 2.4). PASS only continues to Step 6.
+**Why mechanical, not advisory.** Asking the LLM "is each parent AC covered by some child?" papers over the check at slice-time when many drafts are in flight and easy to miscount. Two regexes plus a set difference are the deterministic pre-Step-6 contract — same deterministic-gate pattern as Step 1.6 (e2e AC existence guardrail) where counts/regexes drive the verdict and no LLM judgment intervenes. PASS only continues to Step 6.
 
-### 2.7. Await PRD approval [latent]
+### 2.6. Await PRD approval [latent]
 
 Surface the parent issue URL + number to the user verbatim:
 
@@ -258,6 +235,29 @@ Before showing the breakdown to the user, run two validators on each slice:
 
 **Disjoint-files (WARN-SOFT):** if two slices declare overlapping `Files:`, flag it. They can still ship — `/impl -p N` (alias `--parallel N`) uses Agent-tool worktree isolation so file conflicts resolve at merge time. But surfacing the overlap helps the user decide if a merge would be cleaner than parallel work.
 
+### 4.5. Rung-0 e2e ordering [deterministic]
+
+**Purpose.** Force the most architectural claim of the story to ship FIRST against minimal scaffolding so the abstract architecture is empirically validated before fan-out. If rung-0 ships GREEN, the rest of the children inherit a validated foundation; if rung-0 fails, downstream children are not yet committed and the architecture can be reframed cheaply. This complements Step 1.6 — Step 1.6 ensures an e2e AC EXISTS in the source; Step 4.5 ensures the child covering it ships FIRST.
+
+**Mechanism.** After Step 4 validators pass and BEFORE the Step 5 quiz:
+
+1. Re-parse the source's `## Acceptance criteria` (grill-session) or `## Acceptance` (existing parent issue body) — already loaded at Step 1 — for `(LIVE E2E)` markers (or equivalent live-data markers per Step 1.6's canonical list). Identify the AC IDs carrying the marker (the e2e AC set).
+2. For each child draft (already in conversation context from Step 3), parse its `## Covers AC` section per `references/ac-coverage-spec.md` § 3.2. Build mapping `{ AC# → [covering child draft index, ...] }`.
+3. Compute the rung-0 child:
+   - **Single e2e AC** → rung-0 child is the unique child whose `## Covers AC` lists that AC#.
+   - **Multiple e2e ACs all covered by the same child** → that child is rung-0.
+   - **Multiple e2e ACs with different covering children** → rung-0 = the child covering the most-architectural e2e AC. LLM judgment at slice time; the choice MUST be surfaced in the Step 5 quiz so the user can override (`I picked #N as rung-0 because it covers AC#X — the load-bearing claim. Override?`).
+4. Annotate the rung-0 child draft:
+   - Set its `## Blocked by` section to `None — rung-0`.
+   - Tag the breakdown table entry `rung:0` (visible in the Step 5 quiz output and the Step 8 final report table).
+5. Annotate every OTHER child draft:
+   - Override its `## Blocked by` to `ai-brain#<rung-0-child-N>` regardless of natural sibling dependencies. The rung-0 child is the architectural anchor; sibling-to-sibling deps only kick in AFTER rung-0 ships GREEN.
+   - Placeholder `<rung-0-child-N>` resolves to the actual rung-0 issue number after Step 6 issue creation (rung-0 child is filed FIRST in the topological order so its real number is known when siblings are filed).
+
+**Why all-children-blocked-by-rung-0 instead of natural deps.** The natural-dep DAG can have multiple sibling chains executing in parallel pre-rung-0. If rung-0 fails, those sibling chains have already burned work on a broken foundation. The all-blocked-by-rung-0 contract serializes the architecturally-load-bearing step first, paying the latency cost in exchange for cheap reframing if it falls. This is the slice-time mechanism behind the 2026-05-04 retrospective lesson: 8 children of #237 shipped before live-data validation caught the Stage-0 classifier was wrong.
+
+**No-e2e bypass.** If Step 1.6 was bypassed via `NOT-architectural` / `status:reflection` (no e2e ACs exist), Step 4.5 also no-ops — there is no rung-0 to anchor the DAG. Children carry their natural dependency relations only. This keeps reflection-only grills (no implementation surface) from forcing artificial dep chains.
+
 ### 5. Quiz the user [latent]
 
 Open with the detected budget: `I detected this as <maintenance|greenfield>; proposing N slices. Push back on the budget first if wrong, then on individual slice details.`
@@ -275,7 +275,7 @@ Iterate until the user approves. Do NOT proceed to issue creation while the user
 
 ### 6. Create child issues in dependency order [deterministic]
 
-**Pre-condition.** The Step 2.6 AC coverage gate MUST have passed against the approved drafts before this step runs. If the gate ABORT'd, you are not here — the user amended drafts (added covering child / promoted component to live-AC / amended parent body) and re-ran /slice. Filing without 2.6 PASS would re-create the fake-done failure mode.
+**Pre-condition.** The Step 2.5 AC coverage gate MUST have passed against the approved drafts before this step runs. If the gate ABORT'd, you are not here — the user amended drafts (added covering child / promoted component to live-AC / amended parent body) and re-ran /slice. Filing without 2.5 PASS would re-create the fake-done failure mode.
 
 For each approved child slice, in topological order (blockers first), run the central filer — every label axis is validated against canon (see `references/gh-task-labels.md` § 1):
 
@@ -322,7 +322,7 @@ EOF
 
 After each call, capture the returned child issue number from `CHILD_URL` (e.g. `CHILD_N="${CHILD_URL##*/}"`). Subsequent children that reference this one in `## Blocked by` get the real number substituted in. `priority:p4` was retired — drop low-urgency children to `status:backlog` instead of inventing a new priority axis.
 
-Then link the child to the parent via the `addSubIssue` GraphQL mutation. This populates GitHub's native sub-issues panel on the parent (progress bar + per-child status badges visible in the GitHub UI) AND provides the canonical discovery channel for `scripts/run-story.ts viewSubIssues()` (`gh api graphql` query, `subIssues(first:50){nodes{number}}`, run-story.ts:734). The parent node ID was captured once at Step 2.5; fetch each child's node ID inline:
+Then link the child to the parent via the `addSubIssue` GraphQL mutation. This populates GitHub's native sub-issues panel on the parent (progress bar + per-child status badges visible in the GitHub UI) AND provides the canonical discovery channel for `scripts/run-story.ts viewSubIssues()` (`gh api graphql` query, `subIssues(first:50){nodes{number}}`, run-story.ts:734). The parent node ID was captured once at Step 2.4; fetch each child's node ID inline:
 
 ```bash
 CHILD_N="${CHILD_URL##*/}"
@@ -420,3 +420,15 @@ Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/slice.log`
 - Optional: `args="<grill-session-slug>"`, `corrections=N`, `score=N` (children created), `parent=ai-brain#<P>`
 
 The 48h-no-reactive-resplit criterion is the discipline test for /slice, mirroring /tdd's. If issues stay stable post-creation, the slice-quality assumption holds. If users keep splitting / merging issues after the fact, /slice's breakdown logic needs a `/improve` cycle.
+
+## Changelog
+
+### 2026-05-06 — D6 of ai-brain#253: P1+P2 hard gates retired, e2e-AC enforcement added
+
+P1+P2 hard gates retired in favor of /grill end-step audit recommendation menu (D1, child #3 of ai-brain#253). Trust shifts upstream — /slice now consumes audited grills, doesn't re-audit them. Concretely:
+
+- **Removed.** `### 1.5. P2 audit gate — Start with Why` and `### 2.4. P1 audit gate — First Principles`. Both gates greppped /audit's emitted summary table for FAIL/FLAG verdicts and ABORTed before continuing — the OLD ternary-collapses-to-binary contract. P1's calibrated failure modes referenced in the old prose (existing `owner:bot|human` gate covered 80% of the depth:leaf|trunk decision; 3-layer hybrid trunk gate when 2 false-positives both resolved by Layer 2 alone — Story #154; etc.) are preserved in `daily/grill-sessions/2026-04-27-slice-audit-gate-p1-p2.md` (the grill that ESTABLISHED the gates) and `daily/grill-sessions/2026-05-06-pre-grill-defensibility.md` (the grill that RETIRED them).
+- **Added.** `### 1.6. E2E AC existence guardrail` (e2e AC must exist on the source, with `NOT-architectural` / `status:reflection` bypass) and `### 4.5. Rung-0 e2e ordering` (e2e AC's covering child ships first, all others blocked-by it). These complete D6's three-edit interlock.
+- **Renumbered.** Steps 2.5/2.6/2.7 → 2.4/2.5/2.6 to fill the gap left by removed Step 2.4 (P1 audit gate). All cross-references in the SKILL.md prose updated to reflect the new numbering. The 1.x range keeps an intentional gap at 1.5 — the new e2e guardrail sits at 1.6 per the issue spec, since renumbering 1.x would have rippled into the test/eval shape regexes for no behavioral gain.
+- **Anti-pattern reframed.** "DO NOT skip the P1/P2 audit gates (Steps 1.5 + 2.4)" replaced with "DO NOT slice grills that haven't been audited at /grill end-step." The failure mode the OLD anti-pattern guarded — 14+ closed meta-refactor issues in 48h while real backlog sat untouched — now belongs to /grill's end-step menu (D1). The empirical check that the new contract actually catches that failure mode is AC#7 of #253 (smoke against `daily/grill-sessions/2026-05-04-airtable-mode-b-replay.md`, child #254 — CLOSED 2026-05-06).
+- **Bootstrap risk note.** The /slice run that produced the parent #253 + this child #258 still executed the OLD gates (Steps 1.5 + 2.4) because that's what the SKILL.md still said at the time — meta-step / eats own dogfood. Future /slice runs use this new contract.

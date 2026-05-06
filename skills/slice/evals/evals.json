@@ -105,7 +105,7 @@
     {
       "id": 13,
       "prompt": "A user runs /slice on a settled grill-session. After the PRD is synthesized in conversation context, what is the very next deterministic step BEFORE drafting any child slices, and what does the user see?",
-      "expected_output": "The skill files a parent story issue on sonthanh/ai-brain with the synthesized PRD as the body — labels `type:plan`, `owner:human`, `status:in-progress`, area label inherited from the grill scope. The body MUST contain the sections: User Story, Settled Decisions, Sub-issues (placeholder checklist `- [ ] TBD — children filed in step 7`), Acceptance, Out of Scope. After creation the skill surfaces the parent issue URL + number to the user and waits for `approve` (proceed to slicing) or `edit <section>` (revise PRD before children are filed). Nothing downstream runs until approval — that is the new PRD-review gate added in Workflow Step 2.5 / 2.7.",
+      "expected_output": "The skill files a parent story issue on sonthanh/ai-brain with the synthesized PRD as the body — labels `type:plan`, `owner:human`, `status:in-progress`, area label inherited from the grill scope. The body MUST contain the sections: User Story, Settled Decisions, Sub-issues (placeholder checklist `- [ ] TBD — children filed in step 7`), Acceptance, Out of Scope. After creation the skill surfaces the parent issue URL + number to the user and waits for `approve` (proceed to slicing) or `edit <section>` (revise PRD before children are filed). Nothing downstream runs until approval — that is the PRD-review gate at Workflow Step 2.4 / 2.6.",
       "expectations": [
         "Names filing the parent story issue with the PRD as body BEFORE child slices",
         "Lists the parent-body sections (User Story / Settled Decisions / Sub-issues / Acceptance / Out of Scope)",
@@ -134,44 +134,11 @@
       ]
     },
     {
-      "id": 16,
-      "prompt": "After Step 1 loads the grill-session into conversation context, what does Step 1.5 do, and what behavior is required when the audit returns a FLAG verdict on P2?",
-      "expected_output": "Step 1.5 invokes the `/audit p2` skill via the Skill tool. /audit reads the conversation context Step 1 just loaded and emits a markdown summary table (`| P2 | PASS|FLAG|FAIL | … |`). /slice greps the table for any row matching `^\\| P[0-9]+ \\| (FAIL|FLAG) \\|`. A FLAG verdict aborts the same as FAIL — no override flag, no `--force-no-audit` shortcut, and FLAG is NOT silently rationalized into PASS. The user must re-grill, amend the source, or add an explicit `## P2 — pre-positioning` admission section before re-running /slice. PASS only continues to Step 2.",
-      "expectations": [
-        "Mentions invoking /audit p2 via the Skill tool against conversation context loaded in Step 1",
-        "Names FLAG and FAIL as both aborting (ternary collapses to binary)",
-        "Mentions deterministic grep on the audit-summary table (no LLM judgment of the verdict)",
-        "Names the user recovery options: re-grill, amend source, or add `## P2 — pre-positioning` admission section"
-      ]
-    },
-    {
-      "id": 17,
-      "prompt": "Step 2 synthesizes a PRD draft proposing a new wrapper script around an existing skill (e.g. `audit-gate.ts` wrapping `/audit`). What does Step 2.4 do, and why is the verdict expected to be FAIL or FLAG?",
-      "expected_output": "Step 2.4 invokes `/audit p1` via the Skill tool against the PRD draft already in conversation context. P1 asks (1) Is this the real problem? (2) Does a solution already exist? (3) What's the simplest version? Wrapping an existing skill with a new script fails (2) — the existing skill IS the mechanism; the gap is enforcement at a seam, not new mechanism. P1 verdict: FAIL or FLAG. /slice surfaces the table verbatim and aborts. User collapses the touch points (one skill edit invoking the existing skill), amends the PRD draft, and re-runs /slice. Calibration drawn from tracker entries: depth:leaf|trunk killed by P1 mid-grill (existing owner:bot|human gate covered 80%), grill review gate collapsed 3 → 1 touch points (existing `## Implementation plan` section IS the touch-points table).",
-      "expectations": [
-        "Mentions invoking /audit p1 via the Skill tool against the PRD draft in conversation context",
-        "Names the P1 question that fails (does a solution already exist) when proposing a wrapper around an existing skill",
-        "Names FLAG and FAIL as both aborting with no override",
-        "Mentions the user recovery: collapse touch points / cite existing mechanism / re-run /slice"
-      ]
-    },
-    {
-      "id": 18,
-      "prompt": "A grill-session for legitimate pre-positioning work (e.g. geo-prep rally point — capability gap surfaced before any incident) hits Step 1.5. P2 fails because there is no historical incident. How does the user proceed without bypassing the gate?",
-      "expected_output": "The user adds an explicit `## P2 — pre-positioning` admission section to the source grill-session that says: this work is forward-looking, no incident exists, accepting the risk because the cost of waiting until incident exceeds the cost of pre-building. The forced admission preserves rigor (the user IS naming the bet) while unblocking legitimate pre-positioning work. After amending the source, re-run /slice; Step 1.5 re-audits and now sees the explicit acknowledgment, which P2 passes. NOT acceptable: removing the audit invocation, ignoring the abort, adding a bypass flag, or rewriting the why with manufactured incidents.",
-      "expectations": [
-        "Names adding `## P2 — pre-positioning` admission section as the legitimate path",
-        "Mentions re-running /slice after amending the source",
-        "Names what is NOT acceptable (removing the audit, override flag, manufactured incidents)",
-        "Explains why forced admission preserves rigor (user names the bet rather than rubber-stamping)"
-      ]
-    },
-    {
       "id": 19,
-      "prompt": "User runs /slice on a settled grill. Step 5 quiz approved a breakdown with 3 child drafts; the parent body has 4 AC bullets (AC#1..AC#4); two child drafts carry `## Covers AC` listing AC#1 and AC#3 respectively; the third is a pure-component child with an empty `## Covers AC`. What does Step 2.6 do at the Step 5 → Step 6 boundary, and what does the user see?",
-      "expected_output": "Step 2.6 fires deterministically before any child issue is filed. It applies the parent-AC regex from `references/ac-coverage-spec.md` § 3.1 to the parent body → parent_ac_set = {1, 2, 3, 4}. It applies the child Covers-AC regex from § 3.2 inside each draft's `## Covers AC` section → covered = {1} ∪ {3} ∪ {} = {1, 3}. uncovered = {2, 4}. Non-empty → ABORT (no fall-through to Step 6, no override flag). User sees a markdown table listing AC#2 and AC#4 with their descriptions (parent-AC regex group 2), plus exactly three user options: (1) add a covering child draft, (2) promote an existing component child draft to live-AC by adding the bullet to its `## Covers AC`, (3) amend parent body to drop the orphan AC bullet (re-grill if scope changes). The pure-component child's empty `## Covers AC` is legal per § 1.1 (asserts intent vs filer-forgot). After the user amends drafts, re-run /slice; the gate fires again — PASS only continues to Step 6.",
+      "prompt": "User runs /slice on a settled grill. Step 5 quiz approved a breakdown with 3 child drafts; the parent body has 4 AC bullets (AC#1..AC#4); two child drafts carry `## Covers AC` listing AC#1 and AC#3 respectively; the third is a pure-component child with an empty `## Covers AC`. What does Step 2.5 do at the Step 5 → Step 6 boundary, and what does the user see?",
+      "expected_output": "Step 2.5 fires deterministically before any child issue is filed. It applies the parent-AC regex from `references/ac-coverage-spec.md` § 3.1 to the parent body → parent_ac_set = {1, 2, 3, 4}. It applies the child Covers-AC regex from § 3.2 inside each draft's `## Covers AC` section → covered = {1} ∪ {3} ∪ {} = {1, 3}. uncovered = {2, 4}. Non-empty → ABORT (no fall-through to Step 6, no override flag). User sees a markdown table listing AC#2 and AC#4 with their descriptions (parent-AC regex group 2), plus exactly three user options: (1) add a covering child draft, (2) promote an existing component child draft to live-AC by adding the bullet to its `## Covers AC`, (3) amend parent body to drop the orphan AC bullet (re-grill if scope changes). The pure-component child's empty `## Covers AC` is legal per § 1.1 (asserts intent vs filer-forgot). After the user amends drafts, re-run /slice; the gate fires again — PASS only continues to Step 6.",
       "expectations": [
-        "Names Step 2.6 as a deterministic gate firing at the Step 5 → Step 6 boundary (after quiz approval, before any child issue is filed)",
+        "Names Step 2.5 as a deterministic gate firing at the Step 5 → Step 6 boundary (after quiz approval, before any child issue is filed)",
         "Cites `references/ac-coverage-spec.md` § 3 for the regexes and explicitly notes the regexes are NOT duplicated in /slice prose",
         "Mentions ABORT with a markdown table of uncovered AC bullets (AC# + description), and that there is no override flag",
         "Lists all three user options on gate fail (add covering child / promote component to live-AC / amend parent body)",
@@ -181,21 +148,21 @@
     {
       "id": 20,
       "prompt": "User runs `/slice 207` where ai-brain#207 was filed manually (not via `create-task-issue.sh --type plan`) and therefore lacks the `type:plan` label. Step 1 takes the existing-parent-issue-number branch. What MUST Step 1 do after `gh issue view` returns the labels, and why?",
-      "expected_output": "After `gh issue view` returns labels for the existing parent, Step 1 MUST verify `type:plan` is in the label list. If missing, auto-add it via `gh issue edit <N> -R sonthanh/ai-brain --add-label \"type:plan\"` and surface a one-line note to the user. Default behavior is auto-add (no prompt), because `/slice`'s entire job is preparing the parent for `/impl story` consumption, and `scripts/run-story.ts` (the orchestrator behind `/impl story`) refuses to drain any parent that lacks `type:plan` (parent #N lacks type:plan label → ERROR). Without this verification, a manually-filed parent will pass through `/slice` (children filed correctly, parent body updated correctly) but downstream `/impl story` will refuse to drain the resulting DAG, requiring the user to manually `gh issue edit --add-label type:plan` to unblock. The new-parent path in Step 2.5 already passes `--type plan` to `create-task-issue.sh`, so this verification is needed only on the existing-parent branch.",
+      "expected_output": "After `gh issue view` returns labels for the existing parent, Step 1 MUST verify `type:plan` is in the label list. If missing, auto-add it via `gh issue edit <N> -R sonthanh/ai-brain --add-label \"type:plan\"` and surface a one-line note to the user. Default behavior is auto-add (no prompt), because `/slice`'s entire job is preparing the parent for `/impl story` consumption, and `scripts/run-story.ts` (the orchestrator behind `/impl story`) refuses to drain any parent that lacks `type:plan` (parent #N lacks type:plan label → ERROR). Without this verification, a manually-filed parent will pass through `/slice` (children filed correctly, parent body updated correctly) but downstream `/impl story` will refuse to drain the resulting DAG, requiring the user to manually `gh issue edit --add-label type:plan` to unblock. The new-parent path in Step 2.4 already passes `--type plan` to `create-task-issue.sh`, so this verification is needed only on the existing-parent branch.",
       "expectations": [
         "Names verifying `type:plan` is in the parent labels as a required Step 1 action on the existing-parent branch",
         "Mentions auto-adding `type:plan` via `gh issue edit ... --add-label \"type:plan\"` when missing (default — no prompt)",
         "Cites `/impl story` (or `scripts/run-story.ts`) refusing to drain a parent without `type:plan` as the rationale",
-        "Distinguishes the existing-parent branch from the new-parent path (Step 2.5 already attaches `type:plan` via `create-task-issue.sh --type plan`)"
+        "Distinguishes the existing-parent branch from the new-parent path (Step 2.4 already attaches `type:plan` via `create-task-issue.sh --type plan`)"
       ]
     },
     {
       "id": 21,
       "prompt": "After Step 5 quiz approval, three children get filed via `create-task-issue.sh`. What additional GitHub mutation does Step 6 run per child, and what does the parent's GitHub UI show afterwards?",
-      "expected_output": "After each `create-task-issue.sh` returns a child URL, Step 6 fetches the child's GraphQL node ID via `gh issue view $CHILD_N --json id --jq .id`, then calls the `addSubIssue` mutation: `gh api graphql -f query='mutation($parent:ID!,$child:ID!){addSubIssue(input:{issueId:$parent,subIssueId:$child}){issue{number}}}' -F parent=$PARENT_NODE_ID -F child=$CHILD_NODE_ID`. The parent node ID was captured once at Step 2.5 right after `transition-status.sh`. Result: parent's GitHub UI populates the native sub-issue panel — progress bar + per-child status badges — and `scripts/run-story.ts viewSubIssues()` (run-story.ts:734, shipped in commit 9cf8ca4) discovers children via the `subIssues` GraphQL query rather than parsing the body checklist.",
+      "expected_output": "After each `create-task-issue.sh` returns a child URL, Step 6 fetches the child's GraphQL node ID via `gh issue view $CHILD_N --json id --jq .id`, then calls the `addSubIssue` mutation: `gh api graphql -f query='mutation($parent:ID!,$child:ID!){addSubIssue(input:{issueId:$parent,subIssueId:$child}){issue{number}}}' -F parent=$PARENT_NODE_ID -F child=$CHILD_NODE_ID`. The parent node ID was captured once at Step 2.4 right after `transition-status.sh`. Result: parent's GitHub UI populates the native sub-issue panel — progress bar + per-child status badges — and `scripts/run-story.ts viewSubIssues()` (run-story.ts:734, shipped in commit 9cf8ca4) discovers children via the `subIssues` GraphQL query rather than parsing the body checklist.",
       "expectations": [
         "Names `addSubIssue` GraphQL mutation as the per-child link step (input: issueId = parent, subIssueId = child)",
-        "Mentions parent node ID captured once at Step 2.5 (not re-fetched per child)",
+        "Mentions parent node ID captured once at Step 2.4 (not re-fetched per child)",
         "Mentions native sub-issue panel becoming the canonical status surface (progress bar + badges)",
         "Cites `viewSubIssues()` / GraphQL `subIssues` query as the orchestrator's discovery channel post-link"
       ]
@@ -221,6 +188,30 @@
         "Cites `/impl story` driving DAG drainage AND the parent-close trigger (Gate C in run-story.ts)",
         "Notes per-child `/impl <N>` does not auto-close the parent without the trigger firing — leaving stories stuck OPEN",
         "References story #219 (or the parent-stuck-OPEN failure mode) as the motivation"
+      ]
+    },
+    {
+      "id": 24,
+      "prompt": "User runs /slice on a settled grill-session whose `## Acceptance criteria` has 5 bullets, none carrying a `(LIVE E2E)` / `(integration)` / `(real data validation)` marker, and the grill frontmatter has neither `NOT-architectural` nor `status:reflection`. What does Step 1.6 do, and what are the exact user options?",
+      "expected_output": "Step 1.6 (E2E AC existence guardrail) is deterministic. It locates the source's `## Acceptance criteria` (grill-session) or `## Acceptance` (existing parent issue body) and counts bullets matching `(LIVE E2E)` / `(integration)` / `(real data validation)` literally — no LLM judgment. e2e_count == 0 and source has no bypass label, so /slice ABORTS and surfaces the message `ABORT: story-tier grill missing e2e AC — re-grill or label NOT-architectural to bypass.` Three user options (re-run /slice after action): (1) re-grill to add a `(LIVE E2E)` AC describing smallest real test data with empirical validation, (2) add `NOT-architectural` to grill frontmatter for legitimate pure-reflection grills, (3) confirm `status:reflection` is in the frontmatter for post-D7 reflection grills. No `--force-no-e2e` override. The gate exists because story-tier work without empirical validation produced the 2026-05-04 Mode B replay miss (parent #237 / 8 children shipped on broken Stage-0 classifier assumption).",
+      "expectations": [
+        "Names Step 1.6 as a deterministic guardrail (no LLM judgment) that counts `(LIVE E2E)` / `(integration)` / `(real data validation)` markers literally",
+        "Names the exact ABORT message `story-tier grill missing e2e AC — re-grill or label NOT-architectural to bypass`",
+        "Lists the three recovery options (re-grill + add live e2e AC / add `NOT-architectural` label / use `status:reflection` frontmatter)",
+        "Notes there is no `--force-no-e2e` override flag",
+        "Cites the 2026-05-04 Mode B replay miss / #237 8-children incident as the gate's motivating failure mode"
+      ]
+    },
+    {
+      "id": 25,
+      "prompt": "After Step 5 quiz approval, /slice has 4 child drafts. The parent grill has AC#1, AC#2 (LIVE E2E), AC#3, AC#4. Child A `## Covers AC` lists AC#1; Child B lists AC#2; Child C lists AC#3; Child D lists AC#4. What does Step 4.5 do to the children's `## Blocked by` sections, and what would change if AC#2 had no `(LIVE E2E)` marker?",
+      "expected_output": "Step 4.5 (Rung-0 e2e ordering) runs after Step 4 validators and before the Step 5 quiz. It re-parses the source for `(LIVE E2E)` markers — finds AC#2 only. It maps each child's `## Covers AC` and identifies Child B as the unique covering child for AC#2. Child B is annotated `rung:0`: its `## Blocked by` becomes `None — rung-0`. Children A, C, D each get their `## Blocked by` overridden to `ai-brain#<rung-0-child-N>` regardless of any natural sibling dependencies — Child B becomes the universal blocker. The choice is surfaced in the Step 5 quiz so the user can override. If AC#2 had no `(LIVE E2E)` marker (and no other AC did), the e2e AC set is empty; Step 4.5 no-ops — children carry their natural dependency relations only, no rung-0 anchor. This is the same no-op behavior triggered by the `NOT-architectural` / `status:reflection` bypass at Step 1.6 (interlocked: if 1.6 was bypassed, no e2e ACs exist, 4.5 has nothing to anchor).",
+      "expectations": [
+        "Names Step 4.5 as deterministic and timed between Step 4 validators and the Step 5 quiz",
+        "Identifies the rung-0 child as the unique covering child of the (LIVE E2E)-marked AC",
+        "Names rung-0's `## Blocked by` as `None — rung-0` and all other children's as `ai-brain#<rung-0-child-N>` regardless of natural deps",
+        "Mentions the choice is surfaced in the Step 5 quiz for user override",
+        "Names the no-op behavior when no `(LIVE E2E)` AC exists (or when Step 1.6 was bypassed via `NOT-architectural` / `status:reflection`)"
       ]
     }
   ]
