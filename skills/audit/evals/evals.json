@@ -71,6 +71,36 @@
         "States the ## Audit Summary heading must be present and unchanged",
         "States or implies format is consumed by downstream skills or used programmatically"
       ]
+    },
+    {
+      "id": 8,
+      "prompt": "What does /audit --all do and how does it differ mechanically from /audit p1 p5?",
+      "expected_output": "/audit --all runs P1..P5 as 5 separate advisor() calls (one per principle, isolated contexts). /audit p1 p5 runs a single combined advisor() call covering both principles. The 5-call isolation is the load-bearing semantic of --all — collapsing it to one batched call defeats the mode.",
+      "expectations": [
+        "States --all runs 5 SEPARATE advisor() calls (one per principle), not one combined call",
+        "States /audit p1 p5 continues to use a single advisor() call (backward compat)",
+        "States or implies the per-call isolation is the point — a single batched call would defeat --all"
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "Under /audit --all, in what order do rows appear in the consolidated ## Audit Summary table, and why?",
+      "expected_output": "Rows always appear P1 → P5 in deterministic order regardless of advisor return latency. Deterministic ordering keeps diffs comparable across runs and lets downstream consumers rely on a stable position for each principle.",
+      "expectations": [
+        "States rows are ordered P1 → P5 deterministically",
+        "States order is independent of advisor timing/latency",
+        "States or implies the regex `^\\| P[0-9]+ \\| (PASS|FLAG|FAIL) \\|` consumed by /slice keeps working"
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "How does /audit --all log its run to {vault}/thinking/principles/tracker.md?",
+      "expected_output": "--all writes one tracker log row per principle (5 rows total) and increments the Uses count once per principle (5 increments). Single / shorthand mode writes one row covering all selected principles.",
+      "expectations": [
+        "States --all logs ONE row per principle (5 rows total)",
+        "States --all increments Uses count ONCE per principle (5 increments)",
+        "States single/shorthand mode still writes one consolidated row (unchanged)"
+      ]
     }
   ]
 }
