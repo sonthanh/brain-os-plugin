@@ -24,11 +24,12 @@
     {
       "id": 3,
       "prompt": "How many candidate architecture trees does grill-fast render?",
-      "expected_output": "Three candidate architectures spanning the real design space — each internally consistent and defensible, not 1 good plus 2 strawmen.",
+      "expected_output": "At least four — three (typically A/B/C) axis-aligned and spanning the real design space (each internally consistent and defensible, not strawmen), plus a mandatory 4th axis-challenger tree that explicitly violates the shared framing axis the first three silently agree on. The 4th may be deliberately weak/impractical; the strawman exception applies only to it.",
       "expectations": [
-        "Mentions 3 candidate trees",
-        "Mentions trees must be defensible (not strawmen)",
-        "Mentions trees should span the design space"
+        "Mentions ≥4 candidate trees (or 3 axis-aligned + 1 axis-challenger)",
+        "Mentions trees A/B/C must be defensible (not strawmen)",
+        "Mentions the 4th tree challenges the shared framing axis",
+        "Mentions strawman exception applies only to the 4th tree"
       ]
     },
     {
@@ -54,33 +55,37 @@
     {
       "id": 6,
       "prompt": "What sections must the grill-fast output file contain?",
-      "expected_output": "Frame, The 3 candidate architectures (ASCII), Key deltas, Cost / risk per tree, Parameter picks, Recommended pick, Failure mode call-outs, Status gate.",
+      "expected_output": "Frame (with the shared framing axis named explicitly), The candidate architectures (ASCII — ≥4 trees including the axis-challenger), Key deltas, Cost / risk per tree, Parameter picks, Recommended pick, Failure mode call-outs, Status gate.",
       "expectations": [
         "Lists candidate architectures section with ASCII",
         "Lists key deltas section",
         "Lists cost/risk per tree section",
         "Lists parameter picks section",
-        "Lists recommended pick section"
+        "Lists recommended pick section",
+        "Mentions ≥4 trees including the axis-challenger",
+        "Mentions the shared framing axis must be named explicitly"
       ]
     },
     {
       "id": 7,
-      "prompt": "How does grill-fast highlight differences between the 3 candidate trees?",
-      "expected_output": "ASCII trees include header strips with each tree's ARCH picks plus inline arrow callouts (e.g. ◄──) marking where trees differ, and a delta table with one row per ARCH decision showing per-tree picks.",
+      "prompt": "How does grill-fast highlight differences between the candidate trees?",
+      "expected_output": "ASCII trees include header strips with each tree's ARCH picks plus inline arrow callouts (e.g. ◄──) marking where trees differ, and a delta table with one row per ARCH decision and one column per tree (A/B/C/D...) showing per-tree picks — including how the axis-challenger differs from the axis-aligned set.",
       "expectations": [
         "Mentions header strip showing each tree's ARCH picks",
         "Mentions inline arrow callouts for differences",
-        "Mentions delta table with per-tree picks"
+        "Mentions delta table with one column per tree (A/B/C/D...)",
+        "Mentions the table shows the axis-challenger's deltas alongside A/B/C"
       ]
     },
     {
       "id": 8,
       "prompt": "Does grill-fast end with 'you decide' or with a recommendation?",
-      "expected_output": "Recommendation — picks ONE tree (A/B/C) with rationale. Decide-and-recommend rule applies; never end with multiple-choice ask.",
+      "expected_output": "Recommendation — picks ONE tree (typically A/B/C) with rationale. Decide-and-recommend rule applies; never end with multiple-choice ask. If the user picks the axis-challenger 4th tree (rare), the grill MUST re-grill the framing before locking — drop back to /grill with a fresh question batch around the new framing.",
       "expectations": [
         "Mentions ONE pick / recommendation at the end",
         "Mentions Decide-and-recommend rule",
-        "Says NOT 'you decide' style ending"
+        "Says NOT 'you decide' style ending",
+        "Mentions re-grill the framing if user picks the 4th axis-challenger tree"
       ]
     },
     {
@@ -114,11 +119,46 @@
     {
       "id": 12,
       "prompt": "What special fields does grill-fast log to its outcome log beyond the standard skill-spec § 11 fields?",
-      "expected_output": "turns_to_lock=N (count user turns from invocation to lock — success metric, target ≤3) and pick=A|B|C|hybrid|none (which tree user selected).",
+      "expected_output": "turns_to_lock=N (count user turns from invocation to lock — success metric, target ≤3) and pick=A|B|C|D|hybrid|none (which tree user selected — D is the axis-challenger 4th tree).",
       "expectations": [
         "Mentions turns_to_lock metric",
-        "Mentions pick field with A/B/C/hybrid/none values",
-        "Mentions ≤3 turns target"
+        "Mentions pick field with A/B/C/D/hybrid/none values",
+        "Mentions ≤3 turns target",
+        "Mentions D as the axis-challenger 4th tree"
+      ]
+    },
+    {
+      "id": 13,
+      "prompt": "How does grill-fast identify the shared framing axis that the 4th tree must challenge?",
+      "expected_output": "After drafting trees A/B/C, ask what assumption all three silently agree on. The axis is the dimension trees A/B/C don't disagree on, even though they vary on others. Common axes: schema shape, where entities live (e.g. 'in tables'), pipeline topology (DAG vs feedback loop), control-flow direction, who decides X (deterministic vs LLM judgment). If you can't name the axis after 30 seconds, look for the row that's missing from the delta table — the dimension nobody varied on.",
+      "expectations": [
+        "Mentions asking what A/B/C silently agree on",
+        "Mentions the axis is the dimension trees do NOT disagree on",
+        "Gives ≥1 concrete example of a common axis (schema, entities-in-tables, DAG, etc.)",
+        "Mentions delta-table-row-that's-missing as a fallback method"
+      ]
+    },
+    {
+      "id": 14,
+      "prompt": "How does grill-fast render the mandatory 4th tree, and what's the canonical example?",
+      "expected_output": "Negate the shared framing axis. If A/B/C all assume 'entities live in tables', the 4th assumes 'entities live as denormalized strings inside other records'. The 4th tree may be intentionally weak/impractical/strawman — that's its job, surfacing the framing assumption rather than being a serious candidate. The strawman exception applies ONLY to the 4th tree. Canonical example: the 2026-05-04 airtable replay shipped A/B/C (strict/permissive/wide) all assuming 'entities live in tables' — the missing 4th tree would have asked 'what if entities don't live in tables?', exactly the case that broke 8 children of #237 on the denormalized Payments base where Payer Name / Payee Name were singleLineText strings.",
+      "expectations": [
+        "Mentions negating the shared axis",
+        "Mentions the 4th tree may be deliberately weak/impractical/strawman",
+        "Mentions the strawman exception applies ONLY to the 4th tree",
+        "Cites the 2026-05-04 airtable replay as canonical example",
+        "Mentions 'entities live in tables' / 'entities don't live in tables' framing or denormalized Payments / singleLineText / 8 children of #237"
+      ]
+    },
+    {
+      "id": 15,
+      "prompt": "What does grill-fast do if the user picks the axis-challenger 4th tree?",
+      "expected_output": "Re-grill the framing before locking. The shared axis was just rejected, so the original A/B/C design space is moot. Drop back to /grill with a fresh question batch around the new framing, then re-enter /grill-fast with the new axis to render a fresh A/B/C/D set. Do NOT lock on the axis-challenger as-is — it was scored against the old framing and may have been deliberately weak.",
+      "expectations": [
+        "Mentions re-grill the framing before locking",
+        "Mentions the original A/B/C design space is moot",
+        "Mentions drop back to /grill (fresh question batch)",
+        "Mentions do NOT lock on the axis-challenger as-is"
       ]
     }
   ]
