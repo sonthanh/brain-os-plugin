@@ -133,7 +133,8 @@ Follow `{vault}/skill-spec.md § 11`. After each `run.mts` invocation completes 
 ```
 
 - `pass` — `kind=paused` (base completed) or `kind=no-bases` (queue drained).
-- `fail` — `kind=escalated-re-anchor` or `kind=escalated-batch` (escalation reason in `escalation=` optional field).
+- `partial` — `kind=hitl-pending`: the HITL re-anchor gate exited with code 42 and awaits an operator decision. Read `<runDir>/hitl/re-anchor-decision-needed.json`, drive the grill conversation using the provided context, write `<runDir>/hitl/re-anchor-decision.json` (`{verdict: "approve"|"reject", notes}`), then re-run the same supaterm chain to resume.
+- `fail` — `kind=escalated-re-anchor` (operator rejected the re-anchor shallow slice — review what the slice lacked via the `re-anchor-decision-needed.json` context, adjust the rubric via `rubric-author.mts` or fix the base schema, then retry with a new run-id; no auto-promotion) or `kind=escalated-batch` (batch pass-rate below ≥95% threshold after retry — check `examples.jsonl` for the failing slices).
 - `commit:none` — extracted pages stage in cache, not in a tracked repo, so there is no anchor commit hash for diff detection.
 
-If `result != pass`, auto-invoke `/brain-os:improve airtable-knowledge-extract`. The eval gate inside `/improve` reverts any change that drops pass-rate, so auto-apply is safe.
+If `result != pass`, auto-invoke `/brain-os:improve airtable-knowledge-extract` only for unexpected failures (script errors, API failures). HITL escalations (`partial=hitl-pending`, `fail=re-anchor`) are by-design exits that need operator action, not SKILL.md changes.

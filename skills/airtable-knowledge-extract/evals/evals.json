@@ -88,6 +88,29 @@
         "Notes that selfImprove is atomic — partial-decision case writes needed-files only for missing ones without consuming existing decisions",
         "Mentions --strict-stdin-hitl as the opt-in flag for the legacy behavior"
       ]
+    },
+    {
+      "id": 8,
+      "prompt": "The outcome log shows a `partial` result for an airtable-knowledge-extract run. What does this mean and what should the operator do?",
+      "expected_output": "partial maps to kind=hitl-pending — the HITL re-anchor gate exited with code 42 and awaits an operator decision. The operator should read the re-anchor-decision-needed.json file in <runDir>/hitl/, drive the grill conversation using the provided context, write the re-anchor-decision.json file with {verdict: approve|reject, notes}, and then re-run the same supaterm chain to resume.",
+      "expectations": [
+        "States partial maps to kind=hitl-pending",
+        "Mentions exit code 42 as the hitl-pending signal",
+        "Mentions the operator must read the re-anchor-decision-needed.json file",
+        "Mentions writing the re-anchor-decision.json decision file to allow resume",
+        "Mentions re-running the same supaterm chain to resume"
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "The outcome log shows a `fail` result with escalation=re-anchor. What happened and what are the operator's next steps?",
+      "expected_output": "fail with escalation=re-anchor means kind=escalated-re-anchor — the operator reviewed the re-anchor shallow slice and rejected it (verdict=reject in the decision file). The base is not auto-promoted and must pass re-anchor on the next run-id. To retry: review what the shallow slice lacked via the re-anchor-decision-needed.json context, adjust the rubric via rubric-author.mts or fix the base schema, then re-run with a new run-id.",
+      "expectations": [
+        "States fail with escalation=re-anchor maps to kind=escalated-re-anchor",
+        "States the operator rejected the re-anchor shallow slice",
+        "States the base is not auto-promoted — must pass re-anchor on a new run-id",
+        "Mentions fixing the underlying issue (rubric or base schema) before retrying"
+      ]
     }
   ]
 }
