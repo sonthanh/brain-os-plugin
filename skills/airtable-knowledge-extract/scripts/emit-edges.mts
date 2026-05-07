@@ -68,6 +68,10 @@ import { dirname, join } from "node:path";
 import type { AirtableTable, AirtableField } from "./classify-clusters.mts";
 import type { AirtableRecord } from "./legacy-link-detector.mts";
 import { resolveVaultPath } from "./outcome-log.mts";
+import {
+  entityFields,
+  type TableTextFieldClassification,
+} from "./classify-text-field-entities.mts";
 
 const META_API_BASE = "https://api.airtable.com/v0/meta/bases";
 const RECORDS_API_BASE = "https://api.airtable.com/v0";
@@ -92,6 +96,12 @@ export interface EmitEdgesForTableInput {
   table: AirtableTable;
   records: AirtableRecord[];
   baseId: string;
+  /**
+   * Optional S5a classification for this table — when present, classified
+   * `from-like` / `to-like` text-field entity values override the default
+   * link-field-derived `from`/`to` per side. See `pickEntityFromTo`.
+   */
+  classification?: TableTextFieldClassification;
 }
 
 export interface SkippedRecord {
@@ -122,6 +132,13 @@ export interface EmitEdgesOptions {
   env?: Record<string, string | undefined>;
   configPath?: string;
   cacheBaseDir?: string;
+  /**
+   * S5a (text-field-entities) cache directory — when present + populated for
+   * this base, classified `from-like` / `to-like` text-field values override
+   * the link-field defaults in edge `from`/`to`. Falls back silently to the
+   * existing behaviour when the cache is absent (legacy bases pre-#251).
+   */
+  textFieldCacheBaseDir?: string;
   vaultPath?: string;
   warn?: (msg: string) => void;
 }
@@ -249,22 +266,72 @@ export function pickFromTo(
   return null;
 }
 
+/**
+ * Per-side override (S5b/S7 integration, ai-brain#251). When the table has an
+ * S5a classification with one `from-like` person/company text field with a
+ * non-empty value, returns its slug as `from`; same for `to-like` → `to`.
+ *
+ * MUST produce slugs that match `extract-text-field-entities.mts`'s
+ * `slug` field — both call `slugify` on the canonicalised value
+ * (NFKC + trim + collapse whitespace + lowercase). Drift between the two
+ * canonicalisations would mean S5b emits page `john-doe.md` while S7 emits
+ * edge `from: "johndoe"` — orphan slug references in the graph.
+ *
+ * `undirected` and `none` roles are skipped (undirected entity pages are
+ * still emitted by S5b but they don't drive an edge endpoint).
+ */
+export function pickEntityFromTo(
+  table: AirtableTable,
+  record: AirtableRecord,
+  classification?: TableTextFieldClassification,
+): { from?: string; to?: string } {
+  if (!classification) return {};
+  const fields = entityFields(classification);
+  if (fields.length === 0) return {};
+  let fromSlug: string | undefined;
+  let toSlug: string | undefined;
+  for (const ef of fields) {
+    if (ef.role !== "from-like" && ef.role !== "to-like") continue;
+    const v = record.fields?.[ef.name];
+    if (typeof v !== "string") continue;
+    const trimmed = v.trim();
+    if (trimmed.length === 0) continue;
+    const canonical = trimmed
+      .normalize("NFKC")
+      .replace(/\s+/g, " ")
+      .toLowerCase();
+    const slug = slugify(canonical);
+    if (slug.length === 0) continue;
+    if (ef.role === "from-like" && fromSlug === undefined) fromSlug = slug;
+    if (ef.role === "to-like" && toSlug === undefined) toSlug = slug;
+  }
+  return { from: fromSlug, to: toSlug };
+}
+
 // ---------------------------------------------------------------------------
 // Row construction
 // ---------------------------------------------------------------------------
+
+export interface BuildEdgeRowOptions {
+  classification?: TableTextFieldClassification;
+}
 
 export function buildEdgeRow(
   table: AirtableTable,
   record: AirtableRecord,
   baseId: string,
+  opts: BuildEdgeRowOptions = {},
 ): EdgeRow | null {
-  const ft = pickFromTo(table, record);
-  if (!ft) return null;
+  const linkFt = pickFromTo(table, record);
+  const entityFt = pickEntityFromTo(table, record, opts.classification);
+  const from = entityFt.from ?? linkFt?.from;
+  const to = entityFt.to ?? linkFt?.to;
+  if (!from || !to) return null;
   const row: EdgeRow = {
     id: `${baseId}-${record.id}`,
     type: deriveEdgeType(table.name),
-    from: ft.from,
-    to: ft.to,
+    from,
+    to,
     source_record_id: record.id,
     source_table: table.id,
   };
@@ -283,11 +350,14 @@ export function emitEdgesForTable(
   const rows: EdgeRow[] = [];
   const skipped: SkippedRecord[] = [];
   for (const r of input.records) {
-    const row = buildEdgeRow(input.table, r, input.baseId);
+    const row = buildEdgeRow(input.table, r, input.baseId, {
+      classification: input.classification,
+    });
     if (!row) {
       skipped.push({
         recordId: r.id,
-        reason: "no derivable from/to (need ≥2 link IDs across ≥1 link field)",
+        reason:
+          "no derivable from/to (need ≥2 link IDs across ≥1 link field, or classified text-field entity values)",
       });
       continue;
     }
@@ -454,6 +524,11 @@ function defaultCacheBaseDir(): string {
   return join(here, "..", "cache", "table-types");
 }
 
+function defaultTextFieldCacheBaseDir(): string {
+  const here = dirname(new URL(import.meta.url).pathname);
+  return join(here, "..", "cache", "text-field-entities");
+}
+
 function readStage0Cache(
   cacheBaseDir: string,
   baseId: string,
@@ -462,6 +537,22 @@ function readStage0Cache(
   if (!existsSync(cachePath)) return null;
   try {
     return JSON.parse(readFileSync(cachePath, "utf8")) as Record<string, Stage0Classification>;
+  } catch {
+    return null;
+  }
+}
+
+function readTextFieldCache(
+  cacheBaseDir: string,
+  baseId: string,
+): Record<string, TableTextFieldClassification> | null {
+  const cachePath = join(cacheBaseDir, `${baseId}.json`);
+  if (!existsSync(cachePath)) return null;
+  try {
+    return JSON.parse(readFileSync(cachePath, "utf8")) as Record<
+      string,
+      TableTextFieldClassification
+    >;
   } catch {
     return null;
   }
@@ -529,12 +620,22 @@ export async function emitEdges(
   const tables = await fetchTables(baseId, fetchImpl, token);
   const wantedTables = tables.filter((t) => wantedIds.includes(t.id));
 
+  const textFieldDir =
+    opts.textFieldCacheBaseDir ?? defaultTextFieldCacheBaseDir();
+  const textFieldCache = readTextFieldCache(textFieldDir, baseId) ?? {};
+
   const allRows: EdgeRow[] = [];
   const allSkipped: SkippedRecord[] = [];
   const tablesProcessed: string[] = [];
   for (const t of wantedTables) {
     const records = await fetchAllRecords(baseId, t.id, fetchImpl, token);
-    const { rows, skipped } = emitEdgesForTable({ table: t, records, baseId });
+    const classification = textFieldCache[t.id];
+    const { rows, skipped } = emitEdgesForTable({
+      table: t,
+      records,
+      baseId,
+      classification,
+    });
     allRows.push(...rows);
     for (const s of skipped) {
       allSkipped.push({ recordId: s.recordId, reason: `${t.id}: ${s.reason}` });

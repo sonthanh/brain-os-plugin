@@ -1195,3 +1195,487 @@ describe("Zero Sonnet — emit-edges.mts has no LLM imports or runners", () => {
     expect(source).not.toMatch(/\bSONNET\b|\bclaude-sonnet\b|\bclaude-opus\b/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// pickEntityFromTo + buildEdgeRow with classification (ai-brain#251 S7 update)
+// ---------------------------------------------------------------------------
+
+describe("pickEntityFromTo (S7 / S5a integration)", () => {
+  test("returns entity slugs for from-like + to-like classified text fields", async () => {
+    const { pickEntityFromTo } = await import("../scripts/emit-edges.mts");
+    const table: AirtableTable = {
+      id: "tblPay",
+      name: "Payments",
+      fields: [
+        { id: "f1", name: "Payer Name", type: "singleLineText" },
+        { id: "f2", name: "Payee Name", type: "singleLineText" },
+      ],
+    };
+    const record: AirtableRecord = {
+      id: "rec1",
+      fields: { "Payer Name": "John Doe", "Payee Name": "Acme Corp" },
+    };
+    const cls = {
+      schema_hash: "h",
+      classified_at: "t",
+      fields: {
+        "Payer Name": {
+          kind: "person" as const,
+          role: "from-like" as const,
+          confidence: 0.95,
+          reasoning: "x",
+        },
+        "Payee Name": {
+          kind: "company" as const,
+          role: "to-like" as const,
+          confidence: 0.95,
+          reasoning: "x",
+        },
+      },
+    };
+    expect(pickEntityFromTo(table, record, cls)).toEqual({
+      from: "john-doe",
+      to: "acme-corp",
+    });
+  });
+
+  test("returns {} when classification is undefined", async () => {
+    const { pickEntityFromTo } = await import("../scripts/emit-edges.mts");
+    const table: AirtableTable = { id: "t", name: "T", fields: [] };
+    const record: AirtableRecord = { id: "r", fields: {} };
+    expect(pickEntityFromTo(table, record, undefined)).toEqual({});
+  });
+
+  test("ignores undirected + none roles", async () => {
+    const { pickEntityFromTo } = await import("../scripts/emit-edges.mts");
+    const table: AirtableTable = {
+      id: "t",
+      name: "T",
+      fields: [
+        { id: "f1", name: "Owner", type: "singleLineText" },
+        { id: "f2", name: "Note", type: "singleLineText" },
+      ],
+    };
+    const record: AirtableRecord = {
+      id: "r",
+      fields: { Owner: "Alice", Note: "ignore" },
+    };
+    const cls = {
+      schema_hash: "h",
+      classified_at: "t",
+      fields: {
+        Owner: {
+          kind: "person" as const,
+          role: "undirected" as const,
+          confidence: 0.95,
+          reasoning: "x",
+        },
+        Note: {
+          kind: "none" as const,
+          role: "none" as const,
+          confidence: 0.95,
+          reasoning: "x",
+        },
+      },
+    };
+    expect(pickEntityFromTo(table, record, cls)).toEqual({});
+  });
+
+  test("trims + canonicalises so 'JOHN  DOE' yields same slug as 'john doe'", async () => {
+    const { pickEntityFromTo } = await import("../scripts/emit-edges.mts");
+    const table: AirtableTable = {
+      id: "t",
+      name: "T",
+      fields: [{ id: "f1", name: "Payer Name", type: "singleLineText" }],
+    };
+    const cls = {
+      schema_hash: "h",
+      classified_at: "t",
+      fields: {
+        "Payer Name": {
+          kind: "person" as const,
+          role: "from-like" as const,
+          confidence: 0.95,
+          reasoning: "x",
+        },
+      },
+    };
+    const r1 = { id: "r1", fields: { "Payer Name": "John Doe" } };
+    const r2 = { id: "r2", fields: { "Payer Name": "  JOHN  DOE  " } };
+    expect(pickEntityFromTo(table, r1, cls).from).toBe(
+      pickEntityFromTo(table, r2, cls).from,
+    );
+  });
+
+  test("partial — only from-like classified → returns only from", async () => {
+    const { pickEntityFromTo } = await import("../scripts/emit-edges.mts");
+    const table: AirtableTable = {
+      id: "t",
+      name: "T",
+      fields: [
+        { id: "f1", name: "Payer Name", type: "singleLineText" },
+        { id: "f2", name: "Cashflow", type: "multipleRecordLinks" },
+      ],
+    };
+    const record: AirtableRecord = {
+      id: "r",
+      fields: { "Payer Name": "John Doe", Cashflow: ["recCF1"] },
+    };
+    const cls = {
+      schema_hash: "h",
+      classified_at: "t",
+      fields: {
+        "Payer Name": {
+          kind: "person" as const,
+          role: "from-like" as const,
+          confidence: 0.95,
+          reasoning: "x",
+        },
+      },
+    };
+    const r = pickEntityFromTo(table, record, cls);
+    expect(r.from).toBe("john-doe");
+    expect(r.to).toBeUndefined();
+  });
+
+  test("empty value on classified field → that side is undefined", async () => {
+    const { pickEntityFromTo } = await import("../scripts/emit-edges.mts");
+    const table: AirtableTable = {
+      id: "t",
+      name: "T",
+      fields: [
+        { id: "f1", name: "Payer Name", type: "singleLineText" },
+        { id: "f2", name: "Payee Name", type: "singleLineText" },
+      ],
+    };
+    const record: AirtableRecord = {
+      id: "r",
+      fields: { "Payer Name": "John Doe", "Payee Name": "" },
+    };
+    const cls = {
+      schema_hash: "h",
+      classified_at: "t",
+      fields: {
+        "Payer Name": {
+          kind: "person" as const,
+          role: "from-like" as const,
+          confidence: 0.95,
+          reasoning: "x",
+        },
+        "Payee Name": {
+          kind: "company" as const,
+          role: "to-like" as const,
+          confidence: 0.95,
+          reasoning: "x",
+        },
+      },
+    };
+    const r = pickEntityFromTo(table, record, cls);
+    expect(r.from).toBe("john-doe");
+    expect(r.to).toBeUndefined();
+  });
+});
+
+describe("buildEdgeRow with classification", () => {
+  test("entity slugs override link-field record IDs when both are present", async () => {
+    const { buildEdgeRow } = await import("../scripts/emit-edges.mts");
+    const table: AirtableTable = {
+      id: "tblPay",
+      name: "Payments",
+      fields: [
+        { id: "f1", name: "Payer Name", type: "singleLineText" },
+        { id: "f2", name: "Payee Name", type: "singleLineText" },
+        {
+          id: "f3",
+          name: "Cashflow",
+          type: "multipleRecordLinks",
+          options: { linkedTableId: "tblCF" },
+        },
+        {
+          id: "f4",
+          name: "PnL",
+          type: "multipleRecordLinks",
+          options: { linkedTableId: "tblPnL" },
+        },
+      ],
+    };
+    const record: AirtableRecord = {
+      id: "rec1",
+      fields: {
+        "Payer Name": "John Doe",
+        "Payee Name": "Acme Corp",
+        Cashflow: ["recCF1"],
+        PnL: ["recPnL1"],
+      },
+    };
+    const cls = {
+      schema_hash: "h",
+      classified_at: "t",
+      fields: {
+        "Payer Name": {
+          kind: "person" as const,
+          role: "from-like" as const,
+          confidence: 0.95,
+          reasoning: "x",
+        },
+        "Payee Name": {
+          kind: "company" as const,
+          role: "to-like" as const,
+          confidence: 0.95,
+          reasoning: "x",
+        },
+      },
+    };
+    const row = buildEdgeRow(table, record, "appX", { classification: cls });
+    expect(row).not.toBeNull();
+    expect(row!.from).toBe("john-doe");
+    expect(row!.to).toBe("acme-corp");
+    expect(row!.id).toBe("appX-rec1");
+  });
+
+  test("partial override — entity slug for from, link-field record ID for to", async () => {
+    const { buildEdgeRow } = await import("../scripts/emit-edges.mts");
+    const table: AirtableTable = {
+      id: "tblPay",
+      name: "Payments",
+      fields: [
+        { id: "f1", name: "Payer Name", type: "singleLineText" },
+        {
+          id: "f2",
+          name: "Cashflow",
+          type: "multipleRecordLinks",
+          options: { linkedTableId: "tblCF" },
+        },
+        {
+          id: "f3",
+          name: "PnL",
+          type: "multipleRecordLinks",
+          options: { linkedTableId: "tblPnL" },
+        },
+      ],
+    };
+    const record: AirtableRecord = {
+      id: "rec1",
+      fields: {
+        "Payer Name": "John Doe",
+        Cashflow: ["recCF1"],
+        PnL: ["recPnL1"],
+      },
+    };
+    const cls = {
+      schema_hash: "h",
+      classified_at: "t",
+      fields: {
+        "Payer Name": {
+          kind: "person" as const,
+          role: "from-like" as const,
+          confidence: 0.95,
+          reasoning: "x",
+        },
+      },
+    };
+    const row = buildEdgeRow(table, record, "appX", { classification: cls });
+    expect(row).not.toBeNull();
+    expect(row!.from).toBe("john-doe");
+    expect(row!.to).toBe("recPnL1"); // second link field, first ID — from pickFromTo
+  });
+
+  test("entity slug works when no link fields exist", async () => {
+    const { buildEdgeRow } = await import("../scripts/emit-edges.mts");
+    const table: AirtableTable = {
+      id: "tblPay",
+      name: "Payments",
+      fields: [
+        { id: "f1", name: "Payer Name", type: "singleLineText" },
+        { id: "f2", name: "Payee Name", type: "singleLineText" },
+      ],
+    };
+    const record: AirtableRecord = {
+      id: "rec1",
+      fields: { "Payer Name": "John Doe", "Payee Name": "Acme Corp" },
+    };
+    const cls = {
+      schema_hash: "h",
+      classified_at: "t",
+      fields: {
+        "Payer Name": {
+          kind: "person" as const,
+          role: "from-like" as const,
+          confidence: 0.95,
+          reasoning: "x",
+        },
+        "Payee Name": {
+          kind: "company" as const,
+          role: "to-like" as const,
+          confidence: 0.95,
+          reasoning: "x",
+        },
+      },
+    };
+    const row = buildEdgeRow(table, record, "appX", { classification: cls });
+    expect(row).not.toBeNull();
+    expect(row!.from).toBe("john-doe");
+    expect(row!.to).toBe("acme-corp");
+  });
+
+  test("no classification → falls back to current pickFromTo (existing behaviour)", async () => {
+    const { buildEdgeRow } = await import("../scripts/emit-edges.mts");
+    const table: AirtableTable = {
+      id: "tblPay",
+      name: "Payments",
+      fields: [
+        {
+          id: "f1",
+          name: "Cashflow",
+          type: "multipleRecordLinks",
+          options: { linkedTableId: "tblCF" },
+        },
+        {
+          id: "f2",
+          name: "PnL",
+          type: "multipleRecordLinks",
+          options: { linkedTableId: "tblPnL" },
+        },
+      ],
+    };
+    const record: AirtableRecord = {
+      id: "rec1",
+      fields: { Cashflow: ["recCF1"], PnL: ["recPnL1"] },
+    };
+    const row = buildEdgeRow(table, record, "appX");
+    expect(row!.from).toBe("recCF1");
+    expect(row!.to).toBe("recPnL1");
+  });
+});
+
+describe("emitEdges with text-field cache", () => {
+  test("reads textFieldCacheBaseDir, applies classification per table", async () => {
+    const { emitEdges } = await import("../scripts/emit-edges.mts");
+    const baseId = "appTF001";
+    const stage0Dir = join(tmp, "stage0");
+    const tfDir = join(tmp, "tf");
+    const vault = join(tmp, "vault");
+    mkdirSync(stage0Dir, { recursive: true });
+    mkdirSync(tfDir, { recursive: true });
+    writeStageZeroCache(stage0Dir, baseId, {
+      tblPay: {
+        type: "interaction",
+        reasoning: "x",
+        schema_hash: "h",
+        classified_at: "t",
+      },
+    });
+    writeFileSync(
+      join(tfDir, `${baseId}.json`),
+      JSON.stringify({
+        tblPay: {
+          schema_hash: "h",
+          classified_at: "t",
+          fields: {
+            "Payer Name": {
+              kind: "person",
+              role: "from-like",
+              confidence: 0.95,
+              reasoning: "x",
+            },
+            "Payee Name": {
+              kind: "company",
+              role: "to-like",
+              confidence: 0.95,
+              reasoning: "x",
+            },
+          },
+        },
+      }),
+    );
+    const table: AirtableTable = {
+      id: "tblPay",
+      name: "Payments",
+      fields: [
+        { id: "f1", name: "Payer Name", type: "singleLineText" },
+        { id: "f2", name: "Payee Name", type: "singleLineText" },
+      ],
+    };
+    const records: AirtableRecord[] = [
+      {
+        id: "rec1",
+        fields: { "Payer Name": "John Doe", "Payee Name": "Acme Corp" },
+      },
+    ];
+    const { fetch: fetchImpl } = makeFetch([
+      { match: /\/meta\/bases\//, body: { tables: [table] } },
+      { match: /\/tblPay/, body: { records } },
+    ]);
+    const result = await emitEdges(baseId, {
+      fetch: fetchImpl,
+      env: { AIRTABLE_API_KEY: "fake" },
+      cacheBaseDir: stage0Dir,
+      textFieldCacheBaseDir: tfDir,
+      vaultPath: vault,
+    });
+    expect(result.skipped).toBe(false);
+    const edgesPath = join(vault, "knowledge", "graph", "edges.jsonl");
+    const written = readFileSync(edgesPath, "utf8");
+    const lines = written.trim().split("\n");
+    expect(lines.length).toBe(1);
+    const row = JSON.parse(lines[0]);
+    expect(row.from).toBe("john-doe");
+    expect(row.to).toBe("acme-corp");
+    expect(row.id).toBe(`${baseId}-rec1`);
+  });
+
+  test("missing textFieldCacheBaseDir → falls back to link-field behaviour", async () => {
+    const { emitEdges } = await import("../scripts/emit-edges.mts");
+    const baseId = "appTF002";
+    const stage0Dir = join(tmp, "stage0b");
+    const vault = join(tmp, "vaultb");
+    mkdirSync(stage0Dir, { recursive: true });
+    writeStageZeroCache(stage0Dir, baseId, {
+      tblPay: {
+        type: "interaction",
+        reasoning: "x",
+        schema_hash: "h",
+        classified_at: "t",
+      },
+    });
+    const table: AirtableTable = {
+      id: "tblPay",
+      name: "Payments",
+      fields: [
+        {
+          id: "f1",
+          name: "Cashflow",
+          type: "multipleRecordLinks",
+          options: { linkedTableId: "tblCF" },
+        },
+        {
+          id: "f2",
+          name: "PnL",
+          type: "multipleRecordLinks",
+          options: { linkedTableId: "tblPnL" },
+        },
+      ],
+    };
+    const records: AirtableRecord[] = [
+      { id: "rec1", fields: { Cashflow: ["recCF1"], PnL: ["recPnL1"] } },
+    ];
+    const { fetch: fetchImpl } = makeFetch([
+      { match: /\/meta\/bases\//, body: { tables: [table] } },
+      { match: /\/tblPay/, body: { records } },
+    ]);
+    // Pass a non-existent textFieldCacheBaseDir.
+    const result = await emitEdges(baseId, {
+      fetch: fetchImpl,
+      env: { AIRTABLE_API_KEY: "fake" },
+      cacheBaseDir: stage0Dir,
+      textFieldCacheBaseDir: join(tmp, "nonexistent"),
+      vaultPath: vault,
+    });
+    expect(result.skipped).toBe(false);
+    const edgesPath = join(vault, "knowledge", "graph", "edges.jsonl");
+    const written = readFileSync(edgesPath, "utf8");
+    const row = JSON.parse(written.trim().split("\n")[0]);
+    expect(row.from).toBe("recCF1");
+    expect(row.to).toBe("recPnL1");
+  });
+});
