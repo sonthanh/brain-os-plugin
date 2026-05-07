@@ -51,7 +51,9 @@ export interface RawIssue {
   state: string;
   labels: RawLabel[];
   body?: string;
-  title: string;
+  // gh occasionally returns issues with an undefined `title` field — defended
+  // in `normalizeIssue` so downstream parsers can rely on a string.
+  title?: string;
 }
 
 export interface Issue {
@@ -126,8 +128,7 @@ export function parseBlockers(body: string): number[] {
 // correction)" intentionally don't match (different concept).
 const PHASE_TITLE_RE = /^(.+?)\s*—\s*Phase\s+(\d+)\b/;
 
-export function parsePhase(title: string | null | undefined): PhaseInfo | null {
-  if (!title) return null;
+export function parsePhase(title: string): PhaseInfo | null {
   const m = title.match(PHASE_TITLE_RE);
   if (!m) return null;
   const project = m[1].replace(/^Story:\s*/, "").trim();
@@ -190,14 +191,22 @@ export function buildAdjacency(issues: Issue[]): Map<number, number[]> {
   return adj;
 }
 
+// Walks the adjacency from `num` and returns true on the first OPEN
+// descendant. Cycle-safe: a `visited` set guards against revisiting nodes
+// when the parent graph is malformed (e.g. user authored circular
+// `## Parent` refs). Without this guard an all-CLOSED cycle would push
+// the same nodes onto the stack forever.
 export function hasOpenDescendant(
   num: number,
   adj: Map<number, number[]>,
   byNumber: Map<number, Issue>,
 ): boolean {
+  const visited = new Set<number>();
   const stack = [...(adj.get(num) ?? [])];
   while (stack.length) {
     const n = stack.pop()!;
+    if (visited.has(n)) continue;
+    visited.add(n);
     const c = byNumber.get(n);
     if (!c) continue;
     if (c.state === "OPEN") return true;
@@ -293,8 +302,12 @@ export function statusBadge(issue: Issue): string {
   }
 }
 
+// Strips the `Story:` prefix and collapses any embedded newlines/CRs to
+// spaces. The collapse step blocks markdown injection via title fields:
+// a title containing `\n## ` would otherwise break the rendered structure
+// of `~/.cache/brain-os/status.md`.
 export function cleanTitle(title: string): string {
-  return title.replace(/^Story:\s*/, "").trim();
+  return title.replace(/^Story:\s*/, "").replace(/[\r\n]+/g, " ").trim();
 }
 
 // ============================================================
@@ -397,6 +410,7 @@ interface RenderCtx {
   adj: Map<number, number[]>;
   byNumber: Map<number, Issue>;
   phaseLinks: Map<number, Issue>;
+  visited: Set<number>;
 }
 
 export function renderTree(ctx: RenderCtx, root: Issue): string[] {
@@ -406,15 +420,17 @@ export function renderTree(ctx: RenderCtx, root: Issue): string[] {
 }
 
 function renderRoot(ctx: RenderCtx, root: Issue, out: string[]): void {
+  ctx.visited.add(root.number);
   const planMarker = root.isPlan ? "Story " : "";
   const badge = statusBadge(root);
   const badgeStr = badge ? ` ${badge}` : "";
   out.push(`${planMarker}#${root.number}${badgeStr} — ${cleanTitle(root.title)}`);
-  const childNums = ctx.adj.get(root.number) ?? [];
+  const childNums = (ctx.adj.get(root.number) ?? []).filter(
+    (n) => !ctx.visited.has(n),
+  );
   const items = collapseClosedSiblings(childNums, ctx.byNumber);
   const siblingSet = new Set(childNums);
   const phaseLink = ctx.phaseLinks.get(root.number);
-  const totalRows = items.length + (phaseLink ? 1 : 0);
   for (let i = 0; i < items.length; i++) {
     const isLast = i === items.length - 1 && !phaseLink;
     renderRow(ctx, items[i], "", isLast, siblingSet, out);
@@ -424,7 +440,6 @@ function renderRoot(ctx: RenderCtx, root: Issue, out: string[]): void {
       `${BRANCH_LAST}Next story queued: #${phaseLink.number} — ${cleanTitle(phaseLink.title)}`,
     );
   }
-  void totalRows;
 }
 
 function renderRow(
@@ -440,6 +455,8 @@ function renderRow(
     out.push(`${prefix}${conn}${item.label}`);
     return;
   }
+  if (ctx.visited.has(item.number)) return;
+  ctx.visited.add(item.number);
   const issue = ctx.byNumber.get(item.number);
   if (!issue) return;
   const planMarker = issue.isPlan ? "Story " : "";
@@ -449,7 +466,9 @@ function renderRow(
   out.push(
     `${prefix}${conn}${planMarker}#${issue.number}${badgeStr} — ${cleanTitle(issue.title)}${blockSuffix}`,
   );
-  const childNums = ctx.adj.get(issue.number) ?? [];
+  const childNums = (ctx.adj.get(issue.number) ?? []).filter(
+    (n) => !ctx.visited.has(n),
+  );
   if (childNums.length === 0) return;
   const subItems = collapseClosedSiblings(childNums, ctx.byNumber);
   const subSiblingSet = new Set(childNums);
@@ -502,7 +521,11 @@ export function renderStoriesBlock(rawIssues: RawIssue[]): string {
   const benchCount = benchPlans.length;
   if (activeCount === 0 && benchCount === 0) return "";
 
-  const ctx: RenderCtx = { adj, byNumber, phaseLinks };
+  // Single visited set shared across every root — guards against cycles
+  // in user-authored `## Parent` refs AND prevents an issue from being
+  // rendered twice if it's reachable from two roots (degenerate, but possible
+  // when a root inherits a child via a deleted intermediary).
+  const ctx: RenderCtx = { adj, byNumber, phaseLinks, visited: new Set() };
   const lines: string[] = [];
   const header =
     benchCount === 0

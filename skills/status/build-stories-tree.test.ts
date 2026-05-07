@@ -285,6 +285,28 @@ describe("hasOpenDescendant", () => {
     const byNumber = new Map(issues.map((i) => [i.number, i]));
     expect(hasOpenDescendant(1, adj, byNumber)).toBe(false);
   });
+
+  test("all-closed cycle terminates (visited guard)", () => {
+    // 1 → 2 → 1 cycle of CLOSED issues. Without visited tracking the
+    // iterative stack pushes the same nodes forever. Bounded time = pass.
+    const issues = [
+      mkIssue(1, "CLOSED", 2),
+      mkIssue(2, "CLOSED", 1),
+    ];
+    const adj = buildAdjacency(issues);
+    const byNumber = new Map(issues.map((i) => [i.number, i]));
+    expect(hasOpenDescendant(1, adj, byNumber)).toBe(false);
+  });
+
+  test("open-node cycle short-circuits on first OPEN visit", () => {
+    const issues = [
+      mkIssue(1, "OPEN", 2),
+      mkIssue(2, "CLOSED", 1),
+    ];
+    const adj = buildAdjacency(issues);
+    const byNumber = new Map(issues.map((i) => [i.number, i]));
+    expect(hasOpenDescendant(2, adj, byNumber)).toBe(true);
+  });
 });
 
 // ----- findRoots + isActivePlan -------------------------------------------
@@ -766,5 +788,63 @@ describe("renderStoriesBlock — end to end", () => {
     expect(out).toContain("**Stories (1)**");
     expect(out).not.toContain("on bench");
     expect(out).not.toContain("Next story queued");
+  });
+
+  test("cycle reachable from root renders without throwing + no duplicates", () => {
+    // 3 (root) → 2 → 1 → 3 cycle in adjacency
+    const raw: RawIssue[] = [
+      {
+        number: 3,
+        state: "OPEN",
+        labels: [{ name: "type:plan" }, { name: "status:in-progress" }],
+        body: "## Parent\n\n- ai-brain#1\n",
+        title: "Story: Cyclic root",
+      },
+      {
+        number: 1,
+        state: "OPEN",
+        labels: [],
+        body: "## Parent\n\n- ai-brain#2\n",
+        title: "A",
+      },
+      {
+        number: 2,
+        state: "OPEN",
+        labels: [],
+        body: "## Parent\n\n- ai-brain#3\n",
+        title: "B",
+      },
+    ];
+    const out = renderStoriesBlock(raw);
+    expect(out).toContain("Story #3");
+    // #3 must appear EXACTLY once — visited guard prevents re-render
+    expect((out.match(/#3\b/g) ?? []).length).toBe(1);
+  });
+
+  test("title containing newlines is collapsed (markdown injection guard)", () => {
+    const raw: RawIssue[] = [
+      {
+        number: 1,
+        state: "OPEN",
+        labels: [{ name: "type:plan" }, { name: "status:in-progress" }],
+        body: "",
+        title: "Evil\n## Heading injection\nMore",
+      },
+    ];
+    const out = renderStoriesBlock(raw);
+    expect(out).not.toContain("\n## Heading injection");
+    expect(out).toContain("Evil ## Heading injection More");
+  });
+
+  test("missing title (gh returns undefined) does not crash", () => {
+    const raw: RawIssue[] = [
+      {
+        number: 1,
+        state: "OPEN",
+        labels: [{ name: "type:plan" }, { name: "status:in-progress" }],
+        body: "",
+      } as unknown as RawIssue,
+    ];
+    expect(() => renderStoriesBlock(raw)).not.toThrow();
   });
 });
