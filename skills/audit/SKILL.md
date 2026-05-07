@@ -15,9 +15,9 @@ One-shot audit of current context through your curated principles, verified by a
 | `/audit p1`        | audit through P1 only (single `advisor()` call) |
 | `/audit p0`        | same as bare `/audit` |
 | `/audit p1 p5`     | audit through P1 + P5 in one combined `advisor()` call (shorthand) |
-| `/audit --all`     | audit through ALL 5 principles via **5 SEPARATE `advisor()` calls** (one per principle, isolated contexts) |
+| `/audit --all`     | audit through ALL 5 principles via **5 SEPARATE `Agent(subagent_type=general-purpose)` calls** (one per principle, fresh-context isolation per call) |
 
-`/audit --all <context-source>` accepts the same optional context-source argument as the other invocations. When omitted, the advisor sees the current conversation transcript (which the harness forwards).
+`/audit --all <context-source>` accepts the same optional context-source argument as the other invocations. When omitted, each per-principle Agent receives the current conversation transcript as the audit context (the orchestrator embeds it in the per-call prompt; the Agent itself starts with a fresh context).
 
 ## How It Works — single / shorthand modes (no `--all`)
 
@@ -31,9 +31,9 @@ One-shot audit of current context through your curated principles, verified by a
 
 `/audit p1` and `/audit p1 p5` are **unchanged** under this mode — they continue to work exactly as before. `--all` is additive, not a replacement.
 
-## How It Works — `--all` mode (5 isolated advisor calls)
+## How It Works — `--all` mode (5 isolated Agent calls)
 
-When `--all` is passed, run principles **sequentially as 5 separate `advisor()` calls** — one call per principle, each with an independent context window. **NOT one `advisor()` call with all 5 principles in the prompt.** The per-call isolation is the load-bearing semantic; collapsing to a single batched call defeats the purpose of this mode (see `## Why per-principle isolation matters` below).
+When `--all` is passed, run principles **sequentially as 5 separate `Agent(subagent_type=general-purpose)` calls** — one call per principle, each spawned with a fresh, independent context window. **NOT one call with all 5 principles in the prompt; NOT 5 `advisor()` calls.** The per-call isolation is the load-bearing semantic; collapsing to a single batched call OR using `advisor()` (which forwards the full conversation transcript per call, leaking earlier verdicts) defeats the purpose of this mode (see `## Why per-principle isolation matters` below).
 
 Steps:
 
@@ -41,16 +41,16 @@ Steps:
 2. Resolve audit context: the named context-source arg if provided, otherwise the current conversation transcript.
 3. Print all 5 principle definitions + the resolved context summary into the conversation so the user can see what is about to run.
 4. For each principle in **P1, P2, P3, P4, P5** — sequential, deterministic order, not parallel:
-   1. Compose an `advisor()` prompt that contains ONLY that single principle's text + the resolved audit context + the standard "does this pass or fail this principle, what specifically needs to change?" framing. Do NOT include the other four principles in the prompt.
-   2. Call `advisor()`.
-   3. Parse the returned response for its `## Audit Summary` row using the regex `^\| P[0-9]+ \| (PASS|FLAG|FAIL) \|`. Capture the verdict (PASS/FLAG/FAIL) and the key-finding cell.
-   4. Capture the full advisor response text for later use in the per-principle findings section.
-5. Consolidate the 5 captured rows into ONE merged `## Audit Summary` table — rows ordered **P1 → P5** regardless of advisor return latency or other ordering signals.
-6. Append a `## Per-principle Findings` section containing the full advisor response for each principle, separated by `### P{N}` subheadings (also P1 → P5 order).
+   1. Compose an `Agent` prompt that contains ONLY that single principle's text + the resolved audit context + the standard "does this pass or fail this principle, what specifically needs to change?" framing + an instruction to return its verdict as a single `^\| P{N} \| (PASS|FLAG|FAIL) \| <key finding>` table row. Do NOT include the other four principles in the prompt. Do NOT include results from prior principle calls in the prompt.
+   2. Call `Agent(subagent_type="general-purpose", description="audit P{N}", prompt=<composed prompt>)`. The Agent runs with its own fresh context — none of the orchestrator's transcript is forwarded.
+   3. Parse the returned summary for its row using the regex `^\| P[0-9]+ \| (PASS|FLAG|FAIL) \|`. Capture the verdict (PASS/FLAG/FAIL) and the key-finding cell.
+   4. Capture the full Agent response text for later use in the per-principle findings section.
+5. Consolidate the 5 captured rows into ONE merged `## Audit Summary` table — rows ordered **P1 → P5** regardless of Agent return latency or other ordering signals. The orchestrator builds the table; individual Agents return only their single row + per-principle prose.
+6. Append a `## Per-principle Findings` section containing the full Agent response for each principle, separated by `### P{N}` subheadings (also P1 → P5 order).
 7. Append **one tracker log row per principle** (5 rows total) and increment the Uses count **once per principle** (5 increments). See `## Tracker Integration` below.
 8. Append the outcome-log row per `## Outcome log` below.
 
-Sequential (not parallel) ordering is intentional: it keeps debugging straightforward (failures attribute to a single principle's call) and the deterministic P1→P5 row order makes diffs across runs trivially comparable.
+Sequential (not parallel) ordering is intentional: it keeps debugging straightforward (failures attribute to a single principle's call) and the deterministic P1→P5 row order makes diffs across runs trivially comparable. Sequential is also fine for correctness: each Agent already gets fresh context, so there's no cross-contamination risk that parallel would prevent — it just makes the run linear.
 
 ## Output consolidation contract
 

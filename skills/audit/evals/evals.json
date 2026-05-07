@@ -75,20 +75,20 @@
     {
       "id": 8,
       "prompt": "What does /audit --all do and how does it differ mechanically from /audit p1 p5?",
-      "expected_output": "/audit --all runs P1..P5 as 5 separate advisor() calls (one per principle, isolated contexts). /audit p1 p5 runs a single combined advisor() call covering both principles. The 5-call isolation is the load-bearing semantic of --all — collapsing it to one batched call defeats the mode.",
+      "expected_output": "/audit --all runs P1..P5 as 5 separate Agent(subagent_type=general-purpose) calls (one per principle, fresh-context isolation per call). /audit p1 p5 runs a single combined advisor() call covering both principles. The 5-call fresh-context isolation is the load-bearing semantic of --all — collapsing it to one batched call OR using advisor() (which forwards the full conversation transcript) defeats the mode.",
       "expectations": [
-        "States --all runs 5 SEPARATE advisor() calls (one per principle), not one combined call",
+        "States --all runs 5 SEPARATE Agent(subagent_type=general-purpose) calls (one per principle), not one combined call",
         "States /audit p1 p5 continues to use a single advisor() call (backward compat)",
-        "States or implies the per-call isolation is the point — a single batched call would defeat --all"
+        "States or implies fresh-context per-call isolation is the point — a single batched call OR advisor() (which leaks transcript) would defeat --all"
       ]
     },
     {
       "id": 9,
       "prompt": "Under /audit --all, in what order do rows appear in the consolidated ## Audit Summary table, and why?",
-      "expected_output": "Rows always appear P1 → P5 in deterministic order regardless of advisor return latency. Deterministic ordering keeps diffs comparable across runs and lets downstream consumers rely on a stable position for each principle.",
+      "expected_output": "Rows always appear P1 → P5 in deterministic order regardless of per-principle Agent return latency. Deterministic ordering keeps diffs comparable across runs and lets downstream consumers rely on a stable position for each principle.",
       "expectations": [
         "States rows are ordered P1 → P5 deterministically",
-        "States order is independent of advisor timing/latency",
+        "States order is independent of Agent timing/latency",
         "States or implies the regex `^\\| P[0-9]+ \\| (PASS|FLAG|FAIL) \\|` consumed by /slice keeps working"
       ]
     },
