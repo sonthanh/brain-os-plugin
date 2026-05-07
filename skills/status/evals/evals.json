@@ -64,5 +64,47 @@
     "description": "Skill prose must not contain the literal `gh issue close` instruction — the central close helper (close-issue.sh, wired in #160) is the single close site, and any direct gh issue close mention re-introduces the ghost-label leak surface. The max-age-safety-net narrative may still describe external GH mutations from a plain terminal, but worded so the literal `gh issue close` token does not appear.",
     "args": "status",
     "expect-not-command": "gh issue close"
+  },
+  {
+    "id": "stories-tree-contract",
+    "description": "Spec must document the parent→child tree contract for the Stories sub-block — covers AC#1 (tree shape, not flat list) and signals to readers that the block is rendered by build-stories-tree.ts, not the legacy flat formatter. (#262)",
+    "args": "status",
+    "expect": "Stories tree contract"
+  },
+  {
+    "id": "stories-tree-status-markers",
+    "description": "Spec must enumerate the status markers (READY, in-prog, BLOCKED, backlog, closed) so AC#2 (status markers per node match status:* label at render time) has a single source of truth. (#262)",
+    "args": "status",
+    "expect": "[in-prog]"
+  },
+  {
+    "id": "stories-tree-closed-collapse",
+    "description": "Spec must explain the closed-sibling collapse rule + that an open sibling between closed siblings breaks the run (AC#3 — `#A–#B, #C [closed] — N done` formatting, with run-splitting on open interleave). (#262)",
+    "args": "status",
+    "expect": "Closed sibling collapse"
+  },
+  {
+    "id": "stories-tree-blocker-annotation",
+    "description": "Spec must describe the within-story `(blocked by #N)` suffix derived from `## Blocked by` parsing — closed blockers + non-sibling blockers are silenced. Surfaced from the user-added requirement to show within-story dependencies. (#262)",
+    "args": "status",
+    "expect": "Within-story blocker annotation"
+  },
+  {
+    "id": "stories-tree-phase-pairing",
+    "description": "Spec must describe the cross-story phase pairing — title regex `— Phase N` extracts project + phase, and an active root with a backlog Phase-N+1 peer gets a trailing `Next story queued: #M` leaf. Surfaced from the user's `multi-phase project` follow-up. (#262)",
+    "args": "status",
+    "expect": "Cross-story phase pairing"
+  },
+  {
+    "id": "stories-tree-next-queued-footer",
+    "description": "Spec must document the global `Next story queued: #N — title` footer line — highest-priority unlinked bench plan (AC#4). Hidden when no qualifying bench plan exists. (#262)",
+    "args": "status",
+    "expect": "Next-story-queued global footer"
+  },
+  {
+    "id": "stories-tree-builder-is-typescript",
+    "description": "Spec must declare that the tree-build logic lives in build-stories-tree.ts with bun-test fixtures (NOT bash), per the global TS+bun-test rule. Enforces the no-fix-bug-via-bash-wrapper invariant in the Rules section. (#262)",
+    "args": "status",
+    "expect": "build-stories-tree.ts"
   }
 ]

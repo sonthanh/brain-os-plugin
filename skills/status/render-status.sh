@@ -101,10 +101,12 @@ if [ -n "${GH_TASK_REPO:-}" ] && command -v gh >/dev/null 2>&1; then
 
   gh issue list -R "$GH_TASK_REPO" --state open \
     --limit 200 --json number,title,body,labels > "$TMP_DIR/all-open.json" 2>/dev/null &
-  # Bulk lookup table for child state tally (ready / in-progress / closed)
-  # — needs CLOSED issues, kept as a separate query.
+  # Bulk lookup table — needs CLOSED issues for the Stories tree (parent
+  # refs in CLOSED bodies + closed-leaf collapse), kept as a separate query.
+  # `body` + `title` are needed by build-stories-tree.ts to parse `## Parent`
+  # / `## Blocked by` and render labels.
   gh issue list -R "$GH_TASK_REPO" --state all \
-    --limit 500 --json number,state,labels > "$TMP_DIR/all-states.json" 2>/dev/null &
+    --limit 500 --json number,state,labels,body,title > "$TMP_DIR/all-states.json" 2>/dev/null &
   wait
 
   slice_by_label() {
@@ -203,55 +205,6 @@ filter_out_plans() {
     "$in_file" > "$out_file" 2>/dev/null || cp "$in_file" "$out_file"
 }
 
-# Resolve a child issue's bucket from the bulk all-states lookup.
-# Returns ready | in-progress | closed | other (other = blocked/backlog/etc.).
-child_bucket() {
-  local n="$1"
-  jq -r --argjson n "$n" '
-    .[] | select(.number == $n) |
-    if .state == "CLOSED" then "closed"
-    else
-      ((.labels // []) | map(.name) | map(select(startswith("status:"))) | (.[0] // "")) as $s |
-      if $s == "status:in-progress" then "in-progress"
-      elif $s == "status:ready" then "ready"
-      else "other"
-      end
-    end
-  ' "$TMP_DIR/all-states.json" 2>/dev/null
-}
-
-# Render one Story line — "- #N — Title (M children: A ready / B in-progress / C closed)".
-# N counts distinct `#X` refs in `- [ ]` / `- [x]` checklist lines (handles
-# `#X` and `ai-brain#X` styles); bare acceptance items contribute nothing.
-render_story_line() {
-  local pnum="$1"
-  local ptitle="$2"
-  local body
-  body=$(jq -r --argjson n "$pnum" '.[] | select(.number == $n) | .body // ""' "$TMP_DIR/plans.json" 2>/dev/null)
-  # Match only refs directly after the checkbox (`- [ ] #N` / `- [ ] ai-brain#N`)
-  # — skips prose mentions like `- [ ] /slice re-run (ai-brain#153 source) ...`.
-  local children
-  children=$(printf '%s\n' "$body" \
-    | grep -oE '^- \[[ x]\] +(ai-brain)?#[0-9]+' \
-    | grep -oE '[0-9]+$' | sort -un)
-  local n=0 r=0 ip=0 c=0
-  for ch in $children; do
-    n=$((n + 1))
-    case "$(child_bucket "$ch")" in
-      ready)       r=$((r + 1)) ;;
-      in-progress) ip=$((ip + 1)) ;;
-      closed)      c=$((c + 1)) ;;
-    esac
-  done
-  local clean_title
-  clean_title=$(printf '%s' "$ptitle" | sed 's/^Story: *//')
-  if [ "$n" -gt 0 ]; then
-    echo "- #${pnum} — ${clean_title} (${n} children: ${r} ready / ${ip} in-progress / ${c} closed)"
-  else
-    echo "- #${pnum} — ${clean_title}"
-  fi
-}
-
 # Like format_issues but appends 🔄 + pickup footnote for stealth-picked items.
 # Used for Ready bucket where stealth-work creates misleading "untouched" signal.
 format_ready_issues() {
@@ -300,14 +253,18 @@ if $GH_AVAILABLE; then
   BACKLOG=$(tr -d '[:space:]' < "$TMP_DIR/backlog.txt" 2>/dev/null)
   case "$BACKLOG" in ''|*[!0-9]*) BACKLOG=0 ;; esac
 
+  # Stories tree (parent→child dependency view) — pure deterministic
+  # transform delegated to build-stories-tree.ts. See AC#1-AC#6 in
+  # ai-brain#262. The TS helper consumes all-states.json (open + closed)
+  # because closed sub-issues feed the contiguous-closed-leaf collapse.
+  STORIES_OUT=""
+  if [ "$P_COUNT" -gt 0 ] && [ -s "$TMP_DIR/all-states.json" ] && command -v bun >/dev/null 2>&1; then
+    STORIES_OUT=$(bun run "$SCRIPT_DIR/build-stories-tree.ts" "$TMP_DIR/all-states.json" 2>/dev/null || true)
+  fi
+
   {
-    if [ "$P_COUNT" -gt 0 ]; then
-      echo "**Stories ($P_COUNT)**"
-      jq -r '.[] | "\(.number)\t\(.title)"' "$TMP_DIR/plans.json" 2>/dev/null | \
-        while IFS=$'\t' read -r pnum ptitle; do
-          [ -z "$pnum" ] && continue
-          render_story_line "$pnum" "$ptitle"
-        done
+    if [ -n "$STORIES_OUT" ]; then
+      printf '%s\n' "$STORIES_OUT"
       echo ""
     fi
     echo "**Ready ($R_COUNT)**"

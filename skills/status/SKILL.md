@@ -61,6 +61,18 @@ The dirty marker is cleared on the **first line** of regen, before any source is
 - #N — [title]
 
 ### Tasks
+**Stories (M active + N on bench)**    ← parent→child dependency tree, see "Stories tree contract" below
+Story #179 [in-prog] — Phase 1 MVP
+├── #180–#192 [closed] — 13 done       ← contiguous-closed run collapsed
+├── #204 [in-prog] — retro
+├── #208, #215, #228–#236 [closed] — 11 done   ← non-contiguous runs join via comma when no open sibling interleaves
+├── Story #237 [in-prog] — Schema-driven dispatch    ← nested plan
+│   ├── #238–#245 [closed] — 8 done
+│   ├── #246 [BLOCKED] — replay (blocked by #251)    ← within-story blocker annotation
+│   └── #251 [in-prog] — text-field extractor
+└── Next story queued: #193 — Phase 2  ← cross-story phase pairing (matched by title `— Phase N`)
+Next story queued: #194 — ... (1 more on bench)   ← global footer for unlinked bench plans
+
 **Ready (N)**
 - #N — [P1] ...
 - #N — [P1] ... 🔄 _looks picked up elsewhere; run `/pickup N`_   ← stealth-picked detection (recent vault commit referencing #N OR recent handover/grill/task file match)
@@ -98,6 +110,18 @@ _+ N awareness item(s) — glance via full ledger._   ← header-only count
 
 When no SLA items exist, the `### SLA` section renders as `All clear — no open items.` — it is never omitted.
 
+## Stories tree contract
+
+The Stories sub-block is a parent→child dependency tree, not a flat list. Logic lives in `build-stories-tree.ts` (deterministic transform of the bulk `gh issue list --state all` payload — no extra GH API calls). Contract:
+
+- **Roots = active plans only.** An open `type:plan` issue is a root when (a) its `## Parent` body section names no other active plan, AND (b) `status != backlog` OR it has at least one open descendant. Backlog plans with no open descendants are "bench" — surfaced only via the `Next story queued: #N` footer (or as a peer's phase pairing leaf), never as their own root.
+- **Status markers per node** match the issue's actual `status:*` label at render time: `[READY]`, `[in-prog]`, `[BLOCKED]`, `[backlog]`. Closed issues render `[closed]` derived from `state: CLOSED` (the close helper strips `status:*`). Blank when an open issue carries no `status:*` label.
+- **Closed sibling collapse:** within a parent's children, sort by issue number, then merge runs of consecutive-by-sort closed siblings into a single line `#A–#B, #C [closed] — N done`. An OPEN sibling between two closed siblings breaks the run into two collapse groups. Lone closed siblings (size 1) preserve their title: `#N [closed] — title`.
+- **Within-story blocker annotation:** a child carrying `## Blocked by` references that point to OPEN siblings gets a `(blocked by #N, #M)` suffix on its rendered line. Closed blockers and out-of-tree refs are silenced (the tree shape can't show them anyway).
+- **Cross-story phase pairing:** title regex `^…\s*—\s*Phase\s+(\d+)\b` extracts a project + phase pair. An active root with a backlog peer at `phase + 1` of the same project gets a trailing `└── Next story queued: #M — title` leaf. Embedded `(Phase-N description)` mentions inside parens do not match — only the space-em-dash-space discriminator counts.
+- **Next-story-queued global footer:** after the last root, append `Next story queued: #N — title` for the highest-priority bench plan that is NOT already a phase-pairing pointer above. Tie-break by ascending issue number. Hidden when no qualifying bench plan exists.
+- **Box characters:** `├── ` (mid), `└── ` (last), `│   ` (vertical), `    ` (space). Last child of a root that has a phase pairing line is rendered with `├──` because the phase line claims the `└──` slot.
+
 ## Rules
 
 - No daily note creation — this is a briefing, not a ritual.
@@ -107,6 +131,7 @@ When no SLA items exist, the `### SLA` section renders as `All clear — no open
 - **Cache trust envelope:** the cache is correct for the set of sources watched + the dirty marker. If the user reports a staleness bug, investigate the regen gate (missing mtime-watch target? gh issue event type not matched by the hook?) rather than disabling the cache.
 - **Never invent SLA state** — if `sla-open.md` doesn't exist, the SLA section reports `All clear (no ledger)` and no SLA-driven prioritization happens.
 - **`render-status.sh` runs `set -uo pipefail` by design — never add `-e`.** Sections degrade gracefully: a missing source file or empty awk match should render as "All clear" / skipped section, not abort the whole briefing. Each block has its own guards; don't promote them to a global fail-fast.
+- **Stories tree builder is TS, not bash.** The non-trivial algorithm (closed-collapse runs, phase pairing, blocker annotations) lives in `build-stories-tree.ts` with bun-test fixtures. `render-status.sh` only invokes the helper; it does not re-implement parsing. If the tree shape regresses, fix the logic in the TS file + add a fixture, never patch the bash wrapper to mask a bug.
 
 ## Troubleshooting
 
