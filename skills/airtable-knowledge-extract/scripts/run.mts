@@ -67,6 +67,14 @@ import {
 import { emitEdges, type EmitEdgesResult } from "./emit-edges.mts";
 import { rollupEdges, type RollupResult } from "./rollup-edges.mts";
 import { dispatchBase, type DispatchResult } from "./dispatcher.mts";
+import {
+  classifyAllInteractionTables,
+  type ClassifyAllInteractionTablesResult,
+} from "./classify-text-field-entities.mts";
+import {
+  extractTextFieldEntities,
+  type ExtractTextFieldEntitiesResult,
+} from "./extract-text-field-entities.mts";
 
 export const DEFAULT_PARALLELISM = 5;
 export const DEFAULT_THRESHOLD = 0.95;
@@ -155,11 +163,27 @@ export interface RunDeps {
   now: () => string;
   log: (msg: string) => void;
   uuid: () => string;
+  // Optional — S5a text-field entity classifier (#251, parent #237). Called
+  // after re-anchor approves, before emit-edges + S5b. Reads Stage 0 cache to
+  // find interaction tables, runs one Opus call per table to classify text
+  // fields as person / company / none with from-like / to-like / undirected
+  // roles. Throws HitlPendingError when any field has confidence < 0.85;
+  // orchestrator maps that to RunResult kind=hitl-pending.
+  classifyTextFieldEntitiesPerBase?: (
+    baseId: string,
+  ) => Promise<ClassifyAllInteractionTablesResult>;
   // Optional — Phase-1 architecture-correction hook (#241, parent #237 AC#11).
   // Called after re-anchor approves and before seed-based extraction. Skips
   // silently when Stage 0 cache (#238) is absent for the base. Replaced by
   // the full dispatcher (#242) once that lands.
   emitInteractionEdges?: (baseId: string) => Promise<EmitEdgesResult>;
+  // Optional — S5b text-field entity emitter (#251, parent #237). Called
+  // after emit-edges. Reads S5a cache + walks records of interaction tables
+  // to emit one Person/Company entity page per unique canonical name into
+  // bases/<base_id>/out/{people,companies}/. Zero LLM calls; idempotent.
+  extractTextFieldEntitiesPerBase?: (
+    baseId: string,
+  ) => Promise<ExtractTextFieldEntitiesResult>;
   // Optional — Phase-1 schema-driven dispatcher hook (#242, parent #237 AC#7).
   // Called after edge emission. Computes per-component routing decisions and
   // appends one outcome-log row per component. Aborts loudly if upstream
@@ -348,6 +372,37 @@ export async function runOrchestrator(
     };
   }
 
+  if (deps.classifyTextFieldEntitiesPerBase) {
+    try {
+      const tfResult = await deps.classifyTextFieldEntitiesPerBase(baseId);
+      deps.log(
+        `[run ${args.runId}] classify-text-field-entities ${baseId}: ${tfResult.tablesProcessed.length} processed, ${tfResult.tablesSkippedCached.length} cached, ${tfResult.llmCallsMade} LLM calls`,
+      );
+    } catch (err) {
+      if (err instanceof HitlPendingError) {
+        state = {
+          ...state,
+          phase: "hitl-pending",
+          last_updated_ts: deps.now(),
+        };
+        deps.saveState(state);
+        deps.log(
+          `[run ${args.runId}] classify-text-field-entities HITL pending for ${baseId} — needed: ${err.neededPaths.join(", ")}`,
+        );
+        return {
+          kind: "hitl-pending",
+          baseId,
+          state,
+          reason: "classify-text-field-entities needs human decision",
+          neededPaths: err.neededPaths,
+        };
+      }
+      deps.log(
+        `[run ${args.runId}] classify-text-field-entities failed for ${baseId}: ${(err as Error).message ?? err}`,
+      );
+    }
+  }
+
   if (deps.emitInteractionEdges) {
     try {
       const edgeResult = await deps.emitInteractionEdges(baseId);
@@ -366,6 +421,27 @@ export async function runOrchestrator(
       // pass — degraded edges produce a missing rollup, not a wrong vault.
       deps.log(
         `[run ${args.runId}] emit-edges failed for ${baseId}: ${(err as Error).message ?? err}`,
+      );
+    }
+  }
+
+  if (deps.extractTextFieldEntitiesPerBase) {
+    try {
+      const r = await deps.extractTextFieldEntitiesPerBase(baseId);
+      if (r.skipped) {
+        deps.log(
+          `[run ${args.runId}] extract-text-field-entities skipped for ${baseId}: ${r.reason ?? "(no reason)"}`,
+        );
+      } else {
+        deps.log(
+          `[run ${args.runId}] extract-text-field-entities ${baseId}: ${r.peopleWritten} people, ${r.companiesWritten} companies → ${r.outputDir}`,
+        );
+      }
+    } catch (err) {
+      // Non-fatal: page emission is a side-channel like emit-edges. Failure
+      // here doesn't block dispatcher / extract loop downstream.
+      deps.log(
+        `[run ${args.runId}] extract-text-field-entities failed for ${baseId}: ${(err as Error).message ?? err}`,
       );
     }
   }
@@ -919,7 +995,11 @@ async function main(parsed: ParsedArgs): Promise<number> {
     now: () => new Date().toISOString(),
     log: (msg) => process.stderr.write(`${msg}\n`),
     uuid: defaultUuid,
+    classifyTextFieldEntitiesPerBase: (baseId) =>
+      classifyAllInteractionTables(baseId),
     emitInteractionEdges: (baseId) => emitEdges(baseId),
+    extractTextFieldEntitiesPerBase: (baseId) =>
+      extractTextFieldEntities(baseId, { runId: parsed.runId }),
     dispatchPerBase: (baseId) => dispatchBase(baseId, { runId: parsed.runId }),
     runEdgesRollup: () => Promise.resolve(rollupEdges()),
   };

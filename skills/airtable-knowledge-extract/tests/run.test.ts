@@ -611,6 +611,171 @@ describe("runOrchestrator — emit-edges hook (#241)", () => {
 });
 
 // ---------------------------------------------------------------------------
+// runOrchestrator — text-field entity hooks (#251, parent #237)
+// ---------------------------------------------------------------------------
+
+describe("runOrchestrator — classify + extract text-field entities (#251)", () => {
+  test("classifyTextFieldEntitiesPerBase fires before emitInteractionEdges; extractTextFieldEntitiesPerBase fires after", async () => {
+    const seedsA = [seed("appA", "r1")];
+    const v1 = batchVerdict("appA", [passingVerdict("appA-r1")]);
+    const harness = makeHarness({
+      initialState: null,
+      seedsByBase: { appA: seedsA },
+      reAnchorDecisions: { appA: "approve" },
+      verdictsByBatch: [v1],
+      basesDir: join(tmp, "bases"),
+      metricsDir: join(tmp, "metrics"),
+    });
+    const order: string[] = [];
+    harness.deps.classifyTextFieldEntitiesPerBase = async (baseId) => {
+      order.push(`classifyTF:${baseId}`);
+      return {
+        classifications: {},
+        cachePath: "/tmp/tf.json",
+        tablesProcessed: ["tblPay"],
+        tablesSkippedCached: [],
+        llmCallsMade: 1,
+      };
+    };
+    harness.deps.emitInteractionEdges = async (baseId) => {
+      order.push(`emit:${baseId}`);
+      return {
+        baseId,
+        tablesProcessed: ["tblPay"],
+        edgesWritten: 1,
+        edgesAdded: 1,
+        edgesUpdated: 0,
+        outputPath: "/tmp/edges.jsonl",
+        skipped: false,
+        recordsSkipped: [],
+      };
+    };
+    harness.deps.extractTextFieldEntitiesPerBase = async (baseId) => {
+      order.push(`extractTF:${baseId}`);
+      return {
+        baseId,
+        peopleWritten: 1,
+        companiesWritten: 1,
+        entities: [],
+        outputDir: "/tmp/out",
+        skipped: false,
+      };
+    };
+
+    const result = await runOrchestrator(
+      defaultArgs({ baseId: "appA", parallelism: 1 }),
+      harness.deps,
+    );
+    expect(result.kind).toBe("paused");
+    expect(order).toEqual(["classifyTF:appA", "emit:appA", "extractTF:appA"]);
+  });
+
+  test("classifyTextFieldEntitiesPerBase HitlPendingError → run returns hitl-pending", async () => {
+    const seedsA = [seed("appA", "r1")];
+    const v1 = batchVerdict("appA", [passingVerdict("appA-r1")]);
+    const harness = makeHarness({
+      initialState: null,
+      seedsByBase: { appA: seedsA },
+      reAnchorDecisions: { appA: "approve" },
+      verdictsByBatch: [v1],
+      basesDir: join(tmp, "bases"),
+      metricsDir: join(tmp, "metrics"),
+    });
+    const { HitlPendingError } = await import("../scripts/hitl.mts");
+    harness.deps.classifyTextFieldEntitiesPerBase = async () => {
+      throw new HitlPendingError(["/tmp/text-field-entity-decision-needed.json"]);
+    };
+
+    const result = await runOrchestrator(
+      defaultArgs({ baseId: "appA", parallelism: 1 }),
+      harness.deps,
+    );
+    expect(result.kind).toBe("hitl-pending");
+    expect(result.neededPaths).toEqual(["/tmp/text-field-entity-decision-needed.json"]);
+    expect(result.reason).toContain("classify-text-field-entities");
+    // No extract calls — orchestrator bails before the loop.
+    expect(harness.extractCalls).toHaveLength(0);
+  });
+
+  test("classifyTextFieldEntitiesPerBase non-HITL error is logged but does NOT abort", async () => {
+    const seedsA = [seed("appA", "r1")];
+    const v1 = batchVerdict("appA", [passingVerdict("appA-r1")]);
+    const logs: string[] = [];
+    const harness = makeHarness({
+      initialState: null,
+      seedsByBase: { appA: seedsA },
+      reAnchorDecisions: { appA: "approve" },
+      verdictsByBatch: [v1],
+      basesDir: join(tmp, "bases"),
+      metricsDir: join(tmp, "metrics"),
+    });
+    harness.deps.log = (m: string) => logs.push(m);
+    harness.deps.classifyTextFieldEntitiesPerBase = async () => {
+      throw new Error("Airtable Meta API 500");
+    };
+
+    const result = await runOrchestrator(
+      defaultArgs({ baseId: "appA", parallelism: 1 }),
+      harness.deps,
+    );
+    expect(result.kind).toBe("paused");
+    expect(harness.extractCalls).toHaveLength(1);
+    expect(logs.some((l) => /classify-text-field-entities failed/.test(l))).toBe(true);
+  });
+
+  test("extractTextFieldEntitiesPerBase skipped=true does NOT abort", async () => {
+    const seedsA = [seed("appA", "r1")];
+    const v1 = batchVerdict("appA", [passingVerdict("appA-r1")]);
+    const harness = makeHarness({
+      initialState: null,
+      seedsByBase: { appA: seedsA },
+      reAnchorDecisions: { appA: "approve" },
+      verdictsByBatch: [v1],
+      basesDir: join(tmp, "bases"),
+      metricsDir: join(tmp, "metrics"),
+    });
+    harness.deps.extractTextFieldEntitiesPerBase = async (baseId) => ({
+      baseId,
+      peopleWritten: 0,
+      companiesWritten: 0,
+      entities: [],
+      outputDir: "/tmp",
+      skipped: true,
+      reason: "no entity fields classified",
+    });
+
+    const result = await runOrchestrator(
+      defaultArgs({ baseId: "appA", parallelism: 1 }),
+      harness.deps,
+    );
+    expect(result.kind).toBe("paused");
+    expect(harness.extractCalls).toHaveLength(1);
+  });
+
+  test("omitting both new hooks is back-compat (pre-#251 callers)", async () => {
+    const seedsA = [seed("appA", "r1")];
+    const v1 = batchVerdict("appA", [passingVerdict("appA-r1")]);
+    const harness = makeHarness({
+      initialState: null,
+      seedsByBase: { appA: seedsA },
+      reAnchorDecisions: { appA: "approve" },
+      verdictsByBatch: [v1],
+      basesDir: join(tmp, "bases"),
+      metricsDir: join(tmp, "metrics"),
+    });
+    expect(harness.deps.classifyTextFieldEntitiesPerBase).toBeUndefined();
+    expect(harness.deps.extractTextFieldEntitiesPerBase).toBeUndefined();
+
+    const result = await runOrchestrator(
+      defaultArgs({ baseId: "appA", parallelism: 1 }),
+      harness.deps,
+    );
+    expect(result.kind).toBe("paused");
+    expect(harness.extractCalls).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // runOrchestrator — rollup-edges hook (#245, parent #237 AC#12)
 // ---------------------------------------------------------------------------
 
