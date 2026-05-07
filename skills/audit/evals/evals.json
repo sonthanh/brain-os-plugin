@@ -75,21 +75,22 @@
     {
       "id": 8,
       "prompt": "What does /audit --all do and how does it differ mechanically from /audit p1 p5?",
-      "expected_output": "/audit --all runs P1..P5 as 5 separate advisor() calls (one per principle, isolated contexts). /audit p1 p5 runs a single combined advisor() call covering both principles. The 5-call isolation is the load-bearing semantic of --all — collapsing it to one batched call defeats the mode.",
+      "expected_output": "/audit --all runs P1..P5 as 5 separate Agent(subagent_type=general-purpose) calls (one per principle, fresh-context isolation per call). /audit p1 p5 runs a single combined advisor() call covering both principles. The 5-call fresh-context isolation is the load-bearing semantic of --all — collapsing it to one batched call OR using advisor() (which forwards the full conversation transcript) defeats the mode.",
       "expectations": [
-        "States --all runs 5 SEPARATE advisor() calls (one per principle), not one combined call",
+        "States --all runs 5 SEPARATE Agent(subagent_type=general-purpose) calls (one per principle), not one combined call",
         "States /audit p1 p5 continues to use a single advisor() call (backward compat)",
-        "States or implies the per-call isolation is the point — a single batched call would defeat --all"
+        "States or implies fresh-context per-call isolation is the point — a single batched call OR advisor() (which leaks transcript) would defeat --all"
       ]
     },
     {
       "id": 9,
-      "prompt": "Under /audit --all, in what order do rows appear in the consolidated ## Audit Summary table, and why?",
-      "expected_output": "Rows always appear P1 → P5 in deterministic order regardless of advisor return latency. Deterministic ordering keeps diffs comparable across runs and lets downstream consumers rely on a stable position for each principle.",
+      "prompt": "Under /audit --all, in what order do rows appear in the consolidated ## Audit Summary table, and why? When the orchestrator emits the ## Per-principle Findings section, what does it call each principle's response?",
+      "expected_output": "Rows always appear P1 → P5 in deterministic order regardless of per-principle Agent return latency. Deterministic ordering keeps diffs comparable across runs and lets downstream consumers rely on a stable position for each principle. The per-principle findings section labels each block as 'P{N}'s Agent response' (since --all uses Agent(general-purpose) per principle, not advisor()).",
       "expectations": [
         "States rows are ordered P1 → P5 deterministically",
-        "States order is independent of advisor timing/latency",
-        "States or implies the regex `^\\| P[0-9]+ \\| (PASS|FLAG|FAIL) \\|` consumed by /slice keeps working"
+        "States order is independent of Agent timing/latency",
+        "States or implies the regex `^\\| P[0-9]+ \\| (PASS|FLAG|FAIL) \\|` consumed by /slice keeps working",
+        "Names the per-principle findings source as 'Agent response' (NOT 'advisor response') — under --all the response comes from a per-principle Agent, not advisor"
       ]
     },
     {
@@ -100,6 +101,26 @@
         "States --all logs ONE row per principle (5 rows total)",
         "States --all increments Uses count ONCE per principle (5 increments)",
         "States single/shorthand mode still writes one consolidated row (unchanged)"
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "Why does /audit --all use Agent(general-purpose) per principle instead of advisor()? What's the empirical evidence?",
+      "expected_output": "advisor() forwards the full conversation transcript on each call, so by P3 the advisor sees P1+P2 verdicts — the transcript leakage defeats the per-call isolation contract. Agent(subagent_type=general-purpose) spawns each principle's reviewer in a fresh context that cannot read the orchestrator's transcript. The empirical finding came from the 2026-05-07 #253 AC#7 smoke run against the 2026-05-04 replay grill: P4 FAILed cleanly under Agent isolation, catching the in-doc lock-before-validate violation the 2-session 2026-05-05 audit (tracker rows 89-90) had missed.",
+      "expectations": [
+        "States advisor() forwards/leaks the conversation transcript per call",
+        "States Agent(subagent_type=general-purpose) provides fresh-context isolation",
+        "Cites the #253 AC#7 / 2026-05-07 empirical run as the evidence (or equivalent: P4 caught what 2-session missed)"
+      ]
+    },
+    {
+      "id": 12,
+      "prompt": "A maintainer wants to 'simplify' /audit --all by collapsing 5 Agent calls into one. List the two failure modes the SKILL.md guards against and the CI mechanism that catches them.",
+      "expected_output": "Two failure modes: (1) batched call — collapsing all 5 principles into one prompt lets the LLM rationalize across principles; (2) reverting to advisor() — looks equivalent in prose but leaks the conversation transcript, breaking fresh-context isolation. CI mechanism: skills/audit/evals/check-all-flag.sh greps SKILL.md for `Agent`, `subagent_type=general-purpose`, the 'NOT one batched call' anti-pattern, and an explicit transcript-leak warning; the script must stay PASS or --all is broken.",
+      "expectations": [
+        "Names the batched-call failure mode (collapsing 5 → 1 prompt)",
+        "Names the advisor() revert failure mode (transcript leakage breaks isolation)",
+        "Identifies skills/audit/evals/check-all-flag.sh as the CI guard"
       ]
     }
   ]

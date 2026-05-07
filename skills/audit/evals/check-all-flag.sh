@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 # Verifies skills/audit/SKILL.md documents the /audit --all flag per
-# ai-brain#255 contract: 5 separate advisor() calls, deterministic P1→P5
-# order, consolidation contract, backward-compat note, per-principle
-# tracker logging. Pure prose lint — fast regression guard for the
-# load-bearing semantic that --all must NOT degrade to a single batched
-# advisor() call.
+# ai-brain#255 + ai-brain#260 contract: 5 separate
+# Agent(subagent_type=general-purpose) calls (NOT advisor() — that
+# forwards full transcript per call and breaks the isolation contract;
+# empirical finding from #253 AC#7 smoke 2026-05-07), deterministic
+# P1→P5 order, consolidation contract, backward-compat note,
+# per-principle tracker logging. Pure prose lint — fast regression
+# guard for the load-bearing semantic that --all must NOT degrade to a
+# single batched call OR silently revert to advisor().
 
 set -euo pipefail
 
@@ -27,12 +30,16 @@ check() {
 echo "audit/SKILL.md — /audit --all contract checks"
 
 check "AC#1 — --all flag documented in usage"                '/audit --all'                                                                                  ''
-check "AC#1 — 5 SEPARATE advisor calls (load-bearing)"       '5 separate.{0,4}.advisor.{0,4}.{0,40}(call|invocation)'                                          '-i'
+check "AC#1 — 5 SEPARATE Agent calls (load-bearing isolation)" '5 separate.{0,40}Agent.{0,80}(call|invocation)'                                                '-i'
+check "AC#1 — Agent uses general-purpose subagent_type"      'subagent_type.{0,20}general-purpose'                                                             '-i'
 check "AC#1 — anti-pattern: NOT one batched call"            '(NOT one|not one).{0,80}(call|invocation).{0,40}all 5'                                          '-i'
+check "AC#1 — anti-pattern: advisor() leaks transcript"      '(advisor.{0,40}(forward|transcript|leak)|forward.{0,30}transcript|transcript.{0,30}per call)'   '-i'
 check "AC#1 — deterministic P1→P5 ordering callout"          'P1.{0,4}(→|to|through).{0,4}P5'                                                                 ''
 check "AC#2 — Output consolidation contract subsection"      '^##+ Output consolidation contract'                                                              ''
 check "AC#2 — regex compat preserved"                        '\\\| P\[0-9\]\+ \\\| \(PASS\|FLAG\|FAIL\)'                                                       ''
 check "AC#2 — Per-principle Findings section format"         '^##+ Per-principle Findings'                                                                    ''
+check "AC#2 — example block names per-principle source as 'Agent response'" "P[1-5]'s Agent response"                                                          ''
+check "AC#2 — return-latency wording references Agent (not stale advisor)" 'regardless of per-principle Agent return latency'                                  ''
 check "AC#3 — backward compat note for single + p1 p5"       '(backward compat|backward-compat|continues? (to )?work|unchanged)'                              '-i'
 check "AC#4 — tracker: one row per principle on --all"       '(one|each).{0,40}(row|log row|tracker row).{0,40}(per principle|each principle)'                '-i'
 check "AC#4 — tracker: use count increment per principle"    'increment.{0,40}(use|usage).{0,8}count.{0,40}(per|each|once per) principle'                     '-i'
