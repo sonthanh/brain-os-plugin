@@ -55,11 +55,12 @@
     {
       "id": 6,
       "prompt": "What sections must the grill-fast output file contain?",
-      "expected_output": "Frame (with the shared framing axis named explicitly), The candidate architectures (ASCII — ≥4 trees including the axis-challenger), Key deltas, Cost / risk per tree, Parameter picks, Recommended pick, Failure mode call-outs, Status gate.",
+      "expected_output": "Frame (with the shared framing axis named explicitly), The candidate architectures (ASCII — ≥4 trees including the axis-challenger; each tree's diagram MUST be immediately followed by an inline Pros/Cons block), Key deltas, Cross-tree comparison, Parameter picks, Recommended pick, Failure mode call-outs, Status gate.",
       "expectations": [
         "Lists candidate architectures section with ASCII",
+        "Mentions each tree's diagram is immediately followed by inline Pros/Cons block",
         "Lists key deltas section",
-        "Lists cost/risk per tree section",
+        "Lists cross-tree comparison section (not 'Cost / risk per tree')",
         "Lists parameter picks section",
         "Lists recommended pick section",
         "Mentions ≥4 trees including the axis-challenger",
