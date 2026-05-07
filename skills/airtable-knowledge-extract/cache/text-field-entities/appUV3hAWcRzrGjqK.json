@@ -1,0 +1,68 @@
+{
+  "tbldHANhjJYytRxoQ": {
+    "schema_hash": "6ddd23a03f16764b02a0ab1081907c6604ea5071a3a8f77a941943be42adbf2f",
+    "classified_at": "2026-05-07T18:50:19.835Z",
+    "fields": {
+      "Name": {
+        "kind": "none",
+        "role": "none",
+        "confidence": 0.97,
+        "reasoning": "Field name is generic 'Name' and sample values are transaction descriptions like 'Server Hosting Fees' and 'Angel Investment Round', not entity names."
+      },
+      "Description": {
+        "kind": "none",
+        "role": "none",
+        "confidence": 0.99,
+        "reasoning": "Field name 'Description' and sample values are free-text explanations of cashflow events like 'Monthly AWS server hosting charges for September.'"
+      }
+    }
+  },
+  "tblzcUAT5baDuUzLJ": {
+    "schema_hash": "64808707737b5f807621344fe4caf603c6e08e21c63ad824292427c913401443",
+    "classified_at": "2026-05-07T18:50:29.660Z",
+    "fields": {
+      "Report Name": {
+        "kind": "none",
+        "role": "none",
+        "confidence": 0.97,
+        "reasoning": "Field name indicates a report title and sample values like \"Q2 2025 PnL Report\" are descriptive labels, not entity references."
+      },
+      "Summary Notes": {
+        "kind": "none",
+        "role": "none",
+        "confidence": 0.98,
+        "reasoning": "Field name indicates free-text commentary and sample values like \"Q2 performance steady. Slight dip in ad revenue...\" are narrative descriptions, not entity references."
+      }
+    }
+  },
+  "tblJzfIUcRLa8ekut": {
+    "schema_hash": "99a5783f28c71180bace7ac6a515073be5e20ea5935393796235ddcb3604897f",
+    "classified_at": "2026-05-07T18:50:40.873Z",
+    "fields": {
+      "Payer Name": {
+        "kind": "company",
+        "role": "from-like",
+        "confidence": 0.92,
+        "reasoning": "Field name 'Payer' indicates the source of payment, and sample values like 'Staronline Project', 'BrightTech Solutions', 'MediaCorp Ltd' are all organisation names."
+      },
+      "Payee Name": {
+        "kind": "company",
+        "role": "to-like",
+        "confidence": 0.92,
+        "reasoning": "Field name 'Payee' indicates the recipient of payment, and sample values like 'AdPro Agency', 'CloudHost Inc.', 'Staronline Project' are all organisation names."
+      },
+      "Reference Number": {
+        "kind": "none",
+        "role": "none",
+        "confidence": 0.97,
+        "reasoning": "Field name 'Reference Number' and sample values like 'AP09252025D' and 'BT10032025B' are alphanumeric identifiers, not entity names."
+      },
+      "Notes": {
+        "kind": "none",
+        "role": "none",
+        "confidence": 0.97,
+        "reasoning": "Field name 'Notes' and sample values like 'Monthly server hosting fee' are free-text descriptions, not entity references."
+      }
+    }
+  }
+}
