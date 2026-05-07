@@ -19,6 +19,8 @@ import {
   buildReAnchorDecisionNeeded,
   parseReAnchorDecisionFile,
   defaultExportAndExitPrompt,
+  buildEntityStrategyMap,
+  isClusterGated,
   type ReAnchorDeps,
   type ReAnchorState,
   type SeedForReAnchor,
@@ -29,6 +31,7 @@ import {
 import { HitlPendingError } from "../scripts/hitl.mts";
 import type { BatchVerdict, SliceVerdict } from "../scripts/review-slice.mts";
 import type { ExtractedEntity } from "../scripts/extract-slice.mts";
+import type { ComponentDispatch } from "../scripts/dispatcher.mts";
 
 let tmp: string;
 beforeEach(() => {
@@ -792,5 +795,213 @@ describe("runReAnchor — extract failures", () => {
     expect(existsSync(result.escalationPath!)).toBe(true);
     const md = readFileSync(result.escalationPath!, "utf8");
     expect(md).toContain("no seeds");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #268 — dispatcher gate
+// ---------------------------------------------------------------------------
+
+function noneComponent(tables: string[]): ComponentDispatch {
+  return {
+    component_id: `component-${tables.join("-")}`,
+    shape: "hub-spoke",
+    size: tables.length,
+    entity_tables: [],
+    interaction_tables: tables,
+    rejected_tables: [],
+    entity_record_count: 0,
+    estimated_entity_tokens: 0,
+    entity_strategy: "none",
+    interaction_handler: "edge-emit",
+    reason: "no extractable entity tables in component",
+  };
+}
+
+function entityComponent(tables: string[]): ComponentDispatch {
+  return {
+    component_id: `component-${tables.join("-")}`,
+    shape: "hub-spoke",
+    size: tables.length,
+    entity_tables: tables,
+    interaction_tables: [],
+    rejected_tables: [],
+    entity_record_count: 10,
+    estimated_entity_tokens: 5000,
+    entity_strategy: "single-pass",
+    interaction_handler: "none",
+    reason: "small entity-only component",
+  };
+}
+
+describe("buildEntityStrategyMap + isClusterGated", () => {
+  test("maps every table in entity/interaction/rejected partitions to component strategy", () => {
+    const map = buildEntityStrategyMap([
+      {
+        ...noneComponent(["tA"]),
+        entity_tables: ["tEntity"],
+        rejected_tables: ["tReject"],
+        interaction_tables: ["tA"],
+      },
+      entityComponent(["tB"]),
+    ]);
+    expect(map.get("tEntity")).toBe("none");
+    expect(map.get("tReject")).toBe("none");
+    expect(map.get("tA")).toBe("none");
+    expect(map.get("tB")).toBe("single-pass");
+  });
+
+  test("isClusterGated true only when EVERY tableId resolves to entity_strategy=none", () => {
+    const map = new Map<string, "none" | "single-pass">([
+      ["tA", "none"],
+      ["tB", "single-pass"],
+      ["tC", "none"],
+    ]);
+    expect(isClusterGated(["tA", "tC"], map as never)).toBe(true);
+    expect(isClusterGated(["tA", "tB"], map as never)).toBe(false);
+    expect(isClusterGated(["tA"], map as never)).toBe(true);
+    // Unknown tables conservatively NOT gated (default false)
+    expect(isClusterGated(["tZ"], map as never)).toBe(false);
+    expect(isClusterGated([], map as never)).toBe(false);
+  });
+});
+
+describe("runReAnchor — dispatcher gate (#268)", () => {
+  test("all clusters entity_strategy=none → kind=approved-by-dispatcher; no extract/review/prompt; baseId added to confirmed_bases", async () => {
+    const seedsA = [
+      { ...seed("appA", "rec01"), tableIds: ["appA-tA"] },
+      { ...seed("appA", "rec02"), tableIds: ["appA-tA", "appA-tB"] },
+    ];
+    const extractCalls: SeedForReAnchor[] = [];
+    const reviewCalls: number[] = [];
+
+    const { deps, prompts, reads } = makeDeps({
+      state: {
+        start_ts: "2026-04-29T00:00:00Z",
+        worker_pids: [],
+        current_base: "appA",
+        previous_base: null,
+        confirmed_bases: [],
+      },
+      seedsByBase: { appA: seedsA },
+      decisions: [],
+      verdictByBase: {},
+      basesDir: tmp,
+      runExtract: async (s) => {
+        extractCalls.push(s);
+        return extractResult(s.recordId, s.baseId);
+      },
+      runReview: async () => {
+        reviewCalls.push(1);
+        throw new Error("should not reach review");
+      },
+      getDispatch: async () => [
+        noneComponent(["appA-tA", "appA-tB"]),
+      ],
+    });
+
+    const result = await runReAnchor("run-x", deps);
+
+    expect(result.kind).toBe("approved-by-dispatcher");
+    expect(result.baseId).toBe("appA");
+    expect(extractCalls).toHaveLength(0);
+    expect(reviewCalls).toHaveLength(0);
+    expect(prompts).toHaveLength(0);
+
+    const finalState = reads.saved[reads.saved.length - 1];
+    expect(finalState.confirmed_bases).toEqual(["appA"]);
+    expect(finalState.previous_base).toBe("appA");
+  });
+
+  test("mixed dispatch (one cluster entity, one cluster none) → only entity-cluster seeds extracted", async () => {
+    const seedsA = [
+      { ...seed("appA", "rec01"), tableIds: ["appA-tEntity"] },
+      { ...seed("appA", "rec02"), tableIds: ["appA-tInter"] },
+    ];
+    const extractCalls: SeedForReAnchor[] = [];
+    const verdict = batchVerdict({
+      baseId: "appA",
+      slices: [passingVerdict("appA-rec01")],
+    });
+
+    const { deps } = makeDeps({
+      state: {
+        start_ts: "2026-04-29T00:00:00Z",
+        worker_pids: [],
+        current_base: "appA",
+        previous_base: null,
+        confirmed_bases: [],
+      },
+      seedsByBase: { appA: seedsA },
+      decisions: [{ decision: "approve" }],
+      verdictByBase: { appA: verdict },
+      basesDir: tmp,
+      runExtract: async (s) => {
+        extractCalls.push(s);
+        return extractResult(s.recordId, s.baseId);
+      },
+      getDispatch: async () => [
+        entityComponent(["appA-tEntity"]),
+        noneComponent(["appA-tInter"]),
+      ],
+    });
+
+    const result = await runReAnchor("run-x", deps);
+
+    expect(result.kind).toBe("approved");
+    expect(extractCalls).toHaveLength(1);
+    expect(extractCalls[0].recordId).toBe("rec01");
+  });
+
+  test("getDispatch returns null → no gating, behavior unchanged", async () => {
+    const seedsA = [seed("appA", "rec01")];
+    const verdict = batchVerdict({
+      baseId: "appA",
+      slices: [passingVerdict("appA-rec01")],
+    });
+
+    const { deps } = makeDeps({
+      state: {
+        start_ts: "2026-04-29T00:00:00Z",
+        worker_pids: [],
+        current_base: "appA",
+        previous_base: null,
+        confirmed_bases: [],
+      },
+      seedsByBase: { appA: seedsA },
+      decisions: [{ decision: "approve" }],
+      verdictByBase: { appA: verdict },
+      basesDir: tmp,
+      getDispatch: async () => null,
+    });
+
+    const result = await runReAnchor("run-x", deps);
+    expect(result.kind).toBe("approved");
+  });
+
+  test("getDispatch absent (undefined) is permitted (back-compat)", async () => {
+    const seedsA = [seed("appA", "rec01")];
+    const verdict = batchVerdict({
+      baseId: "appA",
+      slices: [passingVerdict("appA-rec01")],
+    });
+
+    const { deps } = makeDeps({
+      state: {
+        start_ts: "2026-04-29T00:00:00Z",
+        worker_pids: [],
+        current_base: "appA",
+        previous_base: null,
+        confirmed_bases: [],
+      },
+      seedsByBase: { appA: seedsA },
+      decisions: [{ decision: "approve" }],
+      verdictByBase: { appA: verdict },
+      basesDir: tmp,
+    });
+    expect(deps.getDispatch).toBeUndefined();
+
+    const result = await runReAnchor("run-x", deps);
+    expect(result.kind).toBe("approved");
   });
 });

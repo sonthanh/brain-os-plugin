@@ -752,29 +752,54 @@ describe("runOrchestrator — classify + extract text-field entities (#251)", ()
     expect(harness.extractCalls).toHaveLength(1);
   });
 
-  test("S5a + emit-edges + S5b fire EVEN WHEN re-anchor rejects (interaction-only base)", async () => {
-    // Critical regression test: Staronline-class bases (all-interaction tables,
-    // 0 entity tables) yield 0 seeds → re-anchor returns rejected. The side-
-    // channel hooks (S5a / emit / S5b) only need Stage 0 cache and must fire
-    // before re-anchor so interaction-only bases still produce edges + pages.
-    // If a future refactor moves the hooks back behind re-anchor, this test
-    // catches it.
+  test("interaction-only base: dispatch → re-anchor approved-by-dispatcher → S5a + emit + S5b fire → kind=paused", async () => {
+    // Regression guard for #268. Staronline-class bases (all-interaction
+    // tables, 0 extractable entity tables) used to escalate at re-anchor
+    // because extract-slice fabricated `entity-<recordId>` slugs from
+    // interaction records and failed reverse-lookup. With the dispatcher
+    // running first, re-anchor reads its verdict, returns
+    // `approved-by-dispatcher` for these bases, and the orchestrator
+    // continues: side channels produce edges + Person/Company pages, the
+    // rung-1 loop sees zero seeds (gated by dispatch) and pauses cleanly.
+    // If a future refactor breaks any link in this chain, this test catches it.
     const harness = makeHarness({
       initialState: null,
-      seedsByBase: { appA: [] }, // empty — simulates interaction-only base
-      reAnchorDecisions: { appA: "approve" }, // unused; rejected before reaches
+      seedsByBase: { appA: [] }, // dispatch-gated → 0 seeds for rung-1
+      reAnchorDecisions: { appA: "approve" }, // unused; we override runReAnchor
       verdictsByBatch: [],
       basesDir: join(tmp, "bases"),
       metricsDir: join(tmp, "metrics"),
     });
-    // Force re-anchor to reject (mimics the empty-seed escalation path).
-    harness.deps.runReAnchor = async () => ({
-      kind: "rejected",
-      baseId: "appA",
-    });
-    const fired: string[] = [];
+    const order: string[] = [];
+    harness.deps.dispatchPerBase = async (baseId) => {
+      order.push(`dispatch:${baseId}`);
+      return {
+        baseId,
+        runId: "run-x",
+        cachePath: "/tmp/dispatch.json",
+        components: [
+          {
+            component_id: "component-1",
+            shape: "hub-spoke",
+            size: 3,
+            entity_tables: [],
+            interaction_tables: ["tblPay", "tblCash", "tblPnl"],
+            rejected_tables: [],
+            entity_record_count: 0,
+            estimated_entity_tokens: 0,
+            entity_strategy: "none",
+            interaction_handler: "edge-emit",
+            reason: "no extractable entity tables in component",
+          },
+        ],
+      };
+    };
+    harness.deps.runReAnchor = async () => {
+      order.push("re-anchor");
+      return { kind: "approved-by-dispatcher", baseId: "appA" };
+    };
     harness.deps.classifyTextFieldEntitiesPerBase = async (baseId) => {
-      fired.push(`classifyTF:${baseId}`);
+      order.push(`classifyTF:${baseId}`);
       return {
         classifications: {},
         cachePath: "/tmp/tf.json",
@@ -784,7 +809,7 @@ describe("runOrchestrator — classify + extract text-field entities (#251)", ()
       };
     };
     harness.deps.emitInteractionEdges = async (baseId) => {
-      fired.push(`emit:${baseId}`);
+      order.push(`emit:${baseId}`);
       return {
         baseId,
         tablesProcessed: ["tblPay"],
@@ -797,7 +822,7 @@ describe("runOrchestrator — classify + extract text-field entities (#251)", ()
       };
     };
     harness.deps.extractTextFieldEntitiesPerBase = async (baseId) => {
-      fired.push(`extractTF:${baseId}`);
+      order.push(`extractTF:${baseId}`);
       return {
         baseId,
         peopleWritten: 1,
@@ -812,9 +837,67 @@ describe("runOrchestrator — classify + extract text-field entities (#251)", ()
       defaultArgs({ baseId: "appA", parallelism: 1 }),
       harness.deps,
     );
-    expect(result.kind).toBe("escalated-re-anchor");
-    // Side-channel hooks all fired BEFORE re-anchor rejected.
-    expect(fired).toEqual(["classifyTF:appA", "emit:appA", "extractTF:appA"]);
+    expect(result.kind).toBe("paused");
+    expect(order).toEqual([
+      "dispatch:appA",
+      "re-anchor",
+      "classifyTF:appA",
+      "emit:appA",
+      "extractTF:appA",
+    ]);
+    expect(harness.extractCalls).toHaveLength(0); // rung-1 gated by 0 seeds
+  });
+
+  test("dispatchPerBase fires BEFORE re-anchor (#268)", async () => {
+    // Pre-#268, dispatchPerBase ran AFTER re-anchor and re-anchor escalated on
+    // interaction-only bases before the dispatcher's `entity_strategy=none`
+    // verdict could suppress extract-slice. With #268, dispatcher must run
+    // first so re-anchor can read its cache. Side channels (S5a/S7/S5b) move
+    // to AFTER re-anchor.
+    const seedsA = [seed("appA", "r1")];
+    const v1 = batchVerdict("appA", [passingVerdict("appA-r1")]);
+    const harness = makeHarness({
+      initialState: null,
+      seedsByBase: { appA: seedsA },
+      reAnchorDecisions: { appA: "approve" },
+      verdictsByBatch: [v1],
+      basesDir: join(tmp, "bases"),
+      metricsDir: join(tmp, "metrics"),
+    });
+    const order: string[] = [];
+    const originalReAnchor = harness.deps.runReAnchor;
+    harness.deps.dispatchPerBase = async (baseId) => {
+      order.push(`dispatch:${baseId}`);
+      return {
+        baseId,
+        runId: "run-x",
+        cachePath: "/tmp/dispatch.json",
+        components: [],
+      };
+    };
+    harness.deps.runReAnchor = async (runId) => {
+      order.push("re-anchor");
+      return originalReAnchor(runId);
+    };
+    harness.deps.classifyTextFieldEntitiesPerBase = async (baseId) => {
+      order.push(`classifyTF:${baseId}`);
+      return {
+        classifications: {},
+        cachePath: "/tmp/tf.json",
+        tablesProcessed: [],
+        tablesSkippedCached: [],
+        llmCallsMade: 0,
+      };
+    };
+
+    const result = await runOrchestrator(
+      defaultArgs({ baseId: "appA", parallelism: 1 }),
+      harness.deps,
+    );
+    expect(result.kind).toBe("paused");
+    expect(order[0]).toBe("dispatch:appA");
+    expect(order[1]).toBe("re-anchor");
+    expect(order[2]).toBe("classifyTF:appA");
   });
 
   test("omitting both new hooks is back-compat (pre-#251 callers)", async () => {

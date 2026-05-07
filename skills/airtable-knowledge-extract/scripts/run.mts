@@ -66,7 +66,11 @@ import {
 } from "./hitl.mts";
 import { emitEdges, type EmitEdgesResult } from "./emit-edges.mts";
 import { rollupEdges, type RollupResult } from "./rollup-edges.mts";
-import { dispatchBase, type DispatchResult } from "./dispatcher.mts";
+import {
+  dispatchBase,
+  type ComponentDispatch,
+  type DispatchResult,
+} from "./dispatcher.mts";
 import {
   classifyAllInteractionTables,
   type ClassifyAllInteractionTablesResult,
@@ -139,7 +143,12 @@ export interface RunArgs {
 }
 
 export interface ReAnchorOutcome {
-  kind: "approved" | "rejected" | "no-op" | "hitl-pending";
+  kind:
+    | "approved"
+    | "approved-by-dispatcher"
+    | "rejected"
+    | "no-op"
+    | "hitl-pending";
   baseId?: string;
   neededPaths?: string[];
 }
@@ -341,16 +350,89 @@ export async function runOrchestrator(
   };
   deps.saveState(state);
 
-  // Stage 0–dependent side channels run BEFORE re-anchor (#251).
-  // Re-anchor's seed selection assumes there is at least one entity table.
-  // Interaction-only bases (e.g. Staronline `appUV3hAWcRzrGjqK` — 3 tables,
-  // all classified `interaction`) yield zero seeds and re-anchor returns
-  // `rejected`, which would otherwise abort the run before edge emission +
-  // text-field entity extraction had a chance to fire. The S5a / emit-edges /
-  // S5b chain only requires the Stage 0 cache (durable, populated by
-  // classify-table-type.mts on a separate step) — no seeds, no per-base
-  // examples bank. Run them up-front so interaction-only bases produce
-  // edges + Person/Company pages even when re-anchor has nothing to gate.
+  // Dispatcher runs FIRST (#268). Re-anchor reads the dispatch cache to gate
+  // extract-slice for interaction-only clusters; the rung-1 seed loop below
+  // applies the same gate via defaultGetSeedsForBase. Without this ordering,
+  // re-anchor would feed interaction records to extract-slice, which generates
+  // synthetic `entity-<recordId>` slugs that fail reverse-lookup verification
+  // and force `escalated-re-anchor` for interaction-only bases (e.g.
+  // Staronline `appUV3hAWcRzrGjqK` — 3 tables, all classified `interaction`).
+  if (deps.dispatchPerBase) {
+    try {
+      const dispatchResult = await deps.dispatchPerBase(baseId);
+      const histogram = dispatchResult.components.reduce<Record<string, number>>(
+        (acc, c) => {
+          const k =
+            c.entity_strategy !== "none" ? c.entity_strategy : c.interaction_handler;
+          acc[k] = (acc[k] ?? 0) + 1;
+          return acc;
+        },
+        {},
+      );
+      const histStr = Object.entries(histogram)
+        .map(([k, v]) => `${k}:${v}`)
+        .join(",");
+      deps.log(
+        `[run ${args.runId}] dispatch ${baseId}: ${dispatchResult.components.length} component(s) — ${histStr || "empty"} → ${dispatchResult.cachePath}`,
+      );
+    } catch (err) {
+      // Non-fatal at the orchestrator level: re-anchor and the seed loop fall
+      // back to no-gate behavior when the dispatch cache is absent. Missing
+      // upstream caches (Stage 0 / cluster-shapes / natural-keys) surface
+      // here in the log so the operator notices, but we don't tear down the
+      // run — pre-#268 callers operated this way and remain supported.
+      deps.log(
+        `[run ${args.runId}] dispatch failed for ${baseId}: ${(err as Error).message ?? err}`,
+      );
+    }
+  }
+
+  // Re-anchor — gates the entity-extraction batch loop. With dispatcher first
+  // (above), re-anchor reads dispatch-<baseId>.json directly and skips
+  // extract-slice for clusters whose tables are all entity_strategy=none. When
+  // every cluster is gated, re-anchor returns `approved-by-dispatcher` so
+  // interaction-only bases pass cleanly instead of escalating.
+  state = {
+    ...state,
+    phase: "re-anchor",
+    last_updated_ts: deps.now(),
+  };
+  deps.saveState(state);
+
+  const reAnchorResult = await deps.runReAnchor(args.runId);
+  state = deps.loadState() ?? state;
+  if (reAnchorResult.kind === "rejected") {
+    deps.log(`[run ${args.runId}] re-anchor rejected for ${baseId}`);
+    return {
+      kind: "escalated-re-anchor",
+      baseId,
+      state,
+      reason: "re-anchor rejected",
+    };
+  }
+  if (reAnchorResult.kind === "hitl-pending") {
+    state = {
+      ...state,
+      phase: "hitl-pending",
+      last_updated_ts: deps.now(),
+    };
+    deps.saveState(state);
+    deps.log(
+      `[run ${args.runId}] re-anchor HITL pending for ${baseId} — needed: ${(reAnchorResult.neededPaths ?? []).join(", ")}`,
+    );
+    return {
+      kind: "hitl-pending",
+      baseId,
+      state,
+      reason: "re-anchor needs human decision",
+      neededPaths: reAnchorResult.neededPaths,
+    };
+  }
+
+  // Side channels run AFTER re-anchor (#268). Pre-#268 they ran before
+  // re-anchor as a workaround for interaction-only bases rejecting; with the
+  // dispatcher-aware gate above, re-anchor passes-by-dispatcher for those, so
+  // S5a → emit-edges → S5b run in their natural order downstream.
   if (deps.classifyTextFieldEntitiesPerBase) {
     try {
       const tfResult = await deps.classifyTextFieldEntitiesPerBase(baseId);
@@ -418,77 +500,9 @@ export async function runOrchestrator(
       }
     } catch (err) {
       // Non-fatal: page emission is a side-channel like emit-edges. Failure
-      // here doesn't block dispatcher / extract loop downstream.
+      // here doesn't block the rung-1 extract loop downstream.
       deps.log(
         `[run ${args.runId}] extract-text-field-entities failed for ${baseId}: ${(err as Error).message ?? err}`,
-      );
-    }
-  }
-
-  // Re-anchor — gates the entity-extraction batch loop only. Interaction-only
-  // bases will reject here (no seeds), but the side-channel work above has
-  // already produced edges + Person/Company pages.
-  state = {
-    ...state,
-    phase: "re-anchor",
-    last_updated_ts: deps.now(),
-  };
-  deps.saveState(state);
-
-  const reAnchorResult = await deps.runReAnchor(args.runId);
-  state = deps.loadState() ?? state;
-  if (reAnchorResult.kind === "rejected") {
-    deps.log(`[run ${args.runId}] re-anchor rejected for ${baseId}`);
-    return {
-      kind: "escalated-re-anchor",
-      baseId,
-      state,
-      reason: "re-anchor rejected",
-    };
-  }
-  if (reAnchorResult.kind === "hitl-pending") {
-    state = {
-      ...state,
-      phase: "hitl-pending",
-      last_updated_ts: deps.now(),
-    };
-    deps.saveState(state);
-    deps.log(
-      `[run ${args.runId}] re-anchor HITL pending for ${baseId} — needed: ${(reAnchorResult.neededPaths ?? []).join(", ")}`,
-    );
-    return {
-      kind: "hitl-pending",
-      baseId,
-      state,
-      reason: "re-anchor needs human decision",
-      neededPaths: reAnchorResult.neededPaths,
-    };
-  }
-
-  if (deps.dispatchPerBase) {
-    try {
-      const dispatchResult = await deps.dispatchPerBase(baseId);
-      const histogram = dispatchResult.components.reduce<Record<string, number>>(
-        (acc, c) => {
-          const k =
-            c.entity_strategy !== "none" ? c.entity_strategy : c.interaction_handler;
-          acc[k] = (acc[k] ?? 0) + 1;
-          return acc;
-        },
-        {},
-      );
-      const histStr = Object.entries(histogram)
-        .map(([k, v]) => `${k}:${v}`)
-        .join(",");
-      deps.log(
-        `[run ${args.runId}] dispatch ${baseId}: ${dispatchResult.components.length} component(s) — ${histStr || "empty"} → ${dispatchResult.cachePath}`,
-      );
-    } catch (err) {
-      // Non-fatal at the orchestrator level: the legacy seed loop still runs.
-      // Missing upstream caches abort here loudly so the operator notices, but
-      // we don't tear down the run.
-      deps.log(
-        `[run ${args.runId}] dispatch failed for ${baseId}: ${(err as Error).message ?? err}`,
       );
     }
   }
@@ -919,8 +933,24 @@ async function defaultGetSeedsForBase(
     type: string;
     dominant_table: string;
   }>;
+
+  // #268: dispatcher gate. When dispatch-<baseId>.json is present (written by
+  // dispatcher.mts at the top of run.mts), skip clusters whose tables map to
+  // entity_strategy=none — extract-slice would otherwise feed interaction
+  // records to the entity extractor and fabricate synthetic slugs. Joining on
+  // tableId avoids relying on the implicit cluster-N ↔ component-N alignment
+  // between classify-clusters.mts and cluster-classifier.mts.
+  const strategyByTable = loadDispatchStrategyMap(runDir, baseId);
+
   const seeds: SeedForReAnchor[] = [];
   for (const c of clusters) {
+    if (
+      strategyByTable !== null &&
+      c.table_ids.length > 0 &&
+      c.table_ids.every((t) => strategyByTable.get(t) === "none")
+    ) {
+      continue;
+    }
     const seedFile = join(
       runDir,
       `seed-records-${baseId}-${c.cluster_id}.json`,
@@ -941,6 +971,24 @@ async function defaultGetSeedsForBase(
     }
   }
   return seeds;
+}
+
+function loadDispatchStrategyMap(
+  runDir: string,
+  baseId: string,
+): Map<string, string> | null {
+  const dispatchPath = join(runDir, `dispatch-${baseId}.json`);
+  if (!existsSync(dispatchPath)) return null;
+  const components = JSON.parse(
+    readFileSync(dispatchPath, "utf8"),
+  ) as ComponentDispatch[];
+  const m = new Map<string, string>();
+  for (const c of components) {
+    for (const t of c.entity_tables) m.set(t, c.entity_strategy);
+    for (const t of c.interaction_tables) m.set(t, c.entity_strategy);
+    for (const t of c.rejected_tables) m.set(t, c.entity_strategy);
+  }
+  return m;
 }
 
 // ---------------------------------------------------------------------------

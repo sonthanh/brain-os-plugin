@@ -70,6 +70,10 @@ import {
   HitlPendingError,
   makeWakeToken,
 } from "./hitl.mts";
+import type {
+  ComponentDispatch,
+  EntityStrategy,
+} from "./dispatcher.mts";
 
 export const DEFAULT_SEED_COUNT = 10;
 export const DEFAULT_THRESHOLD = 0.95;
@@ -133,10 +137,23 @@ export interface ReAnchorDeps {
   writeEscalation: (baseId: string, content: string) => string;
   now: () => string;
   log: (msg: string) => void;
+  // Optional — Phase-1 dispatcher gate (#268, parent #237). When present, the
+  // returned components partition the base's tables by entity_strategy. Seeds
+  // belonging to a cluster whose tables are all `entity_strategy=none` are
+  // skipped (extract-slice would treat interaction records as entities and
+  // produce synthetic `entity-<recordId>` slugs that fail reverse-lookup).
+  // When every seed is gated this way the base passes-by-definition →
+  // `approved-by-dispatcher`. Returning null disables gating (back-compat).
+  getDispatch?: (baseId: string) => Promise<ComponentDispatch[] | null>;
 }
 
 export interface ReAnchorResult {
-  kind: "approved" | "rejected" | "no-op" | "hitl-pending";
+  kind:
+    | "approved"
+    | "approved-by-dispatcher"
+    | "rejected"
+    | "no-op"
+    | "hitl-pending";
   baseId?: string;
   examplesPath?: string;
   escalationPath?: string;
@@ -389,6 +406,41 @@ function toSliceForReview(e: ExtractResultLite): SliceForReview {
   };
 }
 
+/**
+ * Build a `tableId -> entity_strategy` lookup from the dispatcher's component
+ * decisions. Tables in any partition (entity / interaction / rejected) inherit
+ * their containing component's verdict — so a Stage-0 `interaction` table that
+ * happens to share a component with extractable entity tables still routes
+ * through the entity strategy at the cluster level. Joining on tableId rather
+ * than cluster/component IDs avoids relying on the implicit `cluster-N` ↔
+ * `component-N` parallelism between classify-clusters.mts and cluster-classifier.mts.
+ */
+export function buildEntityStrategyMap(
+  components: ComponentDispatch[],
+): Map<string, EntityStrategy> {
+  const m = new Map<string, EntityStrategy>();
+  for (const c of components) {
+    for (const t of c.entity_tables) m.set(t, c.entity_strategy);
+    for (const t of c.interaction_tables) m.set(t, c.entity_strategy);
+    for (const t of c.rejected_tables) m.set(t, c.entity_strategy);
+  }
+  return m;
+}
+
+/**
+ * A cluster is gated (skip extract-slice) when every one of its tables maps to
+ * a component with `entity_strategy=none`. Tables missing from the map are
+ * conservatively treated as not-none — better to over-extract than silently
+ * skip a cluster the dispatcher didn't see.
+ */
+export function isClusterGated(
+  tableIds: string[],
+  strategyMap: Map<string, EntityStrategy>,
+): boolean {
+  if (tableIds.length === 0) return false;
+  return tableIds.every((t) => strategyMap.get(t) === "none");
+}
+
 // ---------------------------------------------------------------------------
 // Main entry
 // ---------------------------------------------------------------------------
@@ -407,7 +459,37 @@ export async function runReAnchor(
   const baseId = transition.baseId;
   deps.log(`[re-anchor ${runId}] ${transition.reason}`);
 
-  const seeds = await deps.getSeeds(baseId);
+  const allSeeds = await deps.getSeeds(baseId);
+
+  // #268: dispatcher gate. When every cluster's tables map to
+  // entity_strategy=none, the base has nothing for extract-slice to verify;
+  // re-anchor passes by definition (no entity slices to fabricate). Side
+  // channels (S5a/S7/S5b) downstream still produce edges + Person/Company
+  // pages from text fields.
+  let seeds = allSeeds;
+  if (deps.getDispatch && allSeeds.length > 0) {
+    const components = await deps.getDispatch(baseId);
+    if (components && components.length > 0) {
+      const strategyMap = buildEntityStrategyMap(components);
+      const filtered = allSeeds.filter(
+        (s) => !isClusterGated(s.tableIds, strategyMap),
+      );
+      if (filtered.length === 0) {
+        const nextState = mergeStateApprove(deps.loadState(), baseId);
+        deps.saveState(nextState);
+        deps.notify(
+          "airtable-knowledge-extract: re-anchor approved-by-dispatcher",
+          `base=${baseId} (every cluster entity_strategy=none — interaction-only)`,
+        );
+        deps.log(
+          `[re-anchor ${runId}] approved-by-dispatcher ${baseId} — ${allSeeds.length} seed(s) gated, ${components.length} component(s) all entity_strategy=none`,
+        );
+        return { kind: "approved-by-dispatcher", baseId };
+      }
+      seeds = filtered;
+    }
+  }
+
   if (seeds.length === 0) {
     return rejectWith({
       runId,
@@ -629,6 +711,15 @@ async function defaultGetSeeds(
   }));
 }
 
+function defaultGetDispatch(
+  runDir: string,
+  baseId: string,
+): ComponentDispatch[] | null {
+  const path = join(runDir, `dispatch-${baseId}.json`);
+  if (!existsSync(path)) return null;
+  return JSON.parse(readFileSync(path, "utf8")) as ComponentDispatch[];
+}
+
 async function defaultRunExtract(
   seed: SeedForReAnchor,
   runId: string,
@@ -780,12 +871,14 @@ async function main(
       defaultWriteEscalation(layout.basesDir, baseId, content),
     now: () => new Date().toISOString(),
     log: (msg) => process.stderr.write(`${msg}\n`),
+    getDispatch: async (baseId) => defaultGetDispatch(layout.runDir, baseId),
   };
 
   const result = await runReAnchor(runId, deps);
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   switch (result.kind) {
     case "approved":
+    case "approved-by-dispatcher":
     case "no-op":
       return 0;
     case "rejected":
