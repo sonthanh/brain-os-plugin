@@ -68,6 +68,7 @@ import {
 } from "./classify-text-field-entities.mts";
 import type { TableTypeClassification } from "./classify-table-type.mts";
 import { slugify } from "./emit-edges.mts";
+import { canonicalName as sharedCanonicalName } from "./text-canonical.mts";
 
 const META_API_BASE = "https://api.airtable.com/v0/meta/bases";
 const RECORDS_API_BASE = "https://api.airtable.com/v0";
@@ -129,9 +130,14 @@ export interface ExtractTextFieldEntitiesResult {
 // Pure helpers
 // ---------------------------------------------------------------------------
 
-export function canonicalName(s: string): string {
-  return s.normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase();
-}
+/**
+ * Re-export of `text-canonical.mts:canonicalName` for back-compat with tests
+ * + downstream callers. Single source of truth lives in `text-canonical.mts`
+ * — drift between this and `emit-edges.mts:pickEntityFromTo` would orphan
+ * slug references in `edges.jsonl` (per-record edge `from` no longer matches
+ * the canonical-named entity page filename).
+ */
+export const canonicalName = sharedCanonicalName;
 
 /** Render a deterministic frontmatter+body string for a single entity page. */
 export function renderEntityPage(

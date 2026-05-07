@@ -72,6 +72,7 @@ import {
   entityFields,
   type TableTextFieldClassification,
 } from "./classify-text-field-entities.mts";
+import { canonicalName } from "./text-canonical.mts";
 
 const META_API_BASE = "https://api.airtable.com/v0/meta/bases";
 const RECORDS_API_BASE = "https://api.airtable.com/v0";
@@ -294,13 +295,8 @@ export function pickEntityFromTo(
     if (ef.role !== "from-like" && ef.role !== "to-like") continue;
     const v = record.fields?.[ef.name];
     if (typeof v !== "string") continue;
-    const trimmed = v.trim();
-    if (trimmed.length === 0) continue;
-    const canonical = trimmed
-      .normalize("NFKC")
-      .replace(/\s+/g, " ")
-      .toLowerCase();
-    const slug = slugify(canonical);
+    if (v.trim().length === 0) continue;
+    const slug = slugify(canonicalName(v));
     if (slug.length === 0) continue;
     if (ef.role === "from-like" && fromSlug === undefined) fromSlug = slug;
     if (ef.role === "to-like" && toSlug === undefined) toSlug = slug;

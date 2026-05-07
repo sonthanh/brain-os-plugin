@@ -311,6 +311,139 @@ describe("walkTable + buildEntities", () => {
   });
 });
 
+describe("AC#5 structural — page shape conforms to reviewer rubric expectations", () => {
+  /**
+   * AC#5 in #251 says "Reviewer (Opus 4.6) ≥0.95 on text-field-derived entity
+   * pages." The empirical pass-rate lives on the live Staronline replay
+   * (#246) — but the *structural prerequisite* is verifiable here: a page
+   * that lacks `name`, `kind`, provenance (source_record_ids), or context
+   * (source_tables) cannot pass any reviewer rubric.
+   *
+   * If this test fails, the live #246 reviewer pass is impossible. If it
+   * passes, the live #246 pass becomes a question of LLM judgement on the
+   * body prose, not page structure.
+   */
+  const REQUIRED_FRONTMATTER_KEYS = [
+    /^name:\s+/m,
+    /^slug:\s+/m,
+    /^kind:\s+(person|company)/m,
+    /^extraction_strategy:\s+text-field/m,
+    /^base_id:\s+/m,
+    /^source_record_ids:/m,
+    /^source_tables:/m,
+    /^extracted_at:\s+/m,
+  ];
+
+  for (const re of REQUIRED_FRONTMATTER_KEYS) {
+    test(`page contains ${re.source}`, () => {
+      const entity: TextFieldEntity = {
+        name: "John Doe",
+        canonical: "john doe",
+        slug: "john-doe",
+        kind: "person",
+        roles: ["from-like"],
+        source_record_ids: [`${BASE}-recP1`],
+        source_tables: ["Payments"],
+        field_mentions: [{ field: "Payer Name", table: "Payments", count: 1 }],
+      };
+      const page = renderEntityPage(entity, BASE, "2026-05-07T12:00:00Z");
+      expect(page).toMatch(re);
+    });
+  }
+
+  test("body paragraph cites count, source tables, and base_id (the three things a reviewer checks)", () => {
+    const entity: TextFieldEntity = {
+      name: "Acme Corp",
+      canonical: "acme corp",
+      slug: "acme-corp",
+      kind: "company",
+      roles: ["to-like"],
+      source_record_ids: [`${BASE}-recP1`, `${BASE}-recP2`, `${BASE}-recP3`],
+      source_tables: ["Payments"],
+      field_mentions: [{ field: "Payee Name", table: "Payments", count: 3 }],
+    };
+    const page = renderEntityPage(entity, BASE, "2026-05-07T12:00:00Z");
+    const body = page.split("---\n").slice(2).join("---\n");
+    expect(body).toContain("3"); // mention count
+    expect(body).toContain("Payments"); // source table
+    expect(body).toContain(BASE); // base id
+    expect(body).toContain("Acme Corp"); // entity name
+    expect(body).toContain("company"); // kind
+  });
+
+  test("AC#4 page-side dedup — 2 mentions of John Doe → 1 page with 2 source_record_ids", () => {
+    const inputs: WalkInput[] = [
+      {
+        baseId: BASE,
+        table: PAYMENTS_TABLE,
+        records: [
+          { id: "recP1", fields: { "Payer Name": "John Doe" } },
+          { id: "recP2", fields: { "Payer Name": "John Doe" } },
+        ],
+        classification: PAYMENTS_CLS,
+      },
+    ];
+    const { entities } = buildEntities(inputs);
+    const johns = entities.filter((e) => e.slug === "john-doe");
+    expect(johns.length).toBe(1);
+    expect(johns[0].source_record_ids.sort()).toEqual([
+      `${BASE}-recP1`,
+      `${BASE}-recP2`,
+    ]);
+  });
+});
+
+describe("canonicalSlug invariant — S5b page slug == S7 edge slug for same value", () => {
+  /**
+   * Defensive invariant: the slug a Person page is written under (`john-doe.md`
+   * by S5b / extract-text-field-entities) MUST equal the slug an edge endpoint
+   * references (`{from: "john-doe"}` by S7 / emit-edges) for the same raw
+   * value V. Drift between the two would make graph traversal orphan.
+   *
+   * Both helpers go through `canonicalName` from `text-canonical.mts` + the
+   * same `slugify`. This test pins the contract.
+   */
+  test("S5b's canonicalName + slug derivation matches S7's pickEntityFromTo on Unicode + whitespace edge values", async () => {
+    const { slugify } = await import("../scripts/emit-edges.mts");
+    const { pickEntityFromTo } = await import("../scripts/emit-edges.mts");
+    const cases = [
+      "John Doe",
+      "  John  Doe  ",
+      "JOHN DOE",
+      "Nguyễn Văn A",
+      "  Nguyễn   Văn   A  ",
+      "ﬃ", // ligature → ffi via NFKC
+      "John Doe", // non-breaking space → collapses
+    ];
+    const PAIR_TABLE: AirtableTable = {
+      id: "tbl",
+      name: "T",
+      fields: [{ id: "f1", name: "Payer Name", type: "singleLineText" }],
+    };
+    const PAIR_CLS: TableTextFieldClassification = {
+      schema_hash: "h",
+      classified_at: "t",
+      fields: {
+        "Payer Name": {
+          kind: "person",
+          role: "from-like",
+          confidence: 0.95,
+          reasoning: "x",
+        },
+      },
+    };
+    for (const v of cases) {
+      const s5bSlug = slugify(canonicalName(v));
+      const s7 = pickEntityFromTo(
+        PAIR_TABLE,
+        { id: "r", fields: { "Payer Name": v } },
+        PAIR_CLS,
+      );
+      expect(s7.from).toBe(s5bSlug);
+    }
+  });
+});
+
 describe("renderEntityPage", () => {
   test("emits valid frontmatter with required keys + body paragraph", () => {
     const entity: TextFieldEntity = {

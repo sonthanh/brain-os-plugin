@@ -752,6 +752,71 @@ describe("runOrchestrator — classify + extract text-field entities (#251)", ()
     expect(harness.extractCalls).toHaveLength(1);
   });
 
+  test("S5a + emit-edges + S5b fire EVEN WHEN re-anchor rejects (interaction-only base)", async () => {
+    // Critical regression test: Staronline-class bases (all-interaction tables,
+    // 0 entity tables) yield 0 seeds → re-anchor returns rejected. The side-
+    // channel hooks (S5a / emit / S5b) only need Stage 0 cache and must fire
+    // before re-anchor so interaction-only bases still produce edges + pages.
+    // If a future refactor moves the hooks back behind re-anchor, this test
+    // catches it.
+    const harness = makeHarness({
+      initialState: null,
+      seedsByBase: { appA: [] }, // empty — simulates interaction-only base
+      reAnchorDecisions: { appA: "approve" }, // unused; rejected before reaches
+      verdictsByBatch: [],
+      basesDir: join(tmp, "bases"),
+      metricsDir: join(tmp, "metrics"),
+    });
+    // Force re-anchor to reject (mimics the empty-seed escalation path).
+    harness.deps.runReAnchor = async () => ({
+      kind: "rejected",
+      baseId: "appA",
+    });
+    const fired: string[] = [];
+    harness.deps.classifyTextFieldEntitiesPerBase = async (baseId) => {
+      fired.push(`classifyTF:${baseId}`);
+      return {
+        classifications: {},
+        cachePath: "/tmp/tf.json",
+        tablesProcessed: ["tblPay"],
+        tablesSkippedCached: [],
+        llmCallsMade: 1,
+      };
+    };
+    harness.deps.emitInteractionEdges = async (baseId) => {
+      fired.push(`emit:${baseId}`);
+      return {
+        baseId,
+        tablesProcessed: ["tblPay"],
+        edgesWritten: 1,
+        edgesAdded: 1,
+        edgesUpdated: 0,
+        outputPath: "/tmp/edges.jsonl",
+        skipped: false,
+        recordsSkipped: [],
+      };
+    };
+    harness.deps.extractTextFieldEntitiesPerBase = async (baseId) => {
+      fired.push(`extractTF:${baseId}`);
+      return {
+        baseId,
+        peopleWritten: 1,
+        companiesWritten: 1,
+        entities: [],
+        outputDir: "/tmp/out",
+        skipped: false,
+      };
+    };
+
+    const result = await runOrchestrator(
+      defaultArgs({ baseId: "appA", parallelism: 1 }),
+      harness.deps,
+    );
+    expect(result.kind).toBe("escalated-re-anchor");
+    // Side-channel hooks all fired BEFORE re-anchor rejected.
+    expect(fired).toEqual(["classifyTF:appA", "emit:appA", "extractTF:appA"]);
+  });
+
   test("omitting both new hooks is back-compat (pre-#251 callers)", async () => {
     const seedsA = [seed("appA", "r1")];
     const v1 = batchVerdict("appA", [passingVerdict("appA-r1")]);

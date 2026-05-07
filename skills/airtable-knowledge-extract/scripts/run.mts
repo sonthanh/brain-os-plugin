@@ -337,41 +337,20 @@ export async function runOrchestrator(
   state = {
     ...state,
     current_base: baseId,
-    phase: "re-anchor",
     last_updated_ts: deps.now(),
   };
   deps.saveState(state);
 
-  const reAnchorResult = await deps.runReAnchor(args.runId);
-  state = deps.loadState() ?? state;
-  if (reAnchorResult.kind === "rejected") {
-    deps.log(`[run ${args.runId}] re-anchor rejected for ${baseId}`);
-    return {
-      kind: "escalated-re-anchor",
-      baseId,
-      state,
-      reason: "re-anchor rejected",
-    };
-  }
-  if (reAnchorResult.kind === "hitl-pending") {
-    state = {
-      ...state,
-      phase: "hitl-pending",
-      last_updated_ts: deps.now(),
-    };
-    deps.saveState(state);
-    deps.log(
-      `[run ${args.runId}] re-anchor HITL pending for ${baseId} — needed: ${(reAnchorResult.neededPaths ?? []).join(", ")}`,
-    );
-    return {
-      kind: "hitl-pending",
-      baseId,
-      state,
-      reason: "re-anchor needs human decision",
-      neededPaths: reAnchorResult.neededPaths,
-    };
-  }
-
+  // Stage 0–dependent side channels run BEFORE re-anchor (#251).
+  // Re-anchor's seed selection assumes there is at least one entity table.
+  // Interaction-only bases (e.g. Staronline `appUV3hAWcRzrGjqK` — 3 tables,
+  // all classified `interaction`) yield zero seeds and re-anchor returns
+  // `rejected`, which would otherwise abort the run before edge emission +
+  // text-field entity extraction had a chance to fire. The S5a / emit-edges /
+  // S5b chain only requires the Stage 0 cache (durable, populated by
+  // classify-table-type.mts on a separate step) — no seeds, no per-base
+  // examples bank. Run them up-front so interaction-only bases produce
+  // edges + Person/Company pages even when re-anchor has nothing to gate.
   if (deps.classifyTextFieldEntitiesPerBase) {
     try {
       const tfResult = await deps.classifyTextFieldEntitiesPerBase(baseId);
@@ -444,6 +423,46 @@ export async function runOrchestrator(
         `[run ${args.runId}] extract-text-field-entities failed for ${baseId}: ${(err as Error).message ?? err}`,
       );
     }
+  }
+
+  // Re-anchor — gates the entity-extraction batch loop only. Interaction-only
+  // bases will reject here (no seeds), but the side-channel work above has
+  // already produced edges + Person/Company pages.
+  state = {
+    ...state,
+    phase: "re-anchor",
+    last_updated_ts: deps.now(),
+  };
+  deps.saveState(state);
+
+  const reAnchorResult = await deps.runReAnchor(args.runId);
+  state = deps.loadState() ?? state;
+  if (reAnchorResult.kind === "rejected") {
+    deps.log(`[run ${args.runId}] re-anchor rejected for ${baseId}`);
+    return {
+      kind: "escalated-re-anchor",
+      baseId,
+      state,
+      reason: "re-anchor rejected",
+    };
+  }
+  if (reAnchorResult.kind === "hitl-pending") {
+    state = {
+      ...state,
+      phase: "hitl-pending",
+      last_updated_ts: deps.now(),
+    };
+    deps.saveState(state);
+    deps.log(
+      `[run ${args.runId}] re-anchor HITL pending for ${baseId} — needed: ${(reAnchorResult.neededPaths ?? []).join(", ")}`,
+    );
+    return {
+      kind: "hitl-pending",
+      baseId,
+      state,
+      reason: "re-anchor needs human decision",
+      neededPaths: reAnchorResult.neededPaths,
+    };
   }
 
   if (deps.dispatchPerBase) {

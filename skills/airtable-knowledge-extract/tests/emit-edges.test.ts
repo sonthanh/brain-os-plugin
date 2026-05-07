@@ -1624,6 +1624,87 @@ describe("emitEdges with text-field cache", () => {
     expect(row.id).toBe(`${baseId}-rec1`);
   });
 
+  test("AC#4 literal — 2 Payments with same Payer Name → 2 edge rows, both from='john-doe', different to", async () => {
+    const { emitEdges } = await import("../scripts/emit-edges.mts");
+    const baseId = "appAC4";
+    const stage0Dir = join(tmp, "stage0c");
+    const tfDir = join(tmp, "tfc");
+    const vault = join(tmp, "vaultc");
+    mkdirSync(stage0Dir, { recursive: true });
+    mkdirSync(tfDir, { recursive: true });
+    writeStageZeroCache(stage0Dir, baseId, {
+      tblPay: {
+        type: "interaction",
+        reasoning: "x",
+        schema_hash: "h",
+        classified_at: "t",
+      },
+    });
+    writeFileSync(
+      join(tfDir, `${baseId}.json`),
+      JSON.stringify({
+        tblPay: {
+          schema_hash: "h",
+          classified_at: "t",
+          fields: {
+            "Payer Name": {
+              kind: "person",
+              role: "from-like",
+              confidence: 0.95,
+              reasoning: "x",
+            },
+            "Payee Name": {
+              kind: "company",
+              role: "to-like",
+              confidence: 0.95,
+              reasoning: "x",
+            },
+          },
+        },
+      }),
+    );
+    const table: AirtableTable = {
+      id: "tblPay",
+      name: "Payments",
+      fields: [
+        { id: "f1", name: "Payer Name", type: "singleLineText" },
+        { id: "f2", name: "Payee Name", type: "singleLineText" },
+      ],
+    };
+    const records: AirtableRecord[] = [
+      {
+        id: "recP1",
+        fields: { "Payer Name": "John Doe", "Payee Name": "Acme Corp" },
+      },
+      {
+        id: "recP2",
+        fields: { "Payer Name": "John Doe", "Payee Name": "Beta LLC" },
+      },
+    ];
+    const { fetch: fetchImpl } = makeFetch([
+      { match: /\/meta\/bases\//, body: { tables: [table] } },
+      { match: /\/tblPay/, body: { records } },
+    ]);
+    const result = await emitEdges(baseId, {
+      fetch: fetchImpl,
+      env: { AIRTABLE_API_KEY: "fake" },
+      cacheBaseDir: stage0Dir,
+      textFieldCacheBaseDir: tfDir,
+      vaultPath: vault,
+    });
+    expect(result.skipped).toBe(false);
+    const edgesPath = join(vault, "knowledge", "graph", "edges.jsonl");
+    const lines = readFileSync(edgesPath, "utf8").trim().split("\n");
+    expect(lines.length).toBe(2);
+    const rows = lines.map((l) => JSON.parse(l));
+    const fromVals = new Set(rows.map((r) => r.from));
+    const toVals = new Set(rows.map((r) => r.to));
+    expect(fromVals).toEqual(new Set(["john-doe"]));
+    expect(toVals).toEqual(new Set(["acme-corp", "beta-llc"]));
+    expect(rows.every((r) => r.id.startsWith(`${baseId}-`))).toBe(true);
+    expect(new Set(rows.map((r) => r.id)).size).toBe(2);
+  });
+
   test("missing textFieldCacheBaseDir → falls back to link-field behaviour", async () => {
     const { emitEdges } = await import("../scripts/emit-edges.mts");
     const baseId = "appTF002";
