@@ -98,9 +98,18 @@ The `--all` mode output MUST follow this exact structure so downstream consumers
 - `## Per-principle Findings` is a sibling H2 to `## Audit Summary`, with `### P{N}` H3 subheadings (P1 → P5).
 - **Backward compat:** single-principle invocation (`/audit p1`) and combined-shorthand invocation (`/audit p1 p5`) continue to emit the original single-`advisor()` output and the original `## Audit Summary` table layout — `--all` is additive, not a replacement. Existing call sites that invoke `/audit p1` or `/audit p2` from `/slice` keep working unchanged.
 
-## Why per-principle isolation matters (load-bearing — do NOT collapse to one batched call)
+## Why per-principle isolation matters (load-bearing — do NOT collapse to one batched call OR revert to `advisor()`)
 
-The 2026-05-03/04 grill that fell into the P4 trap had `/audit p1` and `/audit p2` invoked in **separate sessions**; both passed. The hypothesis `/audit --all` tests is: "5 isolated `advisor()` calls catch what 2 separate sessions missed because all 5 principles run on the same content within one /audit invocation." A single `advisor()` call with all 5 principles in the prompt would give the LLM permission to **rationalize across principles silently** — exactly the failure mode this gate exists to prevent. Per-call isolation is the empirical fork that determines whether agent-teams (Phase B, ai-brain#252) is needed: if `--all` catches the failure mode in the 2026-05-04 replay smoke test, agent-teams stays deferred. **A future maintainer who collapses the 5 calls into 1 to "simplify" defeats the entire mode** — the `--all` sugar is incidental, the isolation is the contract.
+The 2026-05-03/04 grill that fell into the P4 trap had `/audit p1` and `/audit p2` invoked in **separate sessions**; both passed. The hypothesis `/audit --all` tests is: "5 fresh-context-isolated calls catch what 2 separate sessions missed, because all 5 principles run on the same content within one /audit invocation." A single batched call with all 5 principles in the prompt would give the LLM permission to **rationalize across principles silently** — exactly the failure mode this gate exists to prevent.
+
+**Why Agent(general-purpose), not advisor() — the empirical finding from #253 AC#7 (2026-05-07).** When `/audit --all` first ran end-to-end against the 2026-05-04 replay grill, the runner discovered that `advisor()` forwards the full conversation transcript to the reviewer on every call. By P3, the advisor was reading P1+P2's verdicts before forming its own — the transcript leakage defeats the "fresh context per principle" contract even though the calls were structurally sequential. The runner switched to `Agent(subagent_type="general-purpose", ...)` per principle: each Agent spawns with a fresh context, sees only the per-call prompt the orchestrator embeds, and cannot read the orchestrator's transcript. P4 then FAILed cleanly on the in-doc lock-before-validate violation that the 2-session 2026-05-05 audit had missed (tracker rows 89-90 — both P1 PASS + P2 PASS individually, neither saw the cross-principle gap).
+
+**Future-maintainer guard.** Two failure modes silently regress this contract:
+
+1. **Batched call:** "simplifying" by collapsing the 5 principle prompts into one call. The LLM rationalizes across principles. Catch: any change that produces fewer than 5 distinct calls for `--all` is a regression.
+2. **Reverting to `advisor()`:** `advisor()` reads cleaner in skill prose and seems equivalent to `Agent`, but it leaks transcript. Catch: `skills/audit/evals/check-all-flag.sh` grep-guards the SKILL.md text for both `Agent` + `subagent_type=general-purpose` + an explicit transcript-leak warning. The CI script must stay PASS or `--all` is broken.
+
+Per-call fresh-context isolation is the empirical fork that determined whether agent-teams (Phase B, ai-brain#252) was needed: AC#7 caught the failure mode, so #252 stays deferred. **A future maintainer who collapses the 5 Agent calls OR swaps them back to `advisor()` defeats the entire mode** — the `--all` sugar is incidental, the fresh-context isolation is the contract.
 
 ## Principle Selection (p0 logic)
 
