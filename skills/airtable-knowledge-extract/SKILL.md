@@ -33,9 +33,14 @@ sp tab new --script "env -u CLAUDECODE bash -c '
   cd \"$SKILL_DIR\"
   ACTIVE_IDS=\$(AIRTABLE_RUN_ID=\"$RUN_ID\" bun run scripts/active-bases.mts --ids)
   for BASE_ID in \$ACTIVE_IDS; do
-    AIRTABLE_RUN_ID=\"$RUN_ID\" bun run scripts/classify-clusters.mts \"\$BASE_ID\" > /dev/null
+    AIRTABLE_RUN_ID=\"$RUN_ID\" bun run scripts/classify-table-type.mts  \"\$BASE_ID\" > /dev/null
+    AIRTABLE_RUN_ID=\"$RUN_ID\" bun run scripts/classify-clusters.mts    \"\$BASE_ID\" > /dev/null
+    AIRTABLE_RUN_ID=\"$RUN_ID\" bun run scripts/cluster-classifier.mts   \"\$BASE_ID\" > /dev/null
+    AIRTABLE_RUN_ID=\"$RUN_ID\" bun run scripts/schema-analyser.mts      \"\$BASE_ID\" > /dev/null
     AIRTABLE_RUN_ID=\"$RUN_ID\" bun run scripts/legacy-link-detector.mts \"\$BASE_ID\" > /dev/null
-    AIRTABLE_RUN_ID=\"$RUN_ID\" bun run scripts/seed-selection.mts \"\$BASE_ID\" > /dev/null
+    for CID in \$(jq -r \".[].cluster_id\" \"\$HOME/.claude/airtable-extract-cache/$RUN_ID/clusters-\$BASE_ID.json\"); do
+      AIRTABLE_RUN_ID=\"$RUN_ID\" bun run scripts/seed-selection.mts \"\$BASE_ID\" \"\$CID\" > /dev/null
+    done
     AIRTABLE_RUN_ID=\"$RUN_ID\" bun run scripts/rubric-author.mts \"\$BASE_ID\" > /dev/null
     bun run scripts/run.mts --run-id \"$RUN_ID\" --base \"\$BASE_ID\" -P 1 \\
       2>&1 | tee -a /tmp/airtable-extract-\"$RUN_ID\".log
@@ -43,6 +48,8 @@ sp tab new --script "env -u CLAUDECODE bash -c '
   sleep 10
 '"
 ```
+
+The pre-step chain feeds `run.mts`'s internal dispatcher (added in #237/#268). Order: `classify-table-type` → Stage 0 LLM table classifier (cached at `${SKILL_DIR}/cache/table-types/`); `classify-clusters` → link-graph clusters; `cluster-classifier` → cluster-shapes (`orphan|pair|chain|tree|hub-spoke|graph`); `schema-analyser` → natural keys + entity-table verdicts; `legacy-link-detector` → cleanup-tasks; `seed-selection` → per-cluster seed records (the inner `jq` loop reads `clusters-<base-id>.json` to enumerate cluster IDs — `seed-selection.mts` requires `<base-id> <cluster-id>` and exits non-zero if cluster-id is omitted). Skipping any of these aborts `run.mts` with `cache not found at ...` from the dispatcher.
 
 On the first invocation within a run-id, `active-bases.mts` writes both `~/.claude/airtable-extract-cache/<run-id>/bases.json` (raw Meta API listing, via the wrapped `list-bases.mts`) and `~/.claude/airtable-extract-cache/<run-id>/active-bases.json` (filter trace per base). On any subsequent invocation with the same run-id, the cached trace is read and the API probes are skipped.
 
