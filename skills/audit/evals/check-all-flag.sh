@@ -25,7 +25,10 @@
 set -euo pipefail
 
 SKILL="$(cd "$(dirname "$0")/.." && pwd)/SKILL.md"
+PLUGIN_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+PROTOCOL="$PLUGIN_ROOT/references/audit-team-protocol.md"
 [ -f "$SKILL" ] || { echo "FATAL: $SKILL not found" >&2; exit 1; }
+[ -f "$PROTOCOL" ] || { echo "FATAL: $PROTOCOL not found (shared audit-team protocol missing)" >&2; exit 1; }
 
 fail=0
 check() {
@@ -81,6 +84,53 @@ check "AC#252-18 — Phase B status: SHIPPED (not deferred)"   '(#252.{0,20}SHIP
 check "AC#252-19 — three-iteration history documented"       '(Iteration 1|Iteration 2|Iteration 3|three iterations|3 iterations)'                            '-i'
 check "AC#252-20 — round budget hard cap of 3"               '(ROUND_BUDGET|round.{0,20}cap|3 rounds.{0,30}(cap|hard|max))'                                   '-i'
 check "AC#252-21 — token-budget pre-spawn estimate (subscription)" '(token.budget|pre-spawn.{0,30}(estimate|budget)|subscription.{0,40}(token|budget))'      '-i'
+check "AC#252-22 — verdict locked at round 1 (anti-stale-read-race)" '(verdict.{0,30}(LOCKED|locked|frozen).{0,40}round.?1|frozen.{0,30}round.?1.{0,30}verdict|do NOT mutate.{0,40}verdict)' '-i'
+check "AC#252-23 — shutdown protocol contract"               '(shutdown_request|shutdown.protocol|shutdown_response)'                                          ''
+check "AC#252-24 — TeamDelete deadlock avoidance documented" '(TeamDelete.{0,80}(wait|hang|deadlock)|shutdown_response.{0,40}(prevent|avoid).{0,30}deadlock)' '-i'
+check "AC#252-25 — PROTOCOL_PATH spawn-prompt variable"      'PROTOCOL_PATH'                                                                                   ''
+check "AC#252-26 — single-source-of-truth shared protocol"   '(audit-team-protocol\.md|references/audit-team-protocol|single.source.of.truth.*protocol)'        '-i'
+
+# Shared protocol contract (in references/audit-team-protocol.md)
+shared_check() {
+  local label="$1"; shift
+  local pattern="$1"; shift
+  local flags="${1:-}"
+  if grep -E ${flags:+$flags} -q "$pattern" "$PROTOCOL"; then
+    echo "  ✓ $label"
+  else
+    echo "  ✗ $label  (missing in references/audit-team-protocol.md: $pattern)"
+    fail=1
+  fi
+}
+
+echo ""
+echo "references/audit-team-protocol.md — shared protocol contract checks"
+shared_check "Protocol — 3-round protocol named"                   '3-round protocol'                                                                                  '-i'
+shared_check "Protocol — Round 1 / 2 / 3 sections"                 '(Round 1|Round 2|Round 3)'                                                                         ''
+shared_check "Protocol — Polling pattern with timeout-guard"       '(timeout-guarded|deadline.{0,30}date.{0,20}\+ 300|date.{0,10}\+ 300)'                              '-i'
+shared_check "Protocol — verdict locked at round 1"                '(verdict.{0,30}(LOCKED|locked|frozen).{0,40}round.?1|frozen.{0,30}round.?1.{0,30}verdict)'         '-i'
+shared_check "Protocol — shutdown_request / shutdown_response"     '(shutdown_request|shutdown_response)'                                                              ''
+shared_check "Protocol — TeamDelete deadlock avoidance"            '(TeamDelete.{0,80}(wait|hang|deadlock)|shutdown_response.{0,40}(prevent|avoid).{0,30}deadlock)'   '-i'
+shared_check "Protocol — per-teammate JSON write protocol"         '(per-teammate JSON|agent-\$\{?name\}?\.json|each teammate writes ONLY)'                            '-i'
+shared_check "Protocol — Forbidden actions section"                '^##+ Forbidden actions'                                                                            ''
+
+# Per-principle agent files reference PROTOCOL_PATH
+echo ""
+echo "agents/principle-auditor-p{1..5}.md — agent file checks"
+for n in 1 2 3 4 5; do
+  agent_file="$PLUGIN_ROOT/agents/principle-auditor-p$n.md"
+  if [ ! -f "$agent_file" ]; then
+    echo "  ✗ agents/principle-auditor-p$n.md MISSING"
+    fail=1
+    continue
+  fi
+  if grep -q "PROTOCOL_PATH" "$agent_file"; then
+    echo "  ✓ p$n references PROTOCOL_PATH"
+  else
+    echo "  ✗ p$n missing PROTOCOL_PATH reference (would re-introduce 5x duplication)"
+    fail=1
+  fi
+done
 
 if [ "$fail" -eq 0 ]; then
   echo "PASS"

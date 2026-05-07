@@ -156,6 +156,28 @@
         "Explains the iteration-3 contract: principle text in agent definition file, lead embeds only audit context",
         "Identifies skills/audit/evals/check-all-flag.sh as the CI guard for the anti-pattern"
       ]
+    },
+    {
+      "id": 16,
+      "prompt": "Why are within-principle teammate verdicts LOCKED at round 1 in /audit --team, and what failure mode does this guard against?",
+      "expected_output": "Verdicts (and scope_flag, where applicable) are frozen at round 1; round 2 (within-principle vote) and round 3 (cross-principle signature) do not mutate `verdict`. Without this lock, round 2 reconciliation produces a stale-read race: peer A reads peer B's round-1 verdict, considers DM rationale, swaps its own verdict; peer B simultaneously does the inverse; each then reports `within_principle_vote.agreed: true` against the other's pre-swap (now stale) state. Observed in the 2026-05-07 dogfood run on the 2026-05-04 fixture — both p2-a and p2-b silently swapped verdicts mid-round-2 and each reported agreement against stale data; the actual divergence was caught at lead aggregation but reported wrong at the teammate level. Fix: round 1 verdict is the final vote; DMs in round 2 are for context-sharing only (no waiting for response, no verdict mutation). The within_principle_vote.agreed field is computed strictly from frozen round-1 verdicts of both peers.",
+      "expectations": [
+        "States verdicts are locked/frozen at round 1; round 2/3 do not mutate verdict",
+        "Names the failure mode: within-principle stale-read race (both peers swap verdicts, each reports agreed:true against stale state)",
+        "Cites the 2026-05-07 dogfood run on the 2026-05-04 fixture as the empirical evidence",
+        "States DMs in round 2 are for context-sharing only (no waiting for response)"
+      ]
+    },
+    {
+      "id": 17,
+      "prompt": "A teammate in /audit --team receives a SendMessage with `{type: 'shutdown_request', request_id: 'xyz'}` from team-lead while still in round 2. What MUST it do, and what is the failure mode if it doesn't?",
+      "expected_output": "The teammate MUST IMMEDIATELY respond with `SendMessage(to: 'team-lead', message: {type: 'shutdown_response', request_id: 'xyz', approve: true, reason: 'audit complete'})` — before doing any other work. The principle-auditor-pN agent definitions encode this as a hard contract. Failure mode: the lead's `TeamDelete()` step waits for ALL teammates to respond to shutdown_request before completing; failing to respond hangs the lead indefinitely (and any wrapping `claude -p --plugin-dir ... /audit --team` smoke-test subprocess that is await-ing proc.exited). Even if the teammate hasn't finished round 3, it should respond `approve: true` — the lead aggregates from whatever final state landed in agent-{name}.json and records partial completion via the variance metric (e.g. `partial:P3-no-peer`).",
+      "expectations": [
+        "States teammate must IMMEDIATELY respond with shutdown_response approve:true",
+        "Names the failure mode: lead's TeamDelete waits indefinitely; smoke subprocess hangs",
+        "States teammate should approve even if work is incomplete; lead handles partial via variance metric",
+        "Identifies the contract lives in the agent definition files (principle-auditor-pN.md), not in the lead"
+      ]
     }
   ]
 }
