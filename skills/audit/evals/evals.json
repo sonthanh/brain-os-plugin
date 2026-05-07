@@ -122,6 +122,40 @@
         "Names the advisor() revert failure mode (transcript leakage breaks isolation)",
         "Identifies skills/audit/evals/check-all-flag.sh as the CI guard"
       ]
+    },
+    {
+      "id": 13,
+      "prompt": "What does /audit --team do, and how does it differ mechanically from /audit --all?",
+      "expected_output": "/audit --team spawns a TeamCreate-managed N×5 team of `principle-auditor-pN` subagent definitions (default N=2 → 10 teammates). Each teammate runs a 3-round protocol: (1) initial verdict; (2) within-principle vote with the within-principle peer; (3) cross-principle DM-debate signature against the other 4 principle leads. Each teammate writes its own `agent-{name}.json` to `~/.claude/audit-runs/{run-id}/` (per-teammate file ownership = race-safe). Lead aggregates after all teammates idle. Differs from --all (5 single-shot Agent(general-purpose) calls): --team adds within-principle consensus (variance dampening), cross-principle scientific debate, and reads principle text from the AGENT FILE not from a lead-composed prompt — eliminating orchestrator-prompt drift surfaced as the 2026-05-07 P2/P5 verdict variance against the same fixture.",
+      "expectations": [
+        "States --team uses TeamCreate + N×5 principle-auditor-pN subagents (default N=2)",
+        "Describes the 3-round protocol (initial → within-principle vote → cross-principle DM signature)",
+        "States per-teammate JSON files (race-safe) instead of one shared consensus.json write",
+        "States the load-bearing difference vs --all: principle text + calibration live in the AGENT FILE, lead never composes principle text into the spawn prompt",
+        "Mentions within-principle consensus dampens variance (the 2026-05-07 evidence)"
+      ]
+    },
+    {
+      "id": 14,
+      "prompt": "When should you pick /audit --team vs /audit --all vs single-mode /audit p1? Cite at least one trade-off.",
+      "expected_output": "Pick single-mode /audit p1 (or shorthand p1 p5) for sharp single-principle audits, quick gut checks, and low-cost in-context decision review (one advisor call). Pick /audit --all for grill-end audits and the /slice gate — covers all 5 principles with fresh-context isolation per call, cheap enough to run on every grill (5 Agent calls). Pick /audit --team for high-stakes architecture audits where verdict-drift between runs has been observed (calibration drift, scope ambiguity, severity rubric drift) — within-principle N=2 consensus + cross-principle DM-debate dampens variance, but at materially higher token cost (N×5 teammates × ~3 rounds vs 5 single-shot Agent calls). The token-budget pre-spawn estimate gates --team against the subscription session/weekly limits.",
+      "expectations": [
+        "Recommends single-mode for sharp single-principle / quick gut checks (cheapest)",
+        "Recommends --all as the default for grill-end / /slice-gate audits (medium cost, fresh-context per principle)",
+        "Recommends --team for high-stakes audits with observed verdict drift (highest cost, variance-dampening via within-principle consensus + cross-principle debate)",
+        "Names at least one cost trade-off (token usage, subscription budget, time, latency)"
+      ]
+    },
+    {
+      "id": 15,
+      "prompt": "A maintainer wants to 'simplify' /audit --team by inlining the principle text from `agents/principle-auditor-pN.md` directly into the lead's spawn prompt — they argue 'fewer files, easier to read'. What is the failure mode they would re-introduce, and what CI mechanism guards against it?",
+      "expected_output": "Failure mode: orchestrator-prompt drift. The 2026-05-07 P2/P5 reproducibility runs against the 2026-05-04 fixture exhibited verdict variance (P2 PASS↔FAIL on scope; P5 FLAG↔FAIL on severity rubric). Diagnosis: even with fresh-context Agent isolation (Iteration 2, --all), the orchestrator composes per-principle prompts from its own context — that interpretation layer drifts run-to-run. Iteration 3 (#252, --team) eliminates this by having each teammate read principle text + calibration from its own agent definition file with a fresh context — the lead embeds ONLY audit context, never principle text. Inlining principle text into the lead's spawn prompt regresses Iteration 3 to Iteration 2's failure mode. CI guard: skills/audit/evals/check-all-flag.sh greps SKILL.md for the explicit 'principle text lives in the AGENT FILE, not in the spawn prompt' callout AND for the anti-pattern: 'fold/folding/inlining principle text into spawn prompt'. Script must stay PASS.",
+      "expectations": [
+        "Names the failure mode (orchestrator-prompt drift / verdict variance across runs)",
+        "Cites the 2026-05-07 P2/P5 reproducibility evidence on the 2026-05-04 fixture",
+        "Explains the iteration-3 contract: principle text in agent definition file, lead embeds only audit context",
+        "Identifies skills/audit/evals/check-all-flag.sh as the CI guard for the anti-pattern"
+      ]
     }
   ]
 }
