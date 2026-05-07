@@ -173,6 +173,21 @@
         "Mentions the cross-tree comparison table complements (does NOT replace) the inline pros/cons",
         "Mentions reader scans each tree top-down as self-contained without cross-referencing"
       ]
+    },
+    {
+      "id": 17,
+      "prompt": "How does grill-fast collect the user's pick by default, and what does each tree option contain?",
+      "expected_output": "Default mode: after the file is written, present the trees as side-by-side preview options via the AskUserQuestion tool — vertical option list on the left, monospace preview pane on the right. Each option has a label (tree letter + ARCH summary; recommended tree gets '(Recommended)' suffix; hybrid recommendation marks the strongest single tree as '(Recommended — pair with X for hybrid)' and relies on auto-Other for hybrid input or 'park as backlog' direction), a 1-line description summarizing the tradeoff, and a preview field with a compact ASCII tree (≤20 lines — data flow + key cost/risk annotations). Question header ≤12 chars. Recommended tree is option 1. Skip this step ONLY when user pre-stated their pick OR running non-interactively (e.g. /loop). After user picks: update frontmatter status (pass / working / deferred) and append outcome log. If trees > 4, present top 4 in AskUserQuestion (recommended + 3 highest-value); the file retains all.",
+      "expectations": [
+        "Mentions AskUserQuestion as the default user-pick mechanism",
+        "Mentions side-by-side layout (option list left, preview pane right)",
+        "Mentions each option has label, description, AND preview fields",
+        "Mentions preview is a compact ASCII tree (≤20 lines or similar bound)",
+        "Mentions recommended tree gets (Recommended) suffix as option 1",
+        "Mentions hybrid recommendations rely on the Other field, not a 5th option",
+        "Mentions skip-conditions: pre-stated pick OR non-interactive context",
+        "Mentions trees > 4 → top 4 in AskUserQuestion, file retains all"
+      ]
     }
   ]
 }

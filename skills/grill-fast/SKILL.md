@@ -24,6 +24,11 @@ Use when topic is multi-component design with ≥3 ARCH decisions. Fall back to 
 8. **Parameter block** — bullet list of PARAM picks (one recommendation each, no tree branching).
 9. **Recommendation** — one pick (typically A/B/C) with rationale. Not "you decide" — Decide-and-recommend rule applies. **If the user picks the axis-challenger 4th tree** (rare but possible), the grill MUST re-grill the framing before locking — the shared axis was just rejected, so A/B/C are no longer the right design space; drop back to `/grill` with a fresh question batch around the new framing.
 10. **Failure-mode call-outs** — for each non-recommended tree, list what to flag if user picks it anyway.
+11. **User pick via `AskUserQuestion` (default mode).** After the file is written, present the trees as side-by-side preview options via the `AskUserQuestion` tool — vertical option list on the left, monospace preview pane on the right showing the focused option's content. Each option has:
+    - `label`: tree letter + ARCH summary, e.g. `"C: Live outcome shadow"` (the recommended tree gets `(Recommended)` suffix per tool convention; when the recommendation is a hybrid, mark the strongest single tree as `(Recommended — pair with X for hybrid)` and rely on the auto-`Other` field for hybrid input or custom direction like "park as backlog").
+    - `description`: 1-line tradeoff summary.
+    - `preview`: compact ASCII tree (≤20 lines: data flow + key cost/risk annotations). Compact ≠ different — same logical structure as the file's full diagram, just trimmed for the preview pane.
+    Question header ≤12 chars derived from topic. Recommended tree is option 1. Skip this step ONLY when user has pre-stated their pick before the skill ran, or when running in a non-interactive context (e.g. `/loop`). After user picks, update file frontmatter (`status: pass` for A/B/C; `status: working` for D triggering re-grill; `status: deferred` for none/Other-deferred) and append the outcome log row. If trees > 4, present the top 4 in `AskUserQuestion` (recommended + 3 highest-value alternatives); the file retains all.
 
 ## Output file
 
