@@ -38,6 +38,8 @@ check "AC#1 — deterministic P1→P5 ordering callout"          'P1.{0,4}(→|t
 check "AC#2 — Output consolidation contract subsection"      '^##+ Output consolidation contract'                                                              ''
 check "AC#2 — regex compat preserved"                        '\\\| P\[0-9\]\+ \\\| \(PASS\|FLAG\|FAIL\)'                                                       ''
 check "AC#2 — Per-principle Findings section format"         '^##+ Per-principle Findings'                                                                    ''
+check "AC#2 — example block names per-principle source as 'Agent response'" "P[1-5]'s Agent response"                                                          ''
+check "AC#2 — return-latency wording references Agent (not stale advisor)" 'regardless of per-principle Agent return latency'                                  ''
 check "AC#3 — backward compat note for single + p1 p5"       '(backward compat|backward-compat|continues? (to )?work|unchanged)'                              '-i'
 check "AC#4 — tracker: one row per principle on --all"       '(one|each).{0,40}(row|log row|tracker row).{0,40}(per principle|each principle)'                '-i'
 check "AC#4 — tracker: use count increment per principle"    'increment.{0,40}(use|usage).{0,8}count.{0,40}(per|each|once per) principle'                     '-i'

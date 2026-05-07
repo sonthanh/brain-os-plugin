@@ -84,12 +84,13 @@
     },
     {
       "id": 9,
-      "prompt": "Under /audit --all, in what order do rows appear in the consolidated ## Audit Summary table, and why?",
-      "expected_output": "Rows always appear P1 → P5 in deterministic order regardless of per-principle Agent return latency. Deterministic ordering keeps diffs comparable across runs and lets downstream consumers rely on a stable position for each principle.",
+      "prompt": "Under /audit --all, in what order do rows appear in the consolidated ## Audit Summary table, and why? When the orchestrator emits the ## Per-principle Findings section, what does it call each principle's response?",
+      "expected_output": "Rows always appear P1 → P5 in deterministic order regardless of per-principle Agent return latency. Deterministic ordering keeps diffs comparable across runs and lets downstream consumers rely on a stable position for each principle. The per-principle findings section labels each block as 'P{N}'s Agent response' (since --all uses Agent(general-purpose) per principle, not advisor()).",
       "expectations": [
         "States rows are ordered P1 → P5 deterministically",
         "States order is independent of Agent timing/latency",
-        "States or implies the regex `^\\| P[0-9]+ \\| (PASS|FLAG|FAIL) \\|` consumed by /slice keeps working"
+        "States or implies the regex `^\\| P[0-9]+ \\| (PASS|FLAG|FAIL) \\|` consumed by /slice keeps working",
+        "Names the per-principle findings source as 'Agent response' (NOT 'advisor response') — under --all the response comes from a per-principle Agent, not advisor"
       ]
     },
     {

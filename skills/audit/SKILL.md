@@ -69,19 +69,19 @@ The `--all` mode output MUST follow this exact structure so downstream consumers
 ## Per-principle Findings
 
 ### P1
-<full text from P1's advisor response>
+<full text from P1's Agent response>
 
 ### P2
-<full text from P2's advisor response>
+<full text from P2's Agent response>
 
 ### P3
-<full text from P3's advisor response>
+<full text from P3's Agent response>
 
 ### P4
-<full text from P4's advisor response>
+<full text from P4's Agent response>
 
 ### P5
-<full text from P5's advisor response>
+<full text from P5's Agent response>
 ```
 
 **Format contract (do not alter):**
@@ -94,7 +94,7 @@ The `--all` mode output MUST follow this exact structure so downstream consumers
   echo "$AUDIT_OUTPUT" | grep -E '^\| P[0-9]+ \| (FAIL|FLAG) \|' && AUDIT_BLOCK=1
   ```
 
-- Rows always appear in **P1 → P5** order, regardless of advisor return latency. Consumers may rely on this ordering.
+- Rows always appear in **P1 → P5** order, regardless of per-principle Agent return latency. Consumers may rely on this ordering.
 - `## Per-principle Findings` is a sibling H2 to `## Audit Summary`, with `### P{N}` H3 subheadings (P1 → P5).
 - **Backward compat:** single-principle invocation (`/audit p1`) and combined-shorthand invocation (`/audit p1 p5`) continue to emit the original single-`advisor()` output and the original `## Audit Summary` table layout — `--all` is additive, not a replacement. Existing call sites that invoke `/audit p1` or `/audit p2` from `/slice` keep working unchanged.
 
@@ -120,7 +120,7 @@ When no specific principle is given (`/audit` or `/audit p0`), pick the **top 3 
 
 Single-principle audits produce the sharpest results. Default p0 to 3 but respect user's specific picks.
 
-`/audit --all` overrides p0 entirely — it always runs all 5 principles regardless of relevance scoring (relevance is what the per-principle advisor calls evaluate; the user opted into the full sweep).
+`/audit --all` overrides p0 entirely — it always runs all 5 principles regardless of relevance scoring (relevance is what the per-principle Agent calls evaluate; the user opted into the full sweep).
 
 **P3 scope check:** P3 (Value Equation) requires ≥50 words of content AND structural differences between options (not phrasing-only). Skip P3 for micro-edits — it won't discriminate. Under `--all`, P3 still runs; expect a `PASS` verdict with a "scope insufficient" key-finding when the content is too thin for P3 to bite.
 
@@ -163,7 +163,7 @@ Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/audit.log`
 {date} | audit | audit | ~/work/brain-os-plugin | thinking/principles/tracker.md | commit:N/A | {result} | args="{principles}" findings={summary}
 ```
 
-- `result`: `pass` when audit completes and produces findings (regardless of verdicts); `partial` if some principles couldn't be fully evaluated (e.g. one of the 5 `--all` advisor calls returned no parseable summary row); `fail` if advisor call failed or tracker.md unreadable
+- `result`: `pass` when audit completes and produces findings (regardless of verdicts); `partial` if some principles couldn't be fully evaluated (e.g. one of the 5 `--all` Agent calls returned no parseable summary row, or single-mode `advisor()` returned no parseable row); `fail` if the per-principle call failed (Agent or advisor) or tracker.md unreadable
 - `findings`: verdict breakdown capturing content quality separately from skill execution — e.g. `3FLAG+2PASS`, `1FAIL+1FLAG+1PASS`. Under `--all`, the breakdown reflects all 5 principles (so `1FAIL+2FLAG+2PASS` totals to 5).
 - `args=`: principle IDs used (e.g. `p1 p5`, or `--all` for the 5-call mode)
 
