@@ -112,5 +112,18 @@
         "Mentions fixing the underlying issue (rubric or base schema) before retrying"
       ]
     }
+  ,
+    {
+      "id": 10,
+      "prompt": "The outcome log shows action=dispatch for an airtable-knowledge-extract run. What does this mean and what fields does it carry?",
+      "expected_output": "dispatch is a separate action type logged by scripts/dispatcher.mts (schema-driven dispatcher, #237) when it computes the component dispatch plan for a base. Output file: ~/.claude/airtable-extract-cache/<run-id>/dispatch-<base-id>.json. pass = plan computed; fail = unrecognized shape or no extractable tables. Optional fields: component_id (graph component id), shape (orphan|pair|chain|tree|hub-spoke|graph), records, est_tokens, strategy (edge-emit|single-pass|chunk-by-AP|record-by-record), interaction_handler.",
+      "expectations": [
+        "Names `dispatch` as a distinct action type separate from `extract`",
+        "States `scripts/dispatcher.mts` writes the dispatch log entry",
+        "Mentions the output path `~/.claude/airtable-extract-cache/<run-id>/dispatch-<base-id>.json`",
+        "Lists the `shape` field values including hub-spoke",
+        "Lists the `strategy` field values including edge-emit"
+      ]
+    }
   ]
 }

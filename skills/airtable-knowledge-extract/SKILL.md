@@ -126,7 +126,9 @@ Entity pages stage in the cache, not the vault, until the user reviews via `sp t
 
 ## Outcome log
 
-Follow `{vault}/skill-spec.md § 11`. After each `run.mts` invocation completes (success or escalation), the CLI `main()` in `scripts/run.mts` calls `appendOutcomeLog` (`scripts/outcome-log.mts`) to append one line to `{vault}/daily/skill-outcomes/airtable-knowledge-extract.log`:
+Follow `{vault}/skill-spec.md § 11`. Two action types appear in this log — `extract` (main extraction loop) and `dispatch` (schema-driven dispatcher, `scripts/dispatcher.mts`, per #237).
+
+**`extract` action** — appended by `scripts/run.mts` CLI `main()` via `scripts/outcome-log.mts`:
 
 ```
 {date} | airtable-knowledge-extract | extract | ~/work/brain-os-plugin | <metrics-or-cache-path> | commit:none | {pass|partial|fail} | run_id=… base_id=… batches_done=… total_batches=… pass_rate=…
@@ -136,5 +138,15 @@ Follow `{vault}/skill-spec.md § 11`. After each `run.mts` invocation completes 
 - `partial` — `kind=hitl-pending`: the HITL re-anchor gate exited with code 42 and awaits an operator decision. Read `<runDir>/hitl/re-anchor-decision-needed.json`, drive the grill conversation using the provided context, write `<runDir>/hitl/re-anchor-decision.json` (`{verdict: "approve"|"reject", notes}`), then re-run the same supaterm chain to resume.
 - `fail` — `kind=escalated-re-anchor` (operator rejected the re-anchor shallow slice — review what the slice lacked via the `re-anchor-decision-needed.json` context, adjust the rubric via `rubric-author.mts` or fix the base schema, then retry with a new run-id; no auto-promotion) or `kind=escalated-batch` (batch pass-rate below ≥95% threshold after retry — check `examples.jsonl` for the failing slices).
 - `commit:none` — extracted pages stage in cache, not in a tracked repo, so there is no anchor commit hash for diff detection.
+
+**`dispatch` action** — appended by `scripts/dispatcher.mts` after computing the schema-driven dispatch plan for a base component:
+
+```
+{date} | airtable-knowledge-extract | dispatch | ~/work/brain-os-plugin | ~/.claude/airtable-extract-cache/<run-id>/dispatch-<base-id>.json | commit:none | {pass|fail} | run_id=… base_id=… component_id=… shape=… records=… est_tokens=… strategy=… interaction_handler=…
+```
+
+- `pass` — dispatcher resolved the component shape and wrote the dispatch plan JSON.
+- `fail` — dispatcher could not resolve the component (unrecognized shape, no extractable tables, or NK-scan failure).
+- Optional fields: `component_id` (graph component id), `shape` (orphan|pair|chain|tree|hub-spoke|graph), `records` (record count in component), `est_tokens` (estimated token budget), `strategy` (edge-emit|single-pass|chunk-by-AP|record-by-record), `interaction_handler` (dispatch execution mode).
 
 If `result != pass`, auto-invoke `/brain-os:improve airtable-knowledge-extract` only for unexpected failures (script errors, API failures). HITL escalations (`partial=hitl-pending`, `fail=re-anchor`) are by-design exits that need operator action, not SKILL.md changes.
