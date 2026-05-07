@@ -160,6 +160,18 @@
         "Mentions drop back to /grill (fresh question batch)",
         "Mentions do NOT lock on the axis-challenger as-is"
       ]
+    },
+    {
+      "id": 16,
+      "prompt": "How does grill-fast format pros/cons for each tree, and where does that information appear in the output file?",
+      "expected_output": "Each tree's diagram is immediately followed by an inline **Pros** / **Cons** block (3-5 concrete bullets each side — build cost, what the tree actually proves, what it misses, key failure mode). Reader scans each tree top-down as a self-contained unit without cross-referencing tables. The cross-tree comparison table (step 7, renamed from 'Cost / risk per tree' to 'Cross-tree comparison') complements this with a side-by-side scan view across all trees on the same axes. BOTH are required — inline pros/cons is not optional, and the cross-tree table is not a replacement.",
+      "expectations": [
+        "Mentions inline pros/cons block immediately under each tree's diagram",
+        "Mentions 3-5 concrete bullets each side (or similar count)",
+        "Mentions inline placement is required, not optional",
+        "Mentions the cross-tree comparison table complements (does NOT replace) the inline pros/cons",
+        "Mentions reader scans each tree top-down as self-contained without cross-referencing"
+      ]
     }
   ]
 }
