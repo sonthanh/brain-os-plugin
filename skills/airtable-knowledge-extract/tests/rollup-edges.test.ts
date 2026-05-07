@@ -34,6 +34,7 @@ import {
   renderRollupBlock,
   applyRollupToPage,
   rollupEdges,
+  stripBasePrefix,
   type EdgeRow,
   type EntityPage,
 } from "../scripts/rollup-edges.mts";
@@ -561,12 +562,12 @@ describe("rollupEdges (CLI flow) — 3 sample edges → 2 entity pages each gain
     expect(after).toContain(ROLLUP_BEGIN);
   });
 
-  test("page with no source_record_id is skipped (counted, not modified)", () => {
+  test("page with neither record_id nor slug is skipped (counted, not modified)", () => {
     const { vault } = setupVault();
     const orphanPath = writeEntityPage(
       vault,
-      "knowledge/companies/no-record.md",
-      { type: "company", slug: "no-record" },
+      "knowledge/companies/no-id.md",
+      { type: "company" },
       "no provenance.\n",
     );
     const before = readFileSync(orphanPath, "utf8");
@@ -574,6 +575,21 @@ describe("rollupEdges (CLI flow) — 3 sample edges → 2 entity pages each gain
     const after = readFileSync(orphanPath, "utf8");
     expect(after).toBe(before);
     expect(result.pagesSkipped).toBe(1);
+  });
+
+  test("page with slug but no matching edges stays untouched (no write, no skip)", () => {
+    const { vault } = setupVault();
+    const orphanPath = writeEntityPage(
+      vault,
+      "knowledge/companies/no-record.md",
+      { type: "company", slug: "no-record" },
+      "slug-only with no inbound/outbound edges.\n",
+    );
+    const before = readFileSync(orphanPath, "utf8");
+    const result = rollupEdges({ vaultPath: vault });
+    const after = readFileSync(orphanPath, "utf8");
+    expect(after).toBe(before);
+    expect(result.pagesUntouched).toBeGreaterThanOrEqual(1);
   });
 
   test("entity page with zero matching edges and no existing markers stays untouched", () => {
@@ -632,5 +648,131 @@ describe("rollupEdges (CLI flow) — 3 sample edges → 2 entity pages each gain
     expect(result.pagesUpdated).toBe(0);
     expect(result.skipped).toBe(true);
     expect(result.reason).toMatch(/edges\.jsonl/);
+  });
+
+  test("stripBasePrefix removes app<14char>- prefix only", () => {
+    expect(stripBasePrefix("appUV3hAWcRzrGjqK-recXYZ")).toBe("recXYZ");
+    expect(stripBasePrefix("recXYZ")).toBe("recXYZ");
+    expect(stripBasePrefix("appShortIDtooShort-recXYZ")).toBe("appShortIDtooShort-recXYZ");
+    expect(stripBasePrefix("")).toBe("");
+  });
+
+  test("extractRecordIds reads source_record_ids (plural) and strips base-id prefix", () => {
+    const fm = {
+      slug: "mediacorp-ltd",
+      source_record_ids: [
+        "appUV3hAWcRzrGjqK-recYBehO97MYJwHDO",
+        "appUV3hAWcRzrGjqK-recOther",
+      ],
+    };
+    const ids = extractRecordIds(fm);
+    expect(ids).toEqual(["recYBehO97MYJwHDO", "recOther"]);
+  });
+
+  test("rollupEdges scans companies/ + people/ + knowledge/ by default", () => {
+    const vault = tmp;
+    writeEdges(vault, [
+      {
+        id: "appBase-recPay",
+        type: "payments",
+        from: "comp-a",
+        to: "comp-b",
+        amount: 100,
+        date: "2026-01-01",
+        source_record_id: "recPay",
+        source_table: "tblPayments",
+      },
+    ]);
+    const compA = writeEntityPage(
+      vault,
+      "companies/comp-a.md",
+      { slug: "comp-a", kind: "company", source_record_ids: ["appBase-recA"] },
+    );
+    const compB = writeEntityPage(
+      vault,
+      "companies/comp-b.md",
+      { slug: "comp-b", kind: "company", source_record_ids: ["appBase-recB"] },
+    );
+    const personC = writeEntityPage(
+      vault,
+      "people/person-c.md",
+      { slug: "person-c", kind: "person", source_record_ids: ["appBase-recC"] },
+    );
+    const result = rollupEdges({ vaultPath: vault });
+    expect(result.entityPagesScanned).toBeGreaterThanOrEqual(3);
+    const aText = readFileSync(compA, "utf8");
+    const bText = readFileSync(compB, "utf8");
+    expect(aText).toContain(ROLLUP_BEGIN);
+    expect(bText).toContain(ROLLUP_BEGIN);
+    expect(aText).toContain("[[comp-b]]");
+    expect(bText).toContain("[[comp-a]]");
+    const cText = readFileSync(personC, "utf8");
+    expect(cText).not.toContain(ROLLUP_BEGIN);
+  });
+
+  test("page with entity-slug edge endpoint resolves via slugIndex (Payment edge case)", () => {
+    const vault = tmp;
+    writeEdges(vault, [
+      {
+        id: "appBase-recPay1",
+        type: "payments",
+        from: "brighttech-solutions",
+        to: "staronline-project",
+        amount: 850,
+        date: "2026-01-15",
+        source_record_id: "recPay1",
+        source_table: "tblPayments",
+      },
+    ]);
+    const brighttech = writeEntityPage(
+      vault,
+      "companies/brighttech-solutions.md",
+      {
+        name: "BrightTech Solutions",
+        slug: "brighttech-solutions",
+        kind: "company",
+        extraction_strategy: "text-field",
+        source_record_ids: ["appBase-recBT"],
+      },
+    );
+    const staronline = writeEntityPage(
+      vault,
+      "companies/staronline-project.md",
+      {
+        name: "Staronline Project",
+        slug: "staronline-project",
+        kind: "company",
+        extraction_strategy: "text-field",
+        source_record_ids: ["appBase-recSP"],
+      },
+    );
+    rollupEdges({ vaultPath: vault });
+    const btText = readFileSync(brighttech, "utf8");
+    const spText = readFileSync(staronline, "utf8");
+    expect(btText).toContain("[[staronline-project]]");
+    expect(btText).toContain("850");
+    expect(spText).toContain("[[brighttech-solutions]]");
+    expect(spText).toContain("850");
+  });
+
+  test("entityPagesRoots option overrides default scan roots", () => {
+    const vault = tmp;
+    writeEdges(vault, [
+      {
+        id: "appBase-recPay",
+        type: "payments",
+        from: "comp-a",
+        to: "comp-b",
+        source_record_id: "recPay",
+        source_table: "tblPayments",
+      },
+    ]);
+    writeEntityPage(vault, "companies/comp-a.md", { slug: "comp-a", source_record_ids: ["appBase-recA"] });
+    writeEntityPage(vault, "knowledge/companies/comp-b.md", { slug: "comp-b", source_record_ids: ["appBase-recB"] });
+    const result = rollupEdges({
+      vaultPath: vault,
+      entityPagesRoots: [join(vault, "knowledge")],
+    });
+    expect(result.entityPagesScanned).toBe(1);
   });
 });

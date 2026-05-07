@@ -123,6 +123,7 @@ export interface ParsedFrontmatter {
 export interface RollupOptions {
   vaultPath?: string;
   entityPagesRoot?: string;
+  entityPagesRoots?: string[];
   edgesPath?: string;
   env?: Record<string, string | undefined>;
   warn?: (msg: string) => void;
@@ -205,14 +206,24 @@ function stripQuotes(s: string): string {
   return s;
 }
 
+export function stripBasePrefix(id: string): string {
+  return id.replace(/^app[A-Za-z0-9]{14}-/, "");
+}
+
 export function extractRecordIds(fm: Record<string, unknown>): string[] {
   const out = new Set<string>();
   const single = fm.source_record_id;
-  if (typeof single === "string" && single.length > 0) out.add(single);
+  if (typeof single === "string" && single.length > 0) out.add(stripBasePrefix(single));
   const list = fm.sources;
   if (Array.isArray(list)) {
     for (const item of list) {
-      if (typeof item === "string" && item.length > 0) out.add(item);
+      if (typeof item === "string" && item.length > 0) out.add(stripBasePrefix(item));
+    }
+  }
+  const plural = fm.source_record_ids;
+  if (Array.isArray(plural)) {
+    for (const item of plural) {
+      if (typeof item === "string" && item.length > 0) out.add(stripBasePrefix(item));
     }
   }
   return [...out];
@@ -292,21 +303,24 @@ function escapeCell(s: string): string {
 }
 
 function renderCounterparty(
-  recordId: string,
-  index: Map<string, string>,
+  identifier: string,
+  recordIndex: Map<string, string>,
+  slugIndex: Set<string>,
 ): string {
-  const slug = index.get(recordId);
+  const slug = recordIndex.get(identifier);
   if (slug) return `[[${slug}]]`;
-  return `\`${recordId}\``;
+  if (slugIndex.has(identifier)) return `[[${identifier}]]`;
+  return `\`${identifier}\``;
 }
 
 export function renderEdgeRow(
   edge: EdgeRow,
   counterpartyId: string,
-  index: Map<string, string>,
+  recordIndex: Map<string, string>,
+  slugIndex: Set<string> = new Set(),
 ): string {
   const date = renderCell(edge.date);
-  const counterparty = renderCounterparty(counterpartyId, index);
+  const counterparty = renderCounterparty(counterpartyId, recordIndex, slugIndex);
   const amount = renderCell(edge.amount);
   const note = renderCell(edge.note);
   return `| ${date} | ${counterparty} | ${amount} | ${note} |`;
@@ -335,14 +349,17 @@ export interface RenderRollupBlockInput {
   incoming: EdgeRow[];
   outgoing: EdgeRow[];
   recordIndex: Map<string, string>;
+  slugIndex?: Set<string>;
   ownerRecordIds: string[];
+  ownerSlug?: string | null;
 }
 
 function renderDirectionSection(
   title: string,
   edges: EdgeRow[],
   pickCounterpartyId: (e: EdgeRow) => string,
-  index: Map<string, string>,
+  recordIndex: Map<string, string>,
+  slugIndex: Set<string>,
 ): string {
   const lines: string[] = [`## ${title}`, ""];
   if (edges.length === 0) {
@@ -351,21 +368,25 @@ function renderDirectionSection(
   }
   lines.push(TABLE_HEADER, TABLE_SEP);
   for (const e of [...edges].sort(compareEdgeRows)) {
-    lines.push(renderEdgeRow(e, pickCounterpartyId(e), index));
+    lines.push(renderEdgeRow(e, pickCounterpartyId(e), recordIndex, slugIndex));
   }
   return lines.join("\n");
 }
 
 export function renderRollupBlock(input: RenderRollupBlockInput): string {
-  const owners = new Set(input.ownerRecordIds);
+  const owners = new Set([
+    ...input.ownerRecordIds,
+    ...(input.ownerSlug ? [input.ownerSlug] : []),
+  ]);
+  const slugIndex = input.slugIndex ?? new Set<string>();
   const incoming = dropSelfEdges(input.incoming, owners);
   const outgoing = dropSelfEdges(input.outgoing, owners);
   const sections: string[] = [
     ROLLUP_BEGIN,
     "",
-    renderDirectionSection("Edges (incoming)", incoming, (e) => e.from, input.recordIndex),
+    renderDirectionSection("Edges (incoming)", incoming, (e) => e.from, input.recordIndex, slugIndex),
     "",
-    renderDirectionSection("Edges (outgoing)", outgoing, (e) => e.to, input.recordIndex),
+    renderDirectionSection("Edges (outgoing)", outgoing, (e) => e.to, input.recordIndex, slugIndex),
     "",
     ROLLUP_END,
   ];
@@ -426,8 +447,12 @@ function readEntityPage(path: string): EntityPage | null {
   if (!frontmatter) {
     return { path, slug: null, recordIds: [], body: text };
   }
-  const recordIds = extractRecordIds(frontmatter);
   const slug = extractSlug(frontmatter);
+  // Text-field pages' source_record_ids are MENTION-records (where the entity name appeared),
+  // not entity-records. Including them in recordIds would attribute mention-record edges
+  // (cashflows/pnl-reports) to the entity. Match these pages by slug only.
+  const isTextField = frontmatter.extraction_strategy === "text-field";
+  const recordIds = isTextField ? [] : extractRecordIds(frontmatter);
   return { path, slug, recordIds, body: text };
 }
 
@@ -444,7 +469,12 @@ export function rollupEdges(opts: RollupOptions = {}): RollupResult {
       "rollup-edges: vault_path not resolvable. Set brain-os.config.md vault_path or pass opts.vaultPath.",
     );
   }
-  const root = opts.entityPagesRoot ?? join(vaultPath, "knowledge");
+  const roots = opts.entityPagesRoots ??
+    (opts.entityPagesRoot ? [opts.entityPagesRoot] : [
+      join(vaultPath, "knowledge"),
+      join(vaultPath, "companies"),
+      join(vaultPath, "people"),
+    ]);
   const edgesPath = opts.edgesPath ?? join(vaultPath, "knowledge", "graph", "edges.jsonl");
 
   const result: RollupResult = {
@@ -470,7 +500,8 @@ export function rollupEdges(opts: RollupOptions = {}): RollupResult {
   const edges = parseEdgesJsonl(readFileSync(edgesPath, "utf8"));
   const grouped = groupEdgesByEntity(edges);
 
-  const paths = walkMarkdownFiles(root);
+  const paths: string[] = [];
+  for (const r of roots) walkMarkdownFiles(r, paths);
   const pages: EntityPage[] = [];
   for (const p of paths) {
     const ep = readEntityPage(p);
@@ -479,19 +510,41 @@ export function rollupEdges(opts: RollupOptions = {}): RollupResult {
   result.entityPagesScanned = pages.length;
 
   const recordIndex = buildRecordIndex(pages);
+  const slugIndex = new Set<string>();
+  for (const p of pages) if (p.slug) slugIndex.add(p.slug);
 
   for (const page of pages) {
-    if (page.recordIds.length === 0) {
+    if (page.recordIds.length === 0 && !page.slug) {
       result.pagesSkipped += 1;
       continue;
     }
+    const matchKeys = new Set<string>([
+      ...page.recordIds,
+      ...(page.slug ? [page.slug] : []),
+    ]);
+    const incomingSeen = new Set<string>();
+    const outgoingSeen = new Set<string>();
     const incoming: EdgeRow[] = [];
     const outgoing: EdgeRow[] = [];
-    for (const rid of page.recordIds) {
-      const inArr = grouped.incoming.get(rid);
-      if (inArr) incoming.push(...inArr);
-      const outArr = grouped.outgoing.get(rid);
-      if (outArr) outgoing.push(...outArr);
+    for (const key of matchKeys) {
+      const inArr = grouped.incoming.get(key);
+      if (inArr) {
+        for (const e of inArr) {
+          if (!incomingSeen.has(e.id)) {
+            incomingSeen.add(e.id);
+            incoming.push(e);
+          }
+        }
+      }
+      const outArr = grouped.outgoing.get(key);
+      if (outArr) {
+        for (const e of outArr) {
+          if (!outgoingSeen.has(e.id)) {
+            outgoingSeen.add(e.id);
+            outgoing.push(e);
+          }
+        }
+      }
     }
 
     const hadExisting = ROLLUP_BLOCK_RE.test(page.body);
@@ -504,7 +557,9 @@ export function rollupEdges(opts: RollupOptions = {}): RollupResult {
       incoming,
       outgoing,
       recordIndex,
+      slugIndex,
       ownerRecordIds: page.recordIds,
+      ownerSlug: page.slug,
     });
     const next = applyRollupToPage(page.body, block);
     if (next === page.body) {
@@ -521,10 +576,14 @@ export function rollupEdges(opts: RollupOptions = {}): RollupResult {
     }
 
     for (const e of incoming) {
-      if (!recordIndex.has(e.from)) result.unresolvedCounterparties += 1;
+      if (!recordIndex.has(e.from) && !slugIndex.has(e.from)) {
+        result.unresolvedCounterparties += 1;
+      }
     }
     for (const e of outgoing) {
-      if (!recordIndex.has(e.to)) result.unresolvedCounterparties += 1;
+      if (!recordIndex.has(e.to) && !slugIndex.has(e.to)) {
+        result.unresolvedCounterparties += 1;
+      }
     }
     result.edgesIncomingTotal += incoming.length;
     result.edgesOutgoingTotal += outgoing.length;
