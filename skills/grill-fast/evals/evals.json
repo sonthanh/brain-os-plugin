@@ -188,6 +188,17 @@
         "Mentions skip-conditions: pre-stated pick OR non-interactive context",
         "Mentions trees > 4 → top 4 in AskUserQuestion, file retains all"
       ]
+    },
+    {
+      "id": 18,
+      "prompt": "What does grill-fast log when a user defers the session to backlog without picking a tree?",
+      "expected_output": "result=partial, pick=none, and the optional deferred_to=<issue-url> field pointing to the backlog issue. Exactly one log row per session — no intermediate row while AskUserQuestion is pending.",
+      "expectations": [
+        "Mentions result=partial for the deferral case",
+        "Mentions pick=none for the deferral case",
+        "Mentions deferred_to optional field (with issue URL or backlog pointer)",
+        "Mentions logging exactly once per session (no intermediate rows)"
+      ]
     }
   ]
 }

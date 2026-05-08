@@ -76,6 +76,8 @@ Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/grill-fast
 {date} | grill-fast | grill-fast | ~/work/brain-os-plugin | daily/grill-sessions/{date}-{slug}.md | commit:{hash} | {result} | args="{topic}" turns_to_lock=N pick=A|B|C|D|hybrid|none
 ```
 
-- `result`: `pass` if user picks a tree (or hybrid) and grill closes ≤3 user turns; `partial` if user requests Q-by-Q follow-up after seeing trees (Mode B incomplete, Mode A patched on top), OR if user picks the axis-challenger 4th tree and re-grill of the framing is required before locking; `fail` if aborted to `/grill` or trees rejected wholesale
+- `result`: `pass` if user picks a tree (or hybrid) and grill closes ≤3 user turns; `partial` if: user requests Q-by-Q follow-up after seeing trees (Mode B incomplete, Mode A patched on top), OR user picks the axis-challenger 4th tree and re-grill of the framing is required before locking, OR user explicitly defers the session to backlog (`pick=none`, `status: deferred` in file frontmatter); `fail` if aborted to `/grill` or trees rejected wholesale
 - `turns_to_lock`: count user turns from skill invocation to lock (success metric — target ≤3)
 - `pick`: which tree user selected — `A`, `B`, `C`, `D` (axis-challenger), `hybrid`, or `none`
+- `deferred_to`: optional — issue URL when `pick=none` and user defers to a backlog issue (e.g. `deferred_to=https://github.com/.../issues/267`)
+- **Log exactly once per session** — after the final outcome is known (user pick, explicit deferral, or session abort). Do NOT append an intermediate row while AskUserQuestion is pending. If a session ends mid-flow before a pick, resolve and log in the session where the pick or deferral is confirmed.
