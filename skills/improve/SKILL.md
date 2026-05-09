@@ -214,6 +214,7 @@ When invoked with a skill name:
    - Meta-case (`/improve` improving itself): questions about `/improve`'s own triggers, signals, auto/manual semantics, scope, or log fields all mean the Clarifications section is missing an answer — extend it, don't re-route to a reference file.
 
 4. **Scan aha moments** — grep `{vault}/thinking/aha/` for mentions of the skill name
+   - **Role:** aha files are **supplementary context** for /improve — NOT a priority hint and NOT subordinate. They can contribute new test cases to Phase 3 (indirect eval path), surface skill priority signals, or provide broader framing context. Use them alongside outcome log signals, not as a stand-alone priority gate. Never describe /aha role as "priority hint (không qua test gate)" — that framing loses the broader context role.
 
 5. **Detect user corrections via git diff** — for each outcome log entry with a commit hash:
    - In the repo that contains the output file, check if the same file was modified in a later commit by the user (not by the skill)

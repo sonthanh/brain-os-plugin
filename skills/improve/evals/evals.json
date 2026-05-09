@@ -30,199 +30,344 @@
   {
     "name": "phase4-variant-count",
     "description": "Phase 4 must require 3-5 candidate edits",
-    "expected_in_skill": ["3-5 candidate", "Minimum 3 candidates required"],
+    "expected_in_skill": [
+      "3-5 candidate",
+      "Minimum 3 candidates required"
+    ],
     "type": "skill-content-check"
   },
   {
     "name": "phase4-mutation-strategies",
     "description": "Phase 4 must define named mutation strategies",
-    "expected_in_skill": ["Narrow rule", "Broad principle", "Gotcha addition", "Example-based", "Restructure"],
+    "expected_in_skill": [
+      "Narrow rule",
+      "Broad principle",
+      "Gotcha addition",
+      "Example-based",
+      "Restructure"
+    ],
     "type": "skill-content-check"
   },
   {
     "name": "phase4-in-memory-eval",
     "description": "Phase 4 must evaluate candidates in memory, not by writing to disk",
-    "expected_in_skill": ["in memory", "Do NOT write candidates to disk"],
+    "expected_in_skill": [
+      "in memory",
+      "Do NOT write candidates to disk"
+    ],
     "type": "skill-content-check"
   },
   {
     "name": "phase4-minimal-diff-tiebreaker",
     "description": "Phase 4 must use minimal diff as selection tiebreaker",
-    "expected_in_skill": ["Minimal diff", "prefer surgical changes"],
+    "expected_in_skill": [
+      "Minimal diff",
+      "prefer surgical changes"
+    ],
     "type": "skill-content-check"
   },
   {
     "name": "phase4-eval-gate-preserved",
     "description": "Phase 4 must keep non-negotiable eval gate",
-    "expected_in_skill": ["eval gate", "non-negotiable", "git checkout"],
+    "expected_in_skill": [
+      "eval gate",
+      "non-negotiable",
+      "git checkout"
+    ],
     "type": "skill-content-check"
   },
   {
     "name": "phase5-variant-table",
     "description": "Phase 5 report must include per-variant evaluation results",
-    "expected_in_skill": ["Variant evaluation", "Strategy", "Eval pass", "Diff lines", "Selected"],
+    "expected_in_skill": [
+      "Variant evaluation",
+      "Strategy",
+      "Eval pass",
+      "Diff lines",
+      "Selected"
+    ],
     "type": "skill-content-check"
   },
   {
     "name": "clarifications-cadence",
     "description": "Clarifications must answer the cadence question (auto-per-run, cron, manual)",
-    "expected_in_skill": ["Auto-per-run", "Scheduled batch", "Manual"],
+    "expected_in_skill": [
+      "Auto-per-run",
+      "Scheduled batch",
+      "Manual"
+    ],
     "type": "skill-content-check"
   },
   {
     "name": "clarifications-signals",
     "description": "Clarifications must enumerate the five signal sources",
-    "expected_in_skill": ["Outcome logs", "Trace JSONL", "Grill sessions", "Aha moments", "User corrections"],
+    "expected_in_skill": [
+      "Outcome logs",
+      "Trace JSONL",
+      "Grill sessions",
+      "Aha moments",
+      "User corrections"
+    ],
     "type": "skill-content-check"
   },
   {
     "name": "clarifications-auto-apply",
     "description": "Clarifications must state full auto with eval gate as safety net, no human-in-loop",
-    "expected_in_skill": ["Full auto", "eval gate", "Manual review mode is NOT supported"],
+    "expected_in_skill": [
+      "Full auto",
+      "eval gate",
+      "Manual review mode is NOT supported"
+    ],
     "type": "skill-content-check"
   },
   {
     "name": "clarifications-scope",
     "description": "Clarifications must distinguish no-arg rank-only vs named-skill full run",
-    "expected_in_skill": ["full Phase 1–5", "stops and reports", "Does NOT auto-run"],
+    "expected_in_skill": [
+      "full Phase 1–5",
+      "stops and reports",
+      "Does NOT auto-run"
+    ],
     "type": "skill-content-check"
   },
   {
     "name": "clarifications-optional-fields",
     "description": "Clarifications must explain how to add optional fields safely",
-    "expected_in_skill": ["7 required pipe-delimited fields", "ignores unknown keys", "Never", "7 required fields"],
+    "expected_in_skill": [
+      "7 required pipe-delimited fields",
+      "ignores unknown keys",
+      "Never",
+      "7 required fields"
+    ],
     "type": "skill-content-check"
   },
   {
     "name": "phase1-grill-question-detection",
     "description": "Phase 1 step 3 must detect clarifying questions as underspec signals",
-    "expected_in_skill": ["Clarifying-question detection", "underspec signal", "within 2 lines"],
+    "expected_in_skill": [
+      "Clarifying-question detection",
+      "underspec signal",
+      "within 2 lines"
+    ],
     "type": "skill-content-check"
   },
   {
     "name": "gotcha-meta-self-grilling",
     "description": "Gotchas must call out the meta self-grilling signal",
-    "expected_in_skill": ["Meta self-grilling signal", "Clarifications section"],
+    "expected_in_skill": [
+      "Meta self-grilling signal",
+      "Clarifications section"
+    ],
     "type": "skill-content-check"
   },
   {
     "name": "phase4-size-gate-20kb",
     "description": "Phase 4 must enforce a 20KB (20480 byte) size cap on candidate variants",
-    "expected_in_skill": ["Size limit (20KB)", "20480", "Disqualify"],
+    "expected_in_skill": [
+      "Size limit (20KB)",
+      "20480",
+      "Disqualify"
+    ],
     "type": "skill-content-check"
   },
   {
     "name": "phase4-semantic-preservation-judge",
     "description": "Phase 4 must spawn an LLM judge that checks candidate against pre-edit frontmatter description",
-    "expected_in_skill": ["Semantic preservation", "LLM judge", "original trigger conditions", "pre-edit frontmatter", "PASS", "FAIL"],
+    "expected_in_skill": [
+      "Semantic preservation",
+      "LLM judge",
+      "original trigger conditions",
+      "pre-edit frontmatter",
+      "PASS",
+      "FAIL"
+    ],
     "type": "skill-content-check"
   },
   {
     "name": "phase4-gate-rejection-revert",
     "description": "Phase 4 must revert via git checkout when any gate rejects all variants",
-    "expected_in_skill": ["Revert if all fail", "size gate", "semantic judge", "git checkout", "regardless of which gate tripped"],
+    "expected_in_skill": [
+      "Revert if all fail",
+      "size gate",
+      "semantic judge",
+      "git checkout",
+      "regardless of which gate tripped"
+    ],
     "type": "skill-content-check"
   },
   {
     "name": "phase4-judge-failure-mode",
     "description": "Phase 4 must treat malformed judge output as FAIL (conservative default)",
-    "expected_in_skill": ["Output handling", "treat as FAIL", "Conservative default"],
+    "expected_in_skill": [
+      "Output handling",
+      "treat as FAIL",
+      "Conservative default"
+    ],
     "type": "skill-content-check"
   },
   {
     "name": "phase5-variant-table-gates",
     "description": "Phase 5 report table must expose size + semantic gate results per variant",
-    "expected_in_skill": ["Size (bytes)", "Size OK?", "Semantic"],
+    "expected_in_skill": [
+      "Size (bytes)",
+      "Size OK?",
+      "Semantic"
+    ],
     "type": "skill-content-check"
   },
   {
     "name": "gotcha-eval-coverage-audit",
     "description": "Gotchas must require /improve to audit evals.json for coverage gaps after SKILL.md edits, in the same commit, before pre-commit-eval-gap.sh blocks",
-    "expected_in_skill": ["Eval coverage audit", "missing evals in the SAME commit", "pre-commit-eval-gap.sh"],
+    "expected_in_skill": [
+      "Eval coverage audit",
+      "missing evals in the SAME commit",
+      "pre-commit-eval-gap.sh"
+    ],
     "type": "skill-content-check"
   },
   {
     "name": "gotcha-learning-loops-observable-state",
     "description": "Gotchas must require learning-loop input signals to be observable state (Gmail labels, diffs, API responses), never user-edited markdown files — users won't touch the file and the loop never closes",
-    "expected_in_skill": ["Learning loops derive from observable state", "never user-edited markdown", "what does the user already do with their hands"],
+    "expected_in_skill": [
+      "Learning loops derive from observable state",
+      "never user-edited markdown",
+      "what does the user already do with their hands"
+    ],
     "type": "skill-content-check"
   },
   {
     "name": "phase4-semantic-judge-short-circuit",
     "description": "Phase 4 Gate 2 must define a deterministic short-circuit: skip the Agent semantic judge when the candidate's frontmatter block is byte-identical to pre-edit. Unchanged frontmatter guarantees trigger routing is preserved. Record in Phase 5 report as short-circuit so skip is auditable.",
-    "expected_in_skill": ["Short-circuit", "byte-identical", "PASS (short-circuit — frontmatter unchanged)"],
+    "expected_in_skill": [
+      "Short-circuit",
+      "byte-identical",
+      "PASS (short-circuit — frontmatter unchanged)"
+    ],
     "type": "skill-content-check"
   },
   {
     "name": "memory-mode-documented",
     "description": "/improve memory usage mode must be documented in the Usage block so the cron and the user know it exists",
-    "expected_in_skill": ["/improve memory", "Triage memory feedback inbox via 5-tier rubric"],
+    "expected_in_skill": [
+      "/improve memory",
+      "Triage memory feedback inbox via 5-tier rubric"
+    ],
     "type": "skill-content-check"
   },
   {
     "name": "phase0-runs-before-phase1",
     "description": "Phase 0 spec must state it runs before Phase 1 so cron orchestration is unambiguous",
-    "expected_in_skill": ["Phase 0 runs **before** Phase 1", "daily cron"],
+    "expected_in_skill": [
+      "Phase 0 runs **before** Phase 1",
+      "daily cron"
+    ],
     "type": "skill-content-check"
   },
   {
     "name": "memory-five-tier-rubric",
     "description": "Step 0.0 must encode the 5-tier rubric (HOOK, SKILL, .claude/rules/, CLAUDE.md, MEMORY-STAY)",
-    "expected_in_skill": ["HOOK", "SKILL", ".claude/rules/", "CLAUDE.md", "MEMORY-STAY"],
+    "expected_in_skill": [
+      "HOOK",
+      "SKILL",
+      ".claude/rules/",
+      "CLAUDE.md",
+      "MEMORY-STAY"
+    ],
     "type": "skill-content-check"
   },
   {
     "name": "memory-rubric-decision-tree",
     "description": "Rubric must walk top-to-bottom with first-match-wins semantics",
-    "expected_in_skill": ["top-to-bottom, first match wins", "Walk the rubric per file"],
+    "expected_in_skill": [
+      "top-to-bottom, first match wins",
+      "Walk the rubric per file"
+    ],
     "type": "skill-content-check"
   },
   {
     "name": "memory-realpath-dedupe",
     "description": "Step 0.0 must realpath-dedupe across symlinked Claude account dirs so the same physical file isn't double-processed",
-    "expected_in_skill": ["realpath-dedupe", "~/.claude*/projects/*/memory/feedback_*.md", "double-process"],
+    "expected_in_skill": [
+      "realpath-dedupe",
+      "~/.claude*/projects/*/memory/feedback_*.md",
+      "double-process"
+    ],
     "type": "skill-content-check"
   },
   {
     "name": "memory-source-deletion",
     "description": "Encoding must delete the source memory feedback file (rm) — not archive — and the commit body must preserve the rule + Why + How-to-apply",
-    "expected_in_skill": ["Delete the source memory feedback file", "rationale survives source deletion", "improve: encoded memory feedback"],
+    "expected_in_skill": [
+      "Delete the source memory feedback file",
+      "rationale survives source deletion",
+      "improve: encoded memory feedback"
+    ],
     "type": "skill-content-check"
   },
   {
     "name": "memory-ambiguous-routing",
     "description": "Ambiguous classifications must file a type:human-review issue rather than guess",
-    "expected_in_skill": ["tier: ambiguous", "type:human-review", "rubric trace"],
+    "expected_in_skill": [
+      "tier: ambiguous",
+      "type:human-review",
+      "rubric trace"
+    ],
     "type": "skill-content-check"
   },
   {
     "name": "memory-step-0-5-index-reconcile",
     "description": "Step 0.5 must rewrite MEMORY.md from disk, sorted, idempotent, preserving the user-maintained footer note",
-    "expected_in_skill": ["Step 0.5", "Rebuilds `MEMORY.md`", "preserving any standing footer note", "Drop entries for files that no longer exist"],
+    "expected_in_skill": [
+      "Step 0.5",
+      "Rebuilds `MEMORY.md`",
+      "preserving any standing footer note",
+      "Drop entries for files that no longer exist"
+    ],
     "type": "skill-content-check"
   },
   {
     "name": "memory-step-0-7-expiry",
     "description": "Step 0.7 must surface stale memory files (last_validated > 90 days default) for confirm-delete via type:human-review issue + Telegram alert",
-    "expected_in_skill": ["Step 0.7", "EXPIRY_DAYS=90", "type:human-review", "Telegram"],
+    "expected_in_skill": [
+      "Step 0.7",
+      "EXPIRY_DAYS=90",
+      "type:human-review",
+      "Telegram"
+    ],
     "type": "skill-content-check"
   },
   {
     "name": "memory-expiry-lazy-default",
     "description": "Files without last_validated frontmatter must be skipped by Step 0.7 — lazy migration, not auto-flagged",
-    "expected_in_skill": ["Files without `last_validated:` are SKIPPED", "lazy migration"],
+    "expected_in_skill": [
+      "Files without `last_validated:` are SKIPPED",
+      "lazy migration"
+    ],
     "type": "skill-content-check"
   },
   {
     "name": "memory-outcome-metrics",
     "description": "Phase 0 must emit triaged/encoded/deleted/ambiguous/failed/expired metrics for the cron log + outcome log",
-    "expected_in_skill": ["triaged=", "encoded=", "deleted=", "ambiguous=", "expired="],
+    "expected_in_skill": [
+      "triaged=",
+      "encoded=",
+      "deleted=",
+      "ambiguous=",
+      "expired="
+    ],
     "type": "skill-content-check"
   },
   {
     "name": "outcome-log-memory-action",
     "description": "Outcome log spec must describe the new `memory` action plus the optional triaged/encoded/deleted/ambiguous/expired fields",
-    "expected_in_skill": ["`memory` (Phase 0 only", "triaged={N}", "encoded={N}", "deleted={N}", "ambiguous={N}", "expired={N}"],
+    "expected_in_skill": [
+      "`memory` (Phase 0 only",
+      "triaged={N}",
+      "encoded={N}",
+      "deleted={N}",
+      "ambiguous={N}",
+      "expired={N}"
+    ],
     "type": "skill-content-check"
   },
   {
@@ -278,49 +423,85 @@
   {
     "name": "descriptions-integrated-not-separate-mode",
     "description": "Description hygiene must be integrated into per-skill flow, not a separate /improve descriptions sub-mode",
-    "expected_in_skill": ["Description hygiene is integrated into the per-skill flow", "There is no separate `/improve descriptions` sub-mode"],
+    "expected_in_skill": [
+      "Description hygiene is integrated into the per-skill flow",
+      "There is no separate `/improve descriptions` sub-mode"
+    ],
     "type": "skill-content-check"
   },
   {
     "name": "phase1-signal-6-description-bloat",
     "description": "Phase 1 must list frontmatter description bloat as the 6th signal source, with detector script reference",
-    "expected_in_skill": ["Six sources", "Frontmatter description bloat", "scripts/scan-skill-descriptions.py", "no outcome data needed"],
+    "expected_in_skill": [
+      "Six sources",
+      "Frontmatter description bloat",
+      "scripts/scan-skill-descriptions.py",
+      "no outcome data needed"
+    ],
     "type": "skill-content-check"
   },
   {
     "name": "phase4-description-trim-strategy",
     "description": "Phase 4 must list 'Description trim' as a mutation strategy alongside the other five",
-    "expected_in_skill": ["Description trim", "≤ 300 chars", "preserving routing keywords", "semantic-judge (Gate 2)"],
+    "expected_in_skill": [
+      "Description trim",
+      "≤ 300 chars",
+      "preserving routing keywords",
+      "semantic-judge (Gate 2)"
+    ],
     "type": "skill-content-check"
   },
   {
     "name": "phase4-description-trim-single-candidate-exemption",
     "description": "Phase 4 must allow a single description-trim candidate when description bloat is the only signal — no need to fabricate alternative behavioral strategies",
-    "expected_in_skill": ["Description-trim variants are the exception", "only* signal is description bloat", "Phase 4 generates a single description-trim candidate"],
+    "expected_in_skill": [
+      "Description-trim variants are the exception",
+      "only* signal is description bloat",
+      "Phase 4 generates a single description-trim candidate"
+    ],
     "type": "skill-content-check"
   },
   {
     "name": "phase4-description-trim-guidance-what-when-diff",
     "description": "Phase 4 description-trim guidance must be WHAT + WHEN + DIFFERENTIATOR with the same trigger-preservation rule",
-    "expected_in_skill": ["Trim guidance for the Description trim strategy", "WHAT + WHEN + DIFFERENTIATOR", "semantic-judge enforces preservation"],
+    "expected_in_skill": [
+      "Trim guidance for the Description trim strategy",
+      "WHAT + WHEN + DIFFERENTIATOR",
+      "semantic-judge enforces preservation"
+    ],
     "type": "skill-content-check"
   },
   {
     "name": "clarifications-description-trim-uses-existing-gate",
     "description": "Clarifications must explain that description-trim variants follow the standard Phase 4 semantic-judge gate — no new safety mechanism",
-    "expected_in_skill": ["Description trim variants follow the same Phase 4 gate", "semantic-preservation judge", "trigger-preservation gate", "No separate carve-out"],
+    "expected_in_skill": [
+      "Description trim variants follow the same Phase 4 gate",
+      "semantic-preservation judge",
+      "trigger-preservation gate",
+      "No separate carve-out"
+    ],
     "type": "skill-content-check"
   },
   {
     "name": "phase4-judge-routing-surface-rule",
     "description": "Phase 4 semantic-judge prompt must enforce verbatim preservation of quoted phrases / backticked tokens (routing surface), and explicitly reject the 'covers the same intent' / 'preserves the core function' fallback that lets paraphrases through",
-    "expected_in_skill": ["Routing-surface preservation rule", "single-quoted phrase", "double-quoted phrase", "backtick-quoted token", "verbatim substring match", "ONLY these — are the routing surface", "Semantic equivalence does not save a missing quoted token"],
+    "expected_in_skill": [
+      "Routing-surface preservation rule",
+      "single-quoted phrase",
+      "double-quoted phrase",
+      "backtick-quoted token",
+      "verbatim substring match",
+      "ONLY these — are the routing surface",
+      "Semantic equivalence does not save a missing quoted token"
+    ],
     "type": "skill-content-check"
   },
   {
     "name": "phase4-judge-unquoted-prose-paraphrase-allowed",
     "description": "Phase 4 judge prompt must explicitly allow paraphrasing/truncating unquoted prose so legitimate trims aren't blocked",
-    "expected_in_skill": ["Unquoted prose, decorative adjectives, and explanatory clauses can be paraphrased, truncated, or dropped freely"],
+    "expected_in_skill": [
+      "Unquoted prose, decorative adjectives, and explanatory clauses can be paraphrased, truncated, or dropped freely"
+    ],
     "type": "skill-content-check"
   },
   {
@@ -397,5 +578,14 @@
     "fixture": "fixtures/descriptions/cases.json",
     "fixture_case": "edge-numbered-steps-only",
     "type": "description-detector"
+  },
+  {
+    "name": "phase1-aha-supplementary-context-role",
+    "description": "Phase 1 /aha signal description must say supplementary context, not priority hint",
+    "expected_in_skill": [
+      "supplementary context",
+      "NOT a priority hint"
+    ],
+    "type": "skill-content-check"
   }
 ]

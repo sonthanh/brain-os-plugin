@@ -111,6 +111,10 @@ If the file does not exist, omit option [5] from the rendered menu entirely (do 
 
 After audit verdict (or skip), the canonical next step is `/slice <grill-file>`. If the audit returns FAIL or FLAG verdicts, surface them verbatim and let the user decide whether to amend the grill before slicing — do not auto-block (the audit gate's job is transparency; the user owns the call).
 
+## Gotchas
+
+- **NEVER use `AskUserQuestion` inside /grill flow.** AskUserQuestion is reserved for `/grill-fast` (Mode B, pre-rendered tree candidates). /grill is a relentless free-form interview — using AskUserQuestion forces the user to pick before discussion is done, breaking the grill discipline. Route through prose recommendations + open-ended turns only.
+
 ## Outcome log
 
 Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/grill.log`:
