@@ -213,6 +213,17 @@
         "Mentions the choice is surfaced in the Step 5 quiz for user override",
         "Names the no-op behavior when no `(LIVE E2E)` AC exists (or when Step 1.6 was bypassed via `NOT-architectural` / `status:reflection`)"
       ]
+    },
+    {
+      "id": 26,
+      "prompt": "A user runs /slice on a settled grill-session.md whose `status: pass` frontmatter is intact. However, the grill was locked BEFORE the /grill end-step audit recommendation menu was introduced (prior to 2026-05-06, child #256 of ai-brain#253). No `Audit recommendation:` section appears at the end of the grill-session file. What does /slice do?",
+      "expected_output": "The skill stops before synthesizing any PRD and asks the user to run `/audit --all` manually on the grill-session first. Rationale: /slice no longer runs internal P1+P2 hard gates — trust shifted upstream to /grill's end-step audit recommendation menu (D1, child #256 of ai-brain#253). A grill locked without the end-step menu cannot confirm principle audit was acknowledged; specifically it cannot confirm P4 (concrete drives abstract) was checked — exactly the gap that produced the 2026-05-04 airtable Mode B miss (8 children shipped on unvalidated Stage-0 assumption). If `/audit --all` flags FAIL on any principle, the user must re-grill or amend before invoking /slice again. Anti-pattern: 'DO NOT slice grills that haven't been audited at /grill end-step.'",
+      "expectations": [
+        "Stops before PRD synthesis and does NOT proceed to file any issues",
+        "Asks the user to run `/audit --all` (or equivalent comprehensive audit) manually on the grill-session",
+        "References the anti-pattern 'DO NOT slice grills that haven't been audited at /grill end-step' or the shifted-trust architecture (P1+P2 gates retired, trust moved to /grill end-step)",
+        "Mentions re-grill or amend if `/audit --all` flags FAIL on any principle"
+      ]
     }
   ]
 }
