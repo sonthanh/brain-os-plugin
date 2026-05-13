@@ -143,6 +143,8 @@ Scan `{vault}/daily/grill-sessions/` for files with no section heading matching 
 
 Exclude files whose filename contains `autogrill` — these are auto-generated planning/design sessions where a formal `## Decisions` section is not required by design.
 
+Exclude files with `status: shipped` frontmatter — shipped grill sessions are completed artifacts; their decisions are locked, not missing.
+
 ### C4. Needs review triage [latent]
 Items where automated detection is uncertain go into `## Needs Review` in the report. Do not auto-fix these — human judgment required.
 
