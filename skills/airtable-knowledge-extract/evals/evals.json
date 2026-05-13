@@ -111,8 +111,7 @@
         "States the base is not auto-promoted — must pass re-anchor on a new run-id",
         "Mentions fixing the underlying issue (rubric or base schema) before retrying"
       ]
-    }
-  ,
+    },
     {
       "id": 10,
       "prompt": "The outcome log shows action=dispatch for an airtable-knowledge-extract run. What does this mean and what fields does it carry?",
@@ -124,19 +123,17 @@
         "Lists the `shape` field values including hub-spoke",
         "Lists the `strategy` field values including edge-emit"
       ]
-    }
-  ,
+    },
     {
       "id": 11,
-      "prompt": "What pre-steps must run before `bun run scripts/run.mts` for /airtable-knowledge-extract, and why?",
-      "expected_output": "Six per-base pre-steps in this order, all sharing AIRTABLE_RUN_ID: (1) classify-table-type — Stage 0 LLM table-type classifier (cached at ${SKILL_DIR}/cache/table-types/<base-id>.json, shared across runs); (2) classify-clusters — link-graph clusters via multipleRecordLinks; (3) cluster-classifier — cluster shapes (orphan|pair|chain|tree|hub-spoke|graph); (4) schema-analyser — natural keys + entity-table verdicts (depends on Stage 0); (5) legacy-link-detector — cross-cluster cleanup tasks; (6) seed-selection per cluster (inner jq loop over clusters-<base-id>.json — seed-selection.mts requires <base-id> <cluster-id> and exits non-zero if cluster-id is omitted). run.mts's internal dispatcher (added in #237/#268) then loads cluster-shapes-<base-id>.json + natural-keys-<base-id>.json + the Stage 0 cache and emits the dispatch plan; skipping any pre-step aborts run.mts with 'cache not found at ...' from the dispatcher.",
+      "prompt": "The outcome log shows a `fail` result with `kind=escalated-re-anchor` and `reason=run.mts legacy extract-slice fired before dispatcher entity_strategy=none could suppress`. What happened and what should the operator do?",
+      "expected_output": "This is NOT an operator rejection — it is a code-path bug: the legacy extract-slice in run.mts fired before the dispatcher's entity_strategy=none suppression took effect, creating a synthetic entity that failed reverse-lookup verification. Check the `reason=` field to distinguish this from a standard operator-rejection. Do NOT adjust the rubric or base schema; the fix requires a code change in run.mts. Retry with a new run-id only after the code is fixed.",
       "expectations": [
-        "Lists all six pre-steps in dependency order: classify-table-type, classify-clusters, cluster-classifier, schema-analyser, legacy-link-detector, seed-selection",
-        "States seed-selection.mts requires <base-id> <cluster-id> (per-cluster invocation, not per-base)",
-        "Mentions the inner jq loop over clusters-<base-id>.json to enumerate cluster IDs for seed-selection",
-        "Mentions that schema-analyser depends on the Stage 0 classify-table-type cache",
-        "States run.mts's internal dispatcher requires Stage 0 + cluster-shapes + natural-keys (so all four classifier pre-steps are mandatory)",
-        "Mentions the failure mode: skipping a pre-step aborts run.mts with 'cache not found' from the dispatcher"
+        "States the failure is a code-path bug, NOT an operator rejection of the re-anchor",
+        "States the operator should check the `reason=` field to distinguish sub-cases",
+        "States the operator should NOT adjust the rubric or base schema",
+        "States the fix requires a code change (not a rubric or schema change)",
+        "Mentions retry with a new run-id only after the code is fixed"
       ]
     }
   ]
