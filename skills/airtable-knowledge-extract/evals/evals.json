@@ -135,6 +135,17 @@
         "States the fix requires a code change (not a rubric or schema change)",
         "Mentions retry with a new run-id only after the code is fixed"
       ]
+    },
+    {
+      "id": 12,
+      "prompt": "The outcome log shows an extract result with kind=standalone-s5a-s7-s5b and reviewer_score=1.0, reviewer_pass=true. What does this mean?",
+      "expected_output": "kind=standalone-s5a-s7-s5b is a pass outcome — a standalone sequential run using the S5a (extract slice) → S7 (Opus reviewer) → S5b (post-review integration) path. reviewer_score=1.0 means all slices achieved 100% pass-rate, clearing the ≥0.95 gate. Fields entities_emitted, edges_added, edges_updated report extraction output counts; reviewer_pass=true confirms the gate passed.",
+      "expectations": [
+        "States kind=standalone-s5a-s7-s5b is a pass outcome, not an error",
+        "Explains S5a-S7-S5b as the sequential extract → Opus review → post-review path",
+        "States reviewer_score is the Opus pass-rate metric against the ≥0.95 gate",
+        "Mentions entities_emitted, edges_added, or edges_updated as extraction output metrics"
+      ]
     }
   ]
 }
