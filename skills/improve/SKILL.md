@@ -298,5 +298,5 @@ Append to `{vault}/daily/skill-outcomes/improve.log`:
 
 - `action`: `improve` (Phase 1–5 single-skill), `memory` (Phase 0 only — triage + index reconcile + expiry), `rank` (no-arg rank-only)
 - `output_path`: `daily/improve-reports/{date}-{skill}.md` for improve/rank; `N/A` for memory
-- `result`: `pass` if evals improved and changes kept OR ≥1 memory file processed cleanly; `partial` if some reverted/some triages ambiguous; `fail` if all reverted or no input data
+- `result`: `pass` if evals improved and changes kept, OR ≥1 memory file processed cleanly, OR no new patterns found (score=100%, variants=0); `partial` if some variants reverted or some triages ambiguous; `fail` if all reverted or no input data. `commit:pending` does not change result — reflects improvement quality, not commit status.
 - Optional: `args="{skill-name}"`, `score={after_pass}/{after_total}`, `desc_trim_applied=1`, `triaged={N}`, `encoded={N}`, `deleted={N}`, `ambiguous={N}`, `expired={N}`

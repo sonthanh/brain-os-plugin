@@ -587,5 +587,15 @@
       "NOT a priority hint"
     ],
     "type": "skill-content-check"
+  },
+  {
+    "name": "outcome-log-commit-pending-not-quality-signal",
+    "description": "Outcome log result spec must include no-new-patterns=pass case and note that commit:pending does not change result classification",
+    "expected_in_skill": [
+      "no new patterns found",
+      "commit:pending",
+      "reflects improvement quality, not commit status"
+    ],
+    "type": "skill-content-check"
   }
 ]
