@@ -597,5 +597,15 @@
       "reflects improvement quality, not commit status"
     ],
     "type": "skill-content-check"
+  },
+  {
+    "name": "phase4-desc-trim-token-prescreen",
+    "description": "Phase 4 description-trim guidance must mandate pre-screening quoted tokens from pre-edit description before writing candidate to prevent doomed trims",
+    "expected_in_skill": [
+      "Pre-screen",
+      "List every single-quoted",
+      "appears verbatim in your candidate before writing"
+    ],
+    "type": "skill-content-check"
   }
 ]

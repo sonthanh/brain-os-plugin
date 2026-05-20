@@ -176,7 +176,7 @@ Generate 3-5 candidate edits addressing Phase 2 patterns via different mutation 
 **Mutation strategies:**
 
 | Strategy | What it does |
-|----------|-------------|
+|----------|--------------|
 | **Narrow rule** | Add one specific rule targeting the exact failure pattern |
 | **Broad principle** | Add a general principle covering this and adjacent failures |
 | **Gotcha addition** | Add to Gotchas section as warning/anti-pattern |
@@ -186,7 +186,9 @@ Generate 3-5 candidate edits addressing Phase 2 patterns via different mutation 
 
 Each candidate must use a meaningfully different strategy. **Minimum 3 candidates required** for behavioral patterns. **Description-trim variants are the exception**: when the *only* signal is description bloat (no corrections, no traces, no grill questions), Phase 4 generates a single description-trim candidate and runs it through the gates.
 
-**Trim guidance for the Description trim strategy:** preserve **WHAT + WHEN + DIFFERENTIATOR**. Move workflow steps and multi-paragraph elaboration to SKILL.md body. The semantic-judge enforces preservation of all routing keywords.
+**Trim guidance for the Description trim strategy:**
+1. **Pre-screen:** List every single-quoted (`'…'`), double-quoted (`"…"`), and backtick-quoted (`` `…` ``) token from the pre-edit description. Verify each appears verbatim in your candidate before writing — the semantic-judge enforces preservation of all routing keywords by returning FAIL on any missing token.
+2. Preserve **WHAT + WHEN + DIFFERENTIATOR**. Move workflow steps and multi-paragraph elaboration to SKILL.md body.
 
 ### Evaluate and select
 
