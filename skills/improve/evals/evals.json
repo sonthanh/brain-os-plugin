@@ -607,5 +607,13 @@
       "appears verbatim in your candidate before writing"
     ],
     "type": "skill-content-check"
+  },
+  {
+    "name": "outcome-log-no-patterns-supersedes-size-gate",
+    "description": "Outcome log result spec must state that no-new-patterns supersedes size-gate-blocked — prevents misclassifying as partial when target is over 20KB but no behavioral patterns exist",
+    "expected_in_skill": [
+      "no-new-patterns supersedes size-gate-blocked"
+    ],
+    "type": "skill-content-check"
   }
 ]
