@@ -88,5 +88,11 @@
     "description": "C3 empty grill detection must exclude grill-session files with status: shipped frontmatter — shipped grills are completed artifacts; their decisions are locked, not missing. Prevents false-positive flags that cause inconsistency between MCP and interactive runs.",
     "args": "vault-lint",
     "expect": "status: shipped"
+  },
+  {
+    "id": "a4-script-failure-context-skip",
+    "description": "A4 must specify explicit recovery for script execution failure (non-zero exit or corrupt output): revert uncommitted changes and treat as context-constrained skip — result pass, not partial. Prevents the 2026-05-30 Linux stat-mismatch partial.",
+    "args": "vault-lint",
+    "expect": "revert any uncommitted changes"
   }
 ]

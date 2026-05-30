@@ -241,3 +241,4 @@ git pull --rebase && git push
 - Entity pages are scoped: `people/`, `companies/`, `meetings/`, `business/decisions/`, `business/projects/`. Don't enforce bidirectional links on grill notes, aha moments, or research reports.
 - The `scripts/update-readmes.sh` script must exist in the vault. If missing, skip A4 and note it in the report.
 - Phase B requires `gh` CLI authenticated (`gh auth status`). If unauthenticated or `gh_task_repo:` unset, the phase skips silently with a report note — it does not fail the whole run.
+- If `scripts/update-readmes.sh` exists but exits non-zero (e.g., macOS `stat -f "%m %N"` syntax on Linux), revert any uncommitted changes (`git checkout -- .`) and treat A4 as a context-constrained skip — log `pass`, not `partial`.
