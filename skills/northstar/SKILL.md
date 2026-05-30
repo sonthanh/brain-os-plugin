@@ -40,7 +40,7 @@ Hand the shape choice to `/grill-fast` (invoke it via the Skill tool — do **no
 
 The user picks a shape (or a hybrid). That pick is the *candidate* star — Step 4 still has to pass it through the framework audit before it locks.
 
-**Fall back to `/grill`** (linear, not multi-tree) when the company genuinely has one obvious star and rendering 4 candidate shapes would be artificial — same abort condition `/grill-fast` uses on itself. Don't force a 4-tree render onto a 1-dimensional choice.
+**Don't assume `/grill-fast` always renders trees — expect either path.** It fires only when the shape choice has ≥3 architectural decisions. In practice that's **topology-driven**: a multi-line / multi-P&L operator has enough live forks (single-vs-layered topology + archetype + quantity-only-vs-quantity+quality apex) to render ≥4 trees, whereas a single-product company has topology foreclosed and usually lands at <3 ARCH — so `/grill-fast` will itself **abort to `/grill`**. That's correct, not a failure. **Fall back to `/grill`** (linear, not multi-tree) whenever the company has one obvious star and 4 candidate shapes would be artificial — don't force a 4-tree render onto a 1-dimensional choice.
 
 ### Step 3 — Map the tier hierarchy
 
@@ -112,7 +112,7 @@ zone: context
 
 The single aligning metric for <company>. Purpose: align decisions and prevent drift.
 - Reusable framework: link to the framework reference / research report.
-- Full decision + audit: link to the grill-session record.
+- Full decision + audit: link to the grill-session record. (only if one exists — see the "Only link artifacts that actually exist" note below)
 
 Strategy (verbatim): "<the strategy the star expresses>"
 
@@ -140,12 +140,14 @@ Strategy (verbatim): "<the strategy the star expresses>"
 - Numbers still unbaselined; causal links unproven; reconciliation with OKRs.
 
 ## Related
-- links to strategy / goals / OKRs.
+- links to strategy / goals / OKRs. (only those that exist — see the "Only link artifacts that actually exist" note below)
 
 ---
 ## Timeline
 - <date> — defined via /northstar (grill + framework audit). Steering use gated on the validation above.
 ```
+
+**Only link artifacts that actually exist.** Include the framework-reference link always, but a `[[grill-session]]` / `strategy.md` / `goals.md` link only when that file is real. On a greenfield company (no context dir, or a pre-stated pick that skipped the grill), omit the link or annotate the gap — never fabricate a path to a doc that doesn't exist.
 
 ## Multi-business / layered hierarchy
 

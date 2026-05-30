@@ -82,6 +82,15 @@
         "/audit p1 p4 is optional and off by default",
         "Does not mandatorily run /audit --all every invocation"
       ]
+    },
+    {
+      "id": 9,
+      "prompt": "You're defining a North Star for a brand-new company with no existing vault context and no grill-session file. How should the output handle links to a grill-session or strategy/goals docs?",
+      "expected_output": "Only link artifacts that actually exist. The framework-reference link is always included, but grill-session / strategy.md / goals.md links are included only when those files are real. On a greenfield company, omit the link or annotate the gap — never fabricate a path to a doc that doesn't exist.",
+      "expectations": [
+        "Only links artifacts that actually exist",
+        "On a greenfield company, omit the link or annotate the gap rather than fabricating a path"
+      ]
     }
   ]
 }
