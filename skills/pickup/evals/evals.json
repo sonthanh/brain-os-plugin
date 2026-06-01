@@ -94,5 +94,11 @@
     "description": "Every close-step in /pickup (handover-doc completion, autogrill auto-close ≥80%, plan-execution wrap-up) must invoke close-issue.sh (central helper that strips status:* labels first, plugging the ghost-label leak fixed in #160) instead of inlining `gh issue close`. Bare gh issue close re-creates the leak by leaving status:in-progress stuck on the closed issue.",
     "args": "pickup",
     "expect": "close-issue.sh"
+  },
+  {
+    "id": "deferred-work-is-pass-not-partial",
+    "description": "Skill must clarify that partial means human-decision-is-blocker, not work-deferred-to-follow-up. When remaining ACs are tracked in a follow-up issue, log pass with a deferred-to-# note, not partial.",
+    "args": "pickup",
+    "expect": "deferred-to-#"
   }
 ]

@@ -268,6 +268,6 @@ Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/pickup.log
 ```
 
 - `action`: `pickup` (interactive), `pickup:N` (direct claim of issue N), or `auto:deprecated` (user invoked `/pickup auto` — log the deprecation event, do not spawn)
-- `result`: `pass` if issues started/completed, `partial` if some escalated to user, `fail` if unrecoverable error (e.g. `gh` auth failure or network)
+- `result`: `pass` if issues started/completed, `partial` if some escalated to user (human decision is active blocker), `fail` if unrecoverable error (e.g. `gh` auth failure or network). Deferred-but-tracked work (remaining ACs handed off to a follow-up issue) → close original → log `pass | note="deferred-to-#N"`. Only `partial` when human must decide before work resumes.
 - **No eligible tasks** (empty Ready column, no `owner:human` issues, or all already in-progress) → log `pass | score=0/0`, not `fail`
 - Optional: `args="{issue-number}"`
