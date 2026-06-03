@@ -11,6 +11,13 @@ let outputDir: string;
 
 const SR = 44100;
 
+// mixConcat and these fixtures both shell out to ffmpeg/ffprobe. Skip (don't
+// hard-fail) when they're absent so the suite stays green on machines without
+// them — CI installs ffmpeg, so this only skips on bare local/fork envs.
+const hasFfmpeg =
+  spawnSync("ffmpeg", ["-version"], { stdio: "ignore" }).status === 0 &&
+  spawnSync("ffprobe", ["-version"], { stdio: "ignore" }).status === 0;
+
 function genSine(path: string, durationSec: number, freqHz: number): void {
   const result = spawnSync(
     "ffmpeg",
@@ -35,6 +42,7 @@ function probeDurationSec(path: string): number {
 }
 
 beforeAll(() => {
+  if (!hasFfmpeg) return;
   workDir = mkdtempSync(join(tmpdir(), "mix-concat-"));
   inputDir = join(workDir, "in");
   outputDir = join(workDir, "out");
@@ -46,10 +54,11 @@ beforeAll(() => {
 });
 
 afterAll(() => {
+  if (!hasFfmpeg) return;
   rmSync(workDir, { recursive: true, force: true });
 });
 
-describe("mixConcat — 3 tracks", () => {
+describe.skipIf(!hasFfmpeg)("mixConcat — 3 tracks", () => {
   test("produces mix mp3 + tracklist.txt at expected paths (tracer)", async () => {
     const mixPath = join(outputDir, "mix.mp3");
     const tracklistPath = join(outputDir, "mix.tracklist.txt");
@@ -95,7 +104,7 @@ describe("mixConcat — 3 tracks", () => {
   });
 });
 
-describe("mixConcat — edge cases", () => {
+describe.skipIf(!hasFfmpeg)("mixConcat — edge cases", () => {
   test("single-track input: mix mp3 produced without crossfade error", async () => {
     const singleDir = join(workDir, "single-in");
     spawnSync("mkdir", ["-p", singleDir]);
