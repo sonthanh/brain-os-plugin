@@ -521,8 +521,8 @@ export interface StoryStatus {
   error?: string;
 }
 
-export interface StatusWriter {
-  write(status: StoryStatus): void;
+export interface StatusWriter<T = StoryStatus> {
+  write(status: T): void;
 }
 
 // Per-child result files written by /impl workers (see SKILL.md § Workflow —
@@ -879,9 +879,9 @@ export class FileLogger implements Logger {
   }
 }
 
-export class FileStatusWriter implements StatusWriter {
+export class FileStatusWriter<T = StoryStatus> implements StatusWriter<T> {
   constructor(private path: string) {}
-  write(status: StoryStatus): void {
+  write(status: T): void {
     const fs = require("fs");
     fs.writeFileSync(this.path, JSON.stringify(status));
   }

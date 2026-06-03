@@ -1,0 +1,22 @@
+{
+  // Typecheck source under strict mode. Test files are excluded here and
+  // exercised at runtime by `bun test` — strict-typing every inline `fetch`
+  // mock against bun's augmented `fetch` (the `preconnect` method) is noise,
+  // not real bugs. `tsc --noEmit` covers source; `bun test` covers tests.
+  "compilerOptions": {
+    "lib": ["ESNext"],
+    "target": "ESNext",
+    "module": "Preserve",
+    "moduleDetection": "force",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noFallthroughCasesInSwitch": true,
+    "types": ["bun", "node"]
+  },
+  "include": ["scripts/**/*.ts", "scripts/**/*.mts", "skills/**/*.ts", "skills/**/*.mts"],
+  "exclude": ["node_modules", "evals/results", "**/*.test.ts"]
+}

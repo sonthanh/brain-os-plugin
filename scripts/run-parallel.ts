@@ -442,7 +442,7 @@ async function main() {
   const statusPath = `${logDir}/${batchId}.status`;
 
   const logger = new FileLogger(logPath);
-  const status = new FileStatusWriter(statusPath);
+  const status = new FileStatusWriter<ParallelStatus>(statusPath);
   const deps: ParallelDeps = {
     gh: new RealGh(repo),
     spawn: new RealSpawn(),
