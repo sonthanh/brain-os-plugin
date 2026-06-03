@@ -100,5 +100,11 @@
     "description": "Skill must clarify that partial means human-decision-is-blocker, not work-deferred-to-follow-up. When remaining ACs are tracked in a follow-up issue, log pass with a deferred-to-# note, not partial.",
     "args": "pickup",
     "expect": "deferred-to-#"
+  },
+  {
+    "id": "deferred-acs-explicit-action-rule",
+    "description": "Skill must have an explicit rule (beyond the outcome log note) that when some ACs are done and the rest are not human-blocked (design approved, implementation pending), the action is to create a follow-up issue and log pass — not partial. Captures the pickup:285 incident where 'voice-first inversion approved, impl+DoD#4 forward work' was logged as partial instead of pass+deferred.",
+    "args": "pickup",
+    "expect": "not human-blocked"
   }
 ]

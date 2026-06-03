@@ -240,6 +240,10 @@ Labels change across sessions. Never cache the Ready list within a long interact
 
 **Default:** When creating new tasks, default to `owner:human` unless the task is a pure mechanical transform (file rewrite per spec, code refactor with clear before/after, format conversion).
 
+### Never log partial for approved-design + pending-impl
+
+If the design decision was already obtained (user gave the green light) but implementation is still pending: this is **not human-blocked** work. Create a new follow-up issue for the remaining ACs, close the current one, and log `pass | note="deferred-to-#N"`. Logging `partial` here is wrong — `partial` means the human must decide something *before* work can resume.
+
 ## Flow
 ```
 Session A:
