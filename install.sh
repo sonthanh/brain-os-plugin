@@ -105,7 +105,7 @@ install_skills() {
       rm "$TARGET_DIR/$skill"
     elif [ -d "$TARGET_DIR/$skill" ]; then
       if [ "$FORCE" = true ]; then
-        rm -r "$TARGET_DIR/$skill"
+        rm -r "${TARGET_DIR:?}/${skill:?}"
       else
         echo "  ! $skill exists as directory, skipping (use --force to replace)"
         continue
