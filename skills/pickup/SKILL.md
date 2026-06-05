@@ -244,6 +244,8 @@ Labels change across sessions. Never cache the Ready list within a long interact
 
 If the design decision was already obtained (user gave the green light) but implementation is still pending: this is **not human-blocked** work. Create a new follow-up issue for the remaining ACs, close the current one, and log `pass | note="deferred-to-#N"`. Logging `partial` here is wrong — `partial` means the human must decide something *before* work can resume.
 
+**Example (pickup:285):** "voice-first inversion approved, impl+DoD#4 forward work" → design was approved, only implementation remained → correct log: `pass | note="deferred-to-#N"`, not `partial`.
+
 ## Flow
 ```
 Session A:
