@@ -106,5 +106,23 @@
     "description": "Spec must declare that the tree-build logic lives in build-stories-tree.ts with bun-test fixtures (NOT bash), per the global TS+bun-test rule. Enforces the no-fix-bug-via-bash-wrapper invariant in the Rules section. (#262)",
     "args": "status",
     "expect": "build-stories-tree.ts"
+  },
+  {
+    "id": "stale-story-contract-section",
+    "description": "Spec must document the anti-drift stale-story contract — active stories whose subtree has no GitHub activity for > STALE_THRESHOLD_DAYS days are surfaced in the ⚠️ Stale stories section above all normal sections. (ai-brain#178)",
+    "args": "status",
+    "expect": "Stale-story contract"
+  },
+  {
+    "id": "stale-story-threshold-constant",
+    "description": "Spec must name STALE_THRESHOLD_DAYS as the staleness threshold and state it is a constant (KISS), not an env var — so the threshold source is unambiguous. (ai-brain#178)",
+    "args": "status",
+    "expect": "STALE_THRESHOLD_DAYS"
+  },
+  {
+    "id": "stale-story-updatedat-signal",
+    "description": "Spec must declare the staleness signal is max updatedAt over the subtree (repo-agnostic), NOT the issue's original per-file git-log sketch — so the design rationale survives future edits. (ai-brain#178)",
+    "args": "status",
+    "expect": "max `updatedAt` over the whole subtree"
   }
 ]

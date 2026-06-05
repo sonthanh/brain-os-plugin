@@ -5,8 +5,12 @@ import {
   buildPhaseLinks,
   cleanTitle,
   collapseClosedSiblings,
+  collectSubtree,
   findBenchPlans,
   findRoots,
+  findStaleStories,
+  renderStaleBlock,
+  STALE_THRESHOLD_DAYS,
   formatClosedGroup,
   hasOpenDescendant,
   isActivePlan,
@@ -148,6 +152,7 @@ describe("normalizeIssue", () => {
       parent: 237,
       blockers: [251],
       title: "Live Staronline replay evidence",
+      updatedAtMs: 0,
     });
   });
 
@@ -167,6 +172,7 @@ describe("normalizeIssue", () => {
       parent: null,
       blockers: [],
       title: "Done thing",
+      updatedAtMs: 0,
     });
   });
 });
@@ -183,6 +189,7 @@ describe("statusBadge", () => {
     parent: null,
     blockers: [],
     title: "x",
+    updatedAtMs: 0,
   });
   test("CLOSED → [closed]", () => {
     expect(statusBadge(make("CLOSED", null))).toBe("[closed]");
@@ -226,6 +233,7 @@ const mkIssue = (
   priority: Issue["priority"] = null,
   blockers: number[] = [],
   title = `T${number}`,
+  updatedAtMs = 0,
 ): Issue => ({
   number,
   state,
@@ -235,6 +243,7 @@ const mkIssue = (
   parent,
   blockers,
   title,
+  updatedAtMs,
 });
 
 describe("buildAdjacency", () => {
@@ -846,5 +855,117 @@ describe("renderStoriesBlock — end to end", () => {
       } as unknown as RawIssue,
     ];
     expect(() => renderStoriesBlock(raw)).not.toThrow();
+  });
+});
+
+// ----- stale-story detection (anti-drift, ai-brain#178) -------------------
+
+describe("collectSubtree", () => {
+  test("includes root + all descendants", () => {
+    const adj = new Map<number, number[]>([
+      [1, [2, 3]],
+      [2, [4]],
+    ]);
+    expect(collectSubtree(1, adj).sort((a, b) => a - b)).toEqual([1, 2, 3, 4]);
+  });
+
+  test("cycle-safe — circular parent refs don't loop forever", () => {
+    const adj = new Map<number, number[]>([
+      [1, [2]],
+      [2, [1]],
+    ]);
+    expect(collectSubtree(1, adj).sort((a, b) => a - b)).toEqual([1, 2]);
+  });
+});
+
+describe("findStaleStories (anti-drift)", () => {
+  const DAY = 86_400_000;
+  const NOW = Date.parse("2026-06-05T00:00:00Z");
+  const ago = (days: number) => NOW - days * DAY;
+  const run = (xs: Issue[]) => {
+    const by = new Map(xs.map((i) => [i.number, i]));
+    return findStaleStories(xs, buildAdjacency(xs), by, NOW);
+  };
+
+  test("threshold constant is 14 (AC#2: KISS, not env-var)", () => {
+    expect(STALE_THRESHOLD_DAYS).toBe(14);
+  });
+
+  test("active story whose whole subtree is old → STALE with correct day count", () => {
+    const issues = [
+      mkIssue(176, "OPEN", null, true, "in-progress", "p2", [], "Story: Vault entity graph", ago(21)),
+      mkIssue(180, "OPEN", 176, false, "ready", null, [], "child A", ago(30)),
+      mkIssue(181, "OPEN", 176, false, "backlog", null, [], "child B", ago(40)),
+    ];
+    expect(run(issues)).toEqual([
+      { number: 176, title: "Vault entity graph", daysStale: 21 },
+    ]);
+  });
+
+  test("recent child activity → NOT stale (AC#3: a worked child clears the story)", () => {
+    const issues = [
+      mkIssue(176, "OPEN", null, true, "in-progress", "p2", [], "Story: Vault entity graph", ago(40)),
+      mkIssue(180, "OPEN", 176, false, "in-progress", null, [], "child A", ago(2)),
+    ];
+    expect(run(issues)).toEqual([]);
+  });
+
+  test("exactly 14d is not stale; 15d is (boundary)", () => {
+    expect(run([mkIssue(1, "OPEN", null, true, "in-progress", null, [], "Story: X", ago(14))])).toEqual([]);
+    expect(run([mkIssue(1, "OPEN", null, true, "in-progress", null, [], "Story: X", ago(15))])).toEqual([
+      { number: 1, title: "X", daysStale: 15 },
+    ]);
+  });
+
+  test("no timestamp signal (updatedAtMs 0) → skipped, never stale", () => {
+    expect(run([mkIssue(1, "OPEN", null, true, "in-progress", null, [], "Story: X", 0)])).toEqual([]);
+  });
+
+  test("bench plan (backlog, no open children) is excluded", () => {
+    expect(run([mkIssue(1, "OPEN", null, true, "backlog", null, [], "Story: bench", ago(99))])).toEqual([]);
+  });
+
+  test("multiple stale stories sorted most-stale first", () => {
+    const issues = [
+      mkIssue(10, "OPEN", null, true, "in-progress", null, [], "Story: A", ago(20)),
+      mkIssue(20, "OPEN", null, true, "in-progress", null, [], "Story: B", ago(35)),
+    ];
+    expect(run(issues).map((s) => s.number)).toEqual([20, 10]);
+  });
+});
+
+describe("renderStaleBlock", () => {
+  const DAY = 86_400_000;
+  const NOW = Date.parse("2026-06-05T00:00:00Z");
+  const iso = (days: number) => new Date(NOW - days * DAY).toISOString();
+
+  test("renders header + STALE line from ISO updatedAt, Story: prefix stripped", () => {
+    const raw: RawIssue[] = [
+      {
+        number: 176,
+        state: "OPEN",
+        labels: [{ name: "type:plan" }, { name: "status:in-progress" }],
+        body: "",
+        title: "Story: Vault entity graph",
+        updatedAt: iso(21),
+      },
+    ];
+    const out = renderStaleBlock(raw, NOW);
+    expect(out).toContain("### ⚠️ Stale stories (1)");
+    expect(out).toContain("- ⚠️ STALE: #176 — Vault entity graph — 21d no activity");
+  });
+
+  test("empty string when nothing is stale", () => {
+    const raw: RawIssue[] = [
+      {
+        number: 1,
+        state: "OPEN",
+        labels: [{ name: "type:plan" }, { name: "status:in-progress" }],
+        body: "",
+        title: "Story: Fresh",
+        updatedAt: iso(2),
+      },
+    ];
+    expect(renderStaleBlock(raw, NOW)).toBe("");
   });
 });

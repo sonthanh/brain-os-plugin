@@ -104,9 +104,10 @@ if [ -n "${GH_TASK_REPO:-}" ] && command -v gh >/dev/null 2>&1; then
   # Bulk lookup table — needs CLOSED issues for the Stories tree (parent
   # refs in CLOSED bodies + closed-leaf collapse), kept as a separate query.
   # `body` + `title` are needed by build-stories-tree.ts to parse `## Parent`
-  # / `## Blocked by` and render labels.
+  # / `## Blocked by` and render labels. `updatedAt` feeds the stale-story
+  # anti-drift check (ai-brain#178).
   gh issue list -R "$GH_TASK_REPO" --state all \
-    --limit 500 --json number,state,labels,body,title > "$TMP_DIR/all-states.json" 2>/dev/null &
+    --limit 500 --json number,state,labels,body,title,updatedAt > "$TMP_DIR/all-states.json" 2>/dev/null &
   wait
 
   slice_by_label() {
@@ -222,6 +223,19 @@ format_ready_issues() {
     fi
   done
 }
+
+# --- Stale Stories (anti-drift, ai-brain#178) ----------------------------
+# Active type:plan stories whose entire subtree (story + every descendant) has
+# had no GitHub issue activity (max updatedAt) in > STALE_THRESHOLD_DAYS days.
+# Rendered ABOVE all normal sections because a forgotten strategic story is the
+# highest-signal drift the briefing can surface. Delegated to the same TS helper
+# as the Stories tree (logic, not bash). Empty output ⇒ section omitted.
+if $GH_AVAILABLE && [ -s "$TMP_DIR/all-states.json" ] && command -v bun >/dev/null 2>&1; then
+  STALE_OUT=$(bun run "$SCRIPT_DIR/build-stories-tree.ts" --stale "$TMP_DIR/all-states.json" 2>/dev/null || true)
+  if [ -n "$STALE_OUT" ]; then
+    { printf '%s\n' "$STALE_OUT"; echo ""; } >> "$TMP_FILE"
+  fi
+fi
 
 # --- Pending Handovers ---------------------------------------------------
 if $GH_AVAILABLE; then

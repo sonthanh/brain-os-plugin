@@ -31,6 +31,17 @@
 import { readFileSync } from "node:fs";
 
 // ============================================================
+// Constants
+// ============================================================
+
+const MS_PER_DAY = 86_400_000;
+
+// Anti-drift threshold (ai-brain#178). A constant, not an env var, by design
+// (KISS): an active story whose entire subtree has had no GitHub issue
+// activity for longer than this many days is surfaced as STALE.
+export const STALE_THRESHOLD_DAYS = 14;
+
+// ============================================================
 // Types
 // ============================================================
 
@@ -54,6 +65,11 @@ export interface RawIssue {
   // gh occasionally returns issues with an undefined `title` field — defended
   // in `normalizeIssue` so downstream parsers can rely on a string.
   title?: string;
+  // ISO-8601 last-activity timestamp from `gh ... --json updatedAt`. Bumped by
+  // comments, edits, label changes, child closes, and cross-referenced commits.
+  // Optional so existing fixtures without it still normalize (→ updatedAtMs 0,
+  // which the stale check treats as "no signal" and skips).
+  updatedAt?: string;
 }
 
 export interface Issue {
@@ -65,6 +81,8 @@ export interface Issue {
   parent: number | null;
   blockers: number[];
   title: string;
+  // Epoch ms of last activity (0 when the source omitted `updatedAt`).
+  updatedAtMs: number;
 }
 
 export interface PhaseInfo {
@@ -163,6 +181,9 @@ export function normalizeIssue(raw: RawIssue): Issue {
     }
   }
   const body = raw.body ?? "";
+  // `Date.parse` of a missing/garbage timestamp is NaN; `|| 0` floors it so
+  // downstream math stays finite and the stale check skips it as "no signal".
+  const updatedAtMs = (raw.updatedAt ? Date.parse(raw.updatedAt) : 0) || 0;
   return {
     number: raw.number,
     state: raw.state === "CLOSED" ? "CLOSED" : "OPEN",
@@ -172,6 +193,7 @@ export function normalizeIssue(raw: RawIssue): Issue {
     parent: parseParentRef(body),
     blockers: parseBlockers(body),
     title,
+    updatedAtMs,
   };
 }
 
@@ -546,17 +568,107 @@ export function renderStoriesBlock(rawIssues: RawIssue[]): string {
 }
 
 // ============================================================
+// Stale-story detection (anti-drift, ai-brain#178)
+// ============================================================
+
+// All issue numbers in the subtree rooted at `rootNum`, INCLUDING the root.
+// Cycle-safe via a `seen` set so malformed circular `## Parent` refs can't
+// loop forever (same guard rationale as hasOpenDescendant).
+export function collectSubtree(
+  rootNum: number,
+  adj: Map<number, number[]>,
+): number[] {
+  const seen = new Set<number>([rootNum]);
+  const stack = [...(adj.get(rootNum) ?? [])];
+  while (stack.length) {
+    const n = stack.pop()!;
+    if (seen.has(n)) continue;
+    seen.add(n);
+    for (const c of adj.get(n) ?? []) stack.push(c);
+  }
+  return [...seen];
+}
+
+export interface StaleStory {
+  number: number;
+  title: string;
+  daysStale: number;
+}
+
+// An ACTIVE story (same roots the Stories block renders) is stale when its
+// entire subtree — the story plus every descendant — has had no GitHub issue
+// activity for more than `thresholdDays`. "Activity" = max `updatedAt` over the
+// subtree, which the brain-os workflow bumps on every /impl close, comment,
+// label flip, and cross-referenced commit. AC#3 ("not stale if any child has a
+// recent commit") holds because a worked child carries a recent `updatedAt`.
+//
+// Bench plans are deliberately excluded: a backlog plan with no open children
+// isn't being worked, so "stale" is meaningless for it.
+export function findStaleStories(
+  issues: Issue[],
+  adj: Map<number, number[]>,
+  byNumber: Map<number, Issue>,
+  nowMs: number,
+  thresholdDays: number = STALE_THRESHOLD_DAYS,
+): StaleStory[] {
+  const roots = findRoots(issues, adj, byNumber);
+  const out: StaleStory[] = [];
+  for (const root of roots) {
+    let maxUpdated = 0;
+    for (const n of collectSubtree(root.number, adj)) {
+      const issue = byNumber.get(n);
+      if (issue && issue.updatedAtMs > maxUpdated) maxUpdated = issue.updatedAtMs;
+    }
+    if (maxUpdated === 0) continue; // no timestamp signal → can't judge
+    const daysStale = Math.floor((nowMs - maxUpdated) / MS_PER_DAY);
+    if (daysStale > thresholdDays) {
+      out.push({ number: root.number, title: cleanTitle(root.title), daysStale });
+    }
+  }
+  // Most-stale first; tie-break on number for deterministic output.
+  return out.sort((a, b) => b.daysStale - a.daysStale || a.number - b.number);
+}
+
+// Markdown for the "⚠️ Stale stories" section. Empty string when nothing is
+// stale (the caller then omits the section entirely).
+export function renderStaleBlock(rawIssues: RawIssue[], nowMs: number): string {
+  const issues = rawIssues.map(normalizeIssue);
+  const byNumber = new Map(issues.map((i) => [i.number, i]));
+  const adj = buildAdjacency(issues);
+  const stale = findStaleStories(issues, adj, byNumber, nowMs);
+  if (stale.length === 0) return "";
+  const lines = [`### ⚠️ Stale stories (${stale.length})`];
+  for (const s of stale) {
+    lines.push(`- ⚠️ STALE: #${s.number} — ${s.title} — ${s.daysStale}d no activity`);
+  }
+  return lines.join("\n");
+}
+
+// ============================================================
 // CLI
 // ============================================================
 
 if (import.meta.main) {
-  const path = process.argv[2];
-  if (!path) {
-    console.error("usage: build-stories-tree.ts <all-states-body.json>");
-    process.exit(2);
+  const args = process.argv.slice(2);
+  // `--stale <json>` emits the anti-drift block; bare `<json>` emits the
+  // Stories tree. Both consume the same all-states gh payload.
+  if (args[0] === "--stale") {
+    const path = args[1];
+    if (!path) {
+      console.error("usage: build-stories-tree.ts --stale <all-states-body.json>");
+      process.exit(2);
+    }
+    const raw: RawIssue[] = JSON.parse(readFileSync(path, "utf8"));
+    const out = renderStaleBlock(raw, Date.now());
+    if (out) process.stdout.write(out + "\n");
+  } else {
+    const path = args[0];
+    if (!path) {
+      console.error("usage: build-stories-tree.ts <all-states-body.json>");
+      process.exit(2);
+    }
+    const raw: RawIssue[] = JSON.parse(readFileSync(path, "utf8"));
+    const out = renderStoriesBlock(raw);
+    if (out) process.stdout.write(out + "\n");
   }
-  const text = readFileSync(path, "utf8");
-  const raw: RawIssue[] = JSON.parse(text);
-  const out = renderStoriesBlock(raw);
-  if (out) process.stdout.write(out + "\n");
 }

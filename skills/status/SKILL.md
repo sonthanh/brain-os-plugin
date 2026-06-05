@@ -57,6 +57,9 @@ The dirty marker is cleared on the **first line** of regen, before any source is
 ```
 ## Status — YYYY-MM-DD HH:MM
 
+### ⚠️ Stale stories (K)               ← omitted when none; see "Stale-story contract"
+- ⚠️ STALE: #N — [title] — Dd no activity
+
 ### Pending Handovers                  ← omitted when none
 - #N — [title]
 
@@ -121,6 +124,16 @@ The Stories sub-block is a parent→child dependency tree, not a flat list. Logi
 - **Cross-story phase pairing:** title regex `^…\s*—\s*Phase\s+(\d+)\b` extracts a project + phase pair. An active root with a backlog peer at `phase + 1` of the same project gets a trailing `└── Next story queued: #M — title` leaf. Embedded `(Phase-N description)` mentions inside parens do not match — only the space-em-dash-space discriminator counts.
 - **Next-story-queued global footer:** after the last root, append `Next story queued: #N — title` for the highest-priority bench plan that is NOT already a phase-pairing pointer above. Tie-break by ascending issue number. Hidden when no qualifying bench plan exists.
 - **Box characters:** `├── ` (mid), `└── ` (last), `│   ` (vertical), `    ` (space). Last child of a root that has a phase pairing line is rendered with `├──` because the phase line claims the `└──` slot.
+
+## Stale-story contract (anti-drift, ai-brain#178)
+
+The `### ⚠️ Stale stories` section surfaces active stories that have silently drifted. Same TS helper (`build-stories-tree.ts --stale`), rendered above all normal sections because a forgotten strategic bet is the highest-signal drift the briefing can show. Contract:
+
+- **Subjects = active story roots** (identical root set to the Stories tree). Bench/backlog plans are excluded — "stale" is meaningless for work not yet started.
+- **Signal = max `updatedAt` over the whole subtree** (story + every descendant). A story is STALE when that newest activity is older than `STALE_THRESHOLD_DAYS` (14, a constant — not an env var, by KISS). `updatedAt` is GitHub's canonical last-touched timestamp: bumped by comments, edits, label flips, child closes, and cross-referenced commits — so AC#3 holds (a worked child carries a recent `updatedAt` and clears the story).
+- **Why `updatedAt`, not per-file `git log`** (the issue's original sketch): commit-date-per-referenced-file is fragile across the three repos work actually lands in (vault, brain-os-plugin, ai-leaders-vietnam) and ties the check to a body-path convention. `updatedAt` is repo-agnostic, one extra JSON field on the existing fetch, and faithfully tracks the brain-os workflow's GH mutations (`/impl` close, `/slice` relabel, comments). A story being coded without ever touching its GH issue for 14 days is *tracking drift* — which is exactly what this should surface.
+- **No timestamp signal ⇒ skipped.** An issue whose payload lacks `updatedAt` (fixtures, partial fetches) contributes `0` and is never falsely flagged.
+- **Sort:** most-stale first, tie-break by ascending issue number. Section omitted entirely when nothing is stale.
 
 ## Rules
 
