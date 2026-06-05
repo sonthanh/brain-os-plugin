@@ -115,6 +115,8 @@ After audit verdict (or skip), the canonical next step is `/slice <grill-file>`.
 
 - **NEVER use `AskUserQuestion` inside /grill flow.** AskUserQuestion is reserved for `/grill-fast` (Mode B, pre-rendered tree candidates). /grill is a relentless free-form interview — using AskUserQuestion forces the user to pick before discussion is done, breaking the grill discipline. Route through prose recommendations + open-ended turns only.
 
+- **Converge on decisions, not phrasing.** A grill locks *decisions* — direction, structure, semantic anchors (the hard facts) — never final wording. Do not micro-edit phrasing mid-grill; ratholing on word choice burns turns and, for writing topics, erases the author's voice (wording is the writer's territory — see `thinking/aha/2026-04-12-microedit-loses-voice.md`). If you catch yourself debating how a sentence reads rather than what it claims, stop and re-anchor on the decision.
+
 ## Outcome log
 
 Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/grill.log`:

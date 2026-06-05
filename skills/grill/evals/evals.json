@@ -167,6 +167,16 @@
                 "Mentions AskUserQuestion belongs to /grill-fast only",
                 "Mentions free-form conversation is the correct interview approach"
             ]
+        },
+        {
+            "id": 18,
+            "prompt": "During a grill, should you micro-edit the wording/phrasing of a proposed hook or sentence?",
+            "expected_output": "No. A grill converges on decisions — direction, structure, semantic anchors — not final wording. Micro-editing phrasing mid-grill burns turns and, for writing topics, erases the author's voice (wording is the writer's territory). Re-anchor on the decision instead.",
+            "expectations": [
+                "Says grill converges on decisions / direction / structure, not final wording",
+                "Says do NOT micro-edit phrasing mid-grill",
+                "Mentions wording is the writer's territory or that micro-editing erases voice"
+            ]
         }
     ]
 }
