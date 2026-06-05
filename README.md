@@ -127,9 +127,7 @@ Karpathy is building something similar with "LLM Knowledge Bases." Same directio
 | `/improve` | Analyze skill outcomes + propose self-improvements (eval-gated) |
 | `/refactor` | Weekly system-level architecture audit across plugin + vault |
 | `/vault-lint` | Nightly mechanical hygiene — broken links, orphan pages, stale tasks |
-| `/triggers` | Manage and debug scheduled remote agents |
 | `/eval` | Run eval checks on skills to catch regressions |
-| `/sync` | Git commit and push all vault changes |
 
 </details>
 

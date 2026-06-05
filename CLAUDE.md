@@ -1,6 +1,6 @@
 # Brain OS Plugin
 
-Claude Code plugin for managing a second brain powered by Obsidian. 16 skills across Learn, Think, and Act.
+Claude Code plugin for managing a second brain powered by Obsidian. 28 skills across Learn, Think, and Act.
 
 ## Key Paths
 
@@ -40,7 +40,7 @@ npm run gmail:bootstrap
 |----------|--------|-------|
 | **Learn** | study, self-learn, verify, ingest, absorb, research | self-learn/verify need Python 3.12+ and notebooklm-py |
 | **Think** | think, grill, audit | /think subsumes old emerge/challenge/drift/connect/trace/ghost; /audit = one-shot principle check via advisor |
-| **Act** | status, aha, journal, handover, pickup, gmail, gmail-bootstrap, triggers, eval | gmail needs Node deps + OAuth setup |
+| **Act** | status, aha, journal, handover, pickup, gmail, gmail-bootstrap, eval | gmail needs Node deps + OAuth setup |
 
 ## Hooks
 
