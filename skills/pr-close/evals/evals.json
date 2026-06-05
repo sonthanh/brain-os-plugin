@@ -1,0 +1,80 @@
+[
+  {
+    "id": "order-load-bearing",
+    "description": "The 4-step order (comment → squash → branch-delete → issue-close) is the whole point of the skill — it must be stated as load-bearing so a future editor doesn't 'optimize' it into a different order.",
+    "args": "pr-close",
+    "expect": "Order is load-bearing"
+  },
+  {
+    "id": "squash-before-branch-delete",
+    "description": "Must document WHY squash precedes branch-delete (so the squash commit still references the branch's work) — the rationale is what stops the order from being reshuffled.",
+    "args": "pr-close",
+    "expect": "Squash before branch-delete"
+  },
+  {
+    "id": "cross-repo-close-prefix",
+    "description": "The defining brain-os nuance: code lives in the code repo, issues in the tracker repo, so the close reference needs the explicit repo prefix. Without this the issue silently never closes.",
+    "args": "pr-close",
+    "expect": "explicit repo prefix"
+  },
+  {
+    "id": "bare-closes-noops",
+    "description": "Must spell out the failure mode — a bare `Closes #N` targets the code repo and no-ops — so the cross-repo rule reads as a real bug-prevention, not pedantry.",
+    "args": "pr-close",
+    "expect": "a bare `Closes #N` targets the code repo and no-ops"
+  },
+  {
+    "id": "close-helper-only-site",
+    "description": "Issue close must route through the central close-issue.sh helper (single close site) — it strips ghost status:* labels and is idempotent on already-closed issues.",
+    "args": "pr-close",
+    "expect": "is the only close site"
+  },
+  {
+    "id": "no-inline-issue-close",
+    "description": "Must explicitly forbid inlining `gh issue close` — inlining re-leaks the ghost status:* labels the helper exists to strip (the original bug from impl #160).",
+    "args": "pr-close",
+    "expect": "never inline `gh issue close`"
+  },
+  {
+    "id": "close-helper-path",
+    "description": "The skill must point at the real helper path so step 4 is executable, not a vague instruction.",
+    "args": "pr-close",
+    "expect": "scripts/gh-tasks/close-issue.sh"
+  },
+  {
+    "id": "pr-title-verbatim-subject",
+    "description": "Squash subject must be the PR title verbatim (pass --subject) — the original feedback rule. Without --subject, gh appends ` (#N)` and the subject drifts.",
+    "args": "pr-close",
+    "expect": "PR title verbatim as the squash subject"
+  },
+  {
+    "id": "plan-preview-before-merge",
+    "description": "Merging is the one irreversible remote action — the skill must preview the plan before it, matching the global 'confirm destructive remote actions first' rule (with a pre-authorized fast path).",
+    "args": "pr-close",
+    "expect": "Plan preview before the merge"
+  },
+  {
+    "id": "verify-fail-loud",
+    "description": "A silent half-merge (merged but branch/issue left dangling) is the exact drift this skill prevents — so it must verify each step and fail loud rather than log pass on a partial run.",
+    "args": "pr-close",
+    "expect": "Verify (fail loud)"
+  },
+  {
+    "id": "abandon-leaves-issues-open",
+    "description": "The close-without-merge (abandon) path must leave linked issues OPEN — the work isn't done — so it must NOT call close-issue.sh. Distinguishes 'land' from 'reject'.",
+    "args": "pr-close",
+    "expect": "leave linked issues open"
+  },
+  {
+    "id": "config-tracker-split",
+    "description": "Must resolve the tracker repo from gh_task_repo config so the cross-repo close reference is configurable, not hardcoded per user.",
+    "args": "pr-close",
+    "expect": "gh_task_repo"
+  },
+  {
+    "id": "uses-prepare-script",
+    "description": "Skill must call scripts/pr-close.ts prepare to build the cross-repo close block + verbatim subject — the load-bearing strings are unit-tested there (pr-close.test.ts), not improvised in prose where a bare #N would silently no-op.",
+    "args": "pr-close",
+    "expect": "scripts/pr-close.ts"
+  }
+]

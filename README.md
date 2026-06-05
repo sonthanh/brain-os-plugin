@@ -110,6 +110,7 @@ Karpathy is building something similar with "LLM Knowledge Bases." Same directio
 | `/impl` | AFK executor — picks one `owner:bot` issue, runs `/tdd`, commits, pushes, closes |
 | `/impl auto` | Drains the `owner:bot` Ready queue serial (or with `-p N` for N worktrees in parallel) |
 | `/impl story <N>` | DAG drains all children of a parent story issue. Bash-detached TS orchestrator (`scripts/run-story.ts`) — main session burns ~0 tokens during drain, macOS notification when parent closes |
+| `/pr-close` | Landing or merging a PR — runs the 4-step hygiene sequence in order: review comment → squash-merge (PR title as subject) → delete branch → close linked tracker issue |
 
 <details>
 <summary><strong>All skills</strong> — full reference</summary>
