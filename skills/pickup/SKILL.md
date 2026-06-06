@@ -246,6 +246,8 @@ If the design decision was already obtained (user gave the green light) but impl
 
 **Example (pickup:285):** "voice-first inversion approved, impl+DoD#4 forward work" → design was approved, only implementation remained → correct log: `pass | note="deferred-to-#N"`, not `partial`.
 
+**Example (pickup:204):** "steps-1-4-done, live-rung-0-deferred-to-208" → steps 1–4 completed, live-rung-0 implementation deferred to #208 — no human decision pending, only tracked implementation work → correct log: `pass | note="deferred-to-208"`, not `partial`.
+
 ## Flow
 ```
 Session A:

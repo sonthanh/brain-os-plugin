@@ -106,5 +106,11 @@
     "description": "Skill must have an explicit rule (beyond the outcome log note) that when some ACs are done and the rest are not human-blocked (design approved, implementation pending), the action is to create a follow-up issue and log pass — not partial. Captures the pickup:285 incident where 'voice-first inversion approved, impl+DoD#4 forward work' was logged as partial instead of pass+deferred.",
     "args": "pickup",
     "expect": "not human-blocked"
+  },
+  {
+    "id": "deferred-impl-only-example",
+    "description": "Rule must cover impl-only deferral (not just approved-design framing). pickup:204 shows the same mis-log: steps 1-4 done, live-rung-0 deferred to #208 — no design decision needed, but was logged partial. A concrete example for this case prevents the rule from being read as only applying when design is the bottleneck.",
+    "args": "pickup",
+    "expect": "pickup:204"
   }
 ]
