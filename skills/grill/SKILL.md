@@ -97,7 +97,8 @@ Override:
 Option [5] is hidden until the agent-teams substrate (ai-brain#252, Phase B) is shipped. Detection is a deterministic file-existence check on the `principle-auditor-p1` subagent definition — present means Phase B has shipped:
 
 ```bash
-test -f "${CLAUDE_PLUGIN_ROOT}/agents/principle-auditor-p1.md"
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/ 2>/dev/null | sort -V | tail -1)}"; PLUGIN_ROOT="${PLUGIN_ROOT%/}"
+test -f "${PLUGIN_ROOT}/agents/principle-auditor-p1.md"
 ```
 
 If the file does not exist, omit option [5] from the rendered menu entirely (do not list it as `[unavailable]` or similar — the goal is not to advertise an unshippable mode). If the file exists, include option [5] as shown above. Treat the file's presence as the contract; do not infer Phase-B completion from any other signal (commit messages, issue state, label colors).

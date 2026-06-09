@@ -50,7 +50,8 @@ in `knowledge/books/` (previously a separate `/ingest` step). Check with `/self-
 
 ### Step 2: Verify
 ```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/skills/verify/scripts/verify.py {vault}/knowledge/raw --status
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/ 2>/dev/null | sort -V | tail -1)}"; PLUGIN_ROOT="${PLUGIN_ROOT%/}"
+python3 ${PLUGIN_ROOT}/skills/verify/scripts/verify.py {vault}/knowledge/raw --status
 ```
 If flag is `false`, run `/verify` with 50 fresh questions.
 If flag is already `true` (from self-learn validation), proceed.

@@ -103,7 +103,8 @@ For brain-os artifact types, the test-command shape comes from `/tdd` Test Comma
 File via the central filer — every label axis is validated against canon (see `references/gh-task-labels.md` § 1). Do NOT inline an `issue create` call; the helper guards against typo'd labels and missing required axes that would otherwise drift across debug runs.
 
 ```bash
-ISSUE_URL=$(bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/create-task-issue.sh" \
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/ 2>/dev/null | sort -V | tail -1)}"; PLUGIN_ROOT="${PLUGIN_ROOT%/}"
+ISSUE_URL=$(bash "$PLUGIN_ROOT/scripts/gh-tasks/create-task-issue.sh" \
   --title "<short imperative, ≤70 chars — e.g. Fix silent geo-digest cron — outcome-log + path resolution>" \
   --body "$(cat <<'EOF'
 ## Problem

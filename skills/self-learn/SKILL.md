@@ -140,9 +140,10 @@ Phase 2 must reach 100% pass at ≥95 before Phase 3 runs. See `/study` for full
 
 ### Status — always run the script, never generate manually
 ```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/skills/self-learn/scripts/summary.py {vault}/knowledge/raw/the-road-less-stupid --status
-python3 ${CLAUDE_PLUGIN_ROOT}/skills/self-learn/scripts/summary.py {vault}/knowledge/raw/the-road-less-stupid --phase3
-python3 ${CLAUDE_PLUGIN_ROOT}/skills/self-learn/scripts/summary.py {vault}/knowledge/raw/the-road-less-stupid
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/ 2>/dev/null | sort -V | tail -1)}"; PLUGIN_ROOT="${PLUGIN_ROOT%/}"
+python3 ${PLUGIN_ROOT}/skills/self-learn/scripts/summary.py {vault}/knowledge/raw/the-road-less-stupid --status
+python3 ${PLUGIN_ROOT}/skills/self-learn/scripts/summary.py {vault}/knowledge/raw/the-road-less-stupid --phase3
+python3 ${PLUGIN_ROOT}/skills/self-learn/scripts/summary.py {vault}/knowledge/raw/the-road-less-stupid
 ```
 
 ### Available Books

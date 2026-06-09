@@ -94,7 +94,8 @@ If one issue returned → continue with that issue's number, title, body.
 Atomic flip via the canonical helper — single `gh issue edit` call removing `status:ready` and adding `status:in-progress` from one process invocation:
 
 ```bash
-bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/transition-status.sh" <N> --to in-progress
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/ 2>/dev/null | sort -V | tail -1)}"; PLUGIN_ROOT="${PLUGIN_ROOT%/}"
+bash "$PLUGIN_ROOT/scripts/gh-tasks/transition-status.sh" <N> --to in-progress
 ```
 
 Do NOT inline `gh issue edit --remove-label status:ready --add-label status:in-progress` — `transition-status.sh` is the single source of truth so the wire-level remove+add stays atomic AND target-validated against the canon list (see `references/gh-task-labels.md` § 3).
@@ -120,6 +121,7 @@ Invoke the `/tdd` skill on the issue. /tdd handles:
 ### 5. Commit + push + close
 
 ```bash
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/ 2>/dev/null | sort -V | tail -1)}"; PLUGIN_ROOT="${PLUGIN_ROOT%/}"
 git add <touched files>
 git commit -m "$(cat <<'EOF'
 <type>: <subject>
@@ -133,7 +135,7 @@ EOF
 )"
 git pull --rebase
 git push
-bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/close-issue.sh" <N>
+bash "$PLUGIN_ROOT/scripts/gh-tasks/close-issue.sh" <N>
 ```
 
 `bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/close-issue.sh"` is the single close site — it strips every `status:*` label before flipping state to closed, plugging the ghost-label leak that pre-dated #160. Do NOT inline `gh issue close` here or anywhere else; the helper is the lifecycle close-step.
@@ -190,7 +192,8 @@ Quoted heredoc (`<<'EOF'`) would block `${m}` / `${evidence}` expansion entirely
 - Immediately after the comment lands, tick the matching parent body bullet so form-(ii) evidence and form-(ii) tick stay co-located in the same write path. The CLI imports `tickAcceptance` from `scripts/run-story.ts` (single SSOT for the U+2014 em-dash + bold AC bullet regex per `references/ac-coverage-spec.md` § 3.1):
 
 ```bash
-bun run "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/tick-parent-ac.ts" "$parent_n" "${m}"
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/ 2>/dev/null | sort -V | tail -1)}"; PLUGIN_ROOT="${PLUGIN_ROOT%/}"
+bun run "$PLUGIN_ROOT/scripts/gh-tasks/tick-parent-ac.ts" "$parent_n" "${m}"
 ```
 
 The CLI is idempotent — already-ticked AC is a silent no-op; missing `**AC#${m}**` bullet in the parent body emits a stderr WARN and exits 0 (the parent body may have been edited after the child filed; not a fatal error). Per-AC-tick races between sibling `/impl <N>` workers closing simultaneously are anticipated: the parent close-trigger spawn (`§ 6.3`) re-runs Gate C's `tickAcceptance` as the second-line idempotent safety net. Operators recovering a parent whose evidence comments landed but whose ticks were missed (e.g. self-bootstrapping orchestrator runs that shipped `tickAcceptance` mid-flight) can run `bun run "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/tick-parent-ac-from-comments.ts" <parent-N>` to backfill from existing comments.
@@ -238,11 +241,12 @@ Independent of §§ 6.1–6.4: tick the just-closed issue's OWN `## Acceptance` 
 4. Per-AC actions (use the same `<tracker-repo>` + heredoc-with-interpolation pattern as § 6.2; em-dash is U+2014):
 
 ```bash
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/ 2>/dev/null | sort -V | tail -1)}"; PLUGIN_ROOT="${PLUGIN_ROOT%/}"
 # For each met AC#${m}:
 gh issue comment <N-just-closed> -R <tracker-repo> --body-file - <<EOF
 Self acceptance verified: AC#${m} — ${evidence}
 EOF
-bun run "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/tick-parent-ac.ts" <N-just-closed> "${m}"
+bun run "$PLUGIN_ROOT/scripts/gh-tasks/tick-parent-ac.ts" <N-just-closed> "${m}"
 
 # For each out-of-scope AC#${m}:
 gh issue comment <N-just-closed> -R <tracker-repo> --body-file - <<EOF
@@ -370,7 +374,8 @@ live integration when AC text says "runs against" is "AC not met".
 Before exit, write counters so `/impl story`'s orchestrator can aggregate them into the impl-story.log row (spec § 5):
 
 ```bash
-bun run "$CLAUDE_PLUGIN_ROOT/scripts/ac-coverage-cli.ts" record-result \
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/ 2>/dev/null | sort -V | tail -1)}"; PLUGIN_ROOT="${PLUGIN_ROOT%/}"
+bun run "$PLUGIN_ROOT/scripts/ac-coverage-cli.ts" record-result \
   <parent-N> <N> <verified:true|false> <tdd-run-count> \
   <advisor-calls> <advisor-rejections> \
   "<last-failure-or-empty>" "<last-verdict-or-empty>"
@@ -381,7 +386,8 @@ The CLI writes JSON to `~/.local/state/impl-story/<parent>-child-<N>.result`. Mi
 If `<parent-N>` is unknown to prose, resolve it via:
 
 ```bash
-PARENT_N=$(bun run "$CLAUDE_PLUGIN_ROOT/scripts/ac-coverage-cli.ts" parent <N>)
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/ 2>/dev/null | sort -V | tail -1)}"; PLUGIN_ROOT="${PLUGIN_ROOT%/}"
+PARENT_N=$(bun run "$PLUGIN_ROOT/scripts/ac-coverage-cli.ts" parent <N>)
 ```
 
 #### When the wrapper does NOT apply

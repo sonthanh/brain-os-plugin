@@ -28,14 +28,15 @@ Stored in `{book_vault}/_validation/audit-flag.json`.
 **Always run the script — it handles fuzzy matching and execution.**
 
 ```bash
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/ 2>/dev/null | sort -V | tail -1)}"; PLUGIN_ROOT="${PLUGIN_ROOT%/}"
 # Run verify
-python3 ${CLAUDE_PLUGIN_ROOT}/skills/verify/scripts/verify.py {vault}/knowledge/raw <optional-fuzzy-name>
+python3 ${PLUGIN_ROOT}/skills/verify/scripts/verify.py {vault}/knowledge/raw <optional-fuzzy-name>
 
 # Check status
-python3 ${CLAUDE_PLUGIN_ROOT}/skills/verify/scripts/verify.py {vault}/knowledge/raw --status
+python3 ${PLUGIN_ROOT}/skills/verify/scripts/verify.py {vault}/knowledge/raw --status
 
 # Set flag
-python3 ${CLAUDE_PLUGIN_ROOT}/skills/verify/scripts/verify.py {vault}/knowledge/raw --set-flag <true|false|manual> <optional-fuzzy-name>
+python3 ${PLUGIN_ROOT}/skills/verify/scripts/verify.py {vault}/knowledge/raw --set-flag <true|false|manual> <optional-fuzzy-name>
 ```
 
 ## How Verify Runs

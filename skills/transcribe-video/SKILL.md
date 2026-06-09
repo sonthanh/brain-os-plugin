@@ -96,7 +96,8 @@ When `/research` is invoked with a URL that's a YouTube watch link, podcast RSS 
 
 Direct invoke:
 ```bash
-bun ${CLAUDE_PLUGIN_ROOT}/scripts/transcribe-video.ts <URL> --out <DIR> [--whisper] [--prompt "...."]
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/ 2>/dev/null | sort -V | tail -1)}"; PLUGIN_ROOT="${PLUGIN_ROOT%/}"
+bun ${PLUGIN_ROOT}/scripts/transcribe-video.ts <URL> --out <DIR> [--whisper] [--prompt "...."]
 ```
 
 ## Setup (one-time)

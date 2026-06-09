@@ -23,7 +23,8 @@ The order is not cosmetic:
 Run the prep script — it fetches PR metadata and builds the two strings that are easy to get wrong (the verbatim squash subject and the cross-repo close block), emitting them as JSON so the load-bearing logic is centralized + unit-tested, not improvised:
 
 ```bash
-bun "${CLAUDE_PLUGIN_ROOT}/skills/pr-close/scripts/pr-close.ts" prepare \
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/ 2>/dev/null | sort -V | tail -1)}"; PLUGIN_ROOT="${PLUGIN_ROOT%/}"
+bun "${PLUGIN_ROOT}/skills/pr-close/scripts/pr-close.ts" prepare \
   --pr <N> --tracker <gh_task_repo>
 # → { number, title, subject, headRef, linkedIssues:[{repo,num}], closesBlock, ... }
 ```
@@ -77,7 +78,8 @@ Pass `--subject` so the PR title verbatim becomes the squash subject — without
 Cross-repo `Closes <repo>#N` **does not always auto-fire**, so closing is not optional cleanup — it is a required step. Use the central close helper; never inline `gh issue close` (the helper also strips ghost `status:*` labels that a bare close leaves behind, and is idempotent if the merge already auto-closed the issue):
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/gh-tasks/close-issue.sh" <M>
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/ 2>/dev/null | sort -V | tail -1)}"; PLUGIN_ROOT="${PLUGIN_ROOT%/}"
+bash "${PLUGIN_ROOT}/scripts/gh-tasks/close-issue.sh" <M>
 ```
 
 Run it once per linked issue (use each `num` from `linkedIssues`). Note: `close-issue.sh` is hardwired to the default tracker `sonthanh/ai-brain`; if your `gh_task_repo` differs, close with `gh issue close <M> --repo <gh_task_repo> --reason completed` and strip any `status:*` labels yourself.

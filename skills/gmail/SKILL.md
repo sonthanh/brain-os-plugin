@@ -120,7 +120,8 @@ Resolution detection also runs automatically in the GHA workflow (via `/tmp/sla-
 
 Requires Google OAuth credentials for the Gmail API. Run the setup script:
 ```bash
-tsx ${CLAUDE_PLUGIN_ROOT}/skills/gmail/scripts/setup-oauth.ts
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/ 2>/dev/null | sort -V | tail -1)}"; PLUGIN_ROOT="${PLUGIN_ROOT%/}"
+tsx ${PLUGIN_ROOT}/skills/gmail/scripts/setup-oauth.ts
 ```
 
 This creates `${CLAUDE_PLUGIN_ROOT}/skills/gmail/.credentials.json` (gitignored).

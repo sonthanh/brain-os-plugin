@@ -94,7 +94,8 @@ Race note: two sessions reading `status:ready` simultaneously and transitioning 
 
 **On completion** — close the issue via the central helper (strips `status:*` labels first):
 ```bash
-bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/close-issue.sh" N
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/ 2>/dev/null | sort -V | tail -1)}"; PLUGIN_ROOT="${PLUGIN_ROOT%/}"
+bash "$PLUGIN_ROOT/scripts/gh-tasks/close-issue.sh" N
 ```
 
 ## Step 2: Autogrill Ready Tasks

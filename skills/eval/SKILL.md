@@ -67,12 +67,35 @@ When `/eval <skill-name>` is invoked:
 2. If not found: report "No evals found for <skill-name>"
 3. Read `${CLAUDE_PLUGIN_ROOT}/skills/<skill-name>/SKILL.md`
 4. For each eval, check each expectation against SKILL.md content
-5. Print ✓/✗ per eval with summary
+5. Run the bash smoke check (see § Bash smoke check below) on the same skill
+6. Print ✓/✗ per eval with summary — smoke findings count as failures
 
 When `/eval --all`:
 1. Scan all skill dirs for `evals/evals.json`
 2. Run eval on each
-3. Print combined summary
+3. Run the bash smoke check across all skills
+4. Print combined summary — smoke findings count as failures
+
+## Bash smoke check
+
+Skill prose IS code Claude executes verbatim (ai-brain#163: a recipe with an
+unresolved `$CLAUDE_PLUGIN_ROOT` died silently in a detached shell). Every eval
+run therefore also validates the fenced bash blocks, not just textual output:
+
+```bash
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/ 2>/dev/null | sort -V | tail -1)}"; PLUGIN_ROOT="${PLUGIN_ROOT%/}"
+bun run "$PLUGIN_ROOT/scripts/skill-bash-smoke.ts" <skill-name>   # omit arg for --all
+```
+
+The tool extracts every ` ```bash ` block from SKILL.md, normalizes doc
+placeholders (`<N>`, `<tracker-repo>`), then enforces:
+
+- **Parse** — `bash -n` must accept the block (broken quoting/heredoc/if-fi fails).
+- **Plugin-root** — any block referencing `CLAUDE_PLUGIN_ROOT` must resolve it
+  with a `:-` glob fallback or `:?` assertion in the same block.
+
+Exit 0 = clean. Exit 1 = findings (report each as a failed eval line). Unit
+tests for the tool live in `scripts/skill-bash-smoke.test.ts`.
 
 ## Adding Evals to a Skill
 

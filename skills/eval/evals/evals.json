@@ -1,0 +1,16 @@
+{
+  "skill_name": "eval",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Besides checking expectations against SKILL.md text, what else does an eval run validate?",
+      "expected_output": "Runs scripts/skill-bash-smoke.ts on the target skill(s): bash -n parse check on every fenced bash block + CLAUDE_PLUGIN_ROOT fallback/assertion check; smoke findings count as eval failures",
+      "expectations": [
+        "Mentions the bash smoke check / skill-bash-smoke.ts",
+        "Mentions bash -n parse validation of fenced bash blocks",
+        "Mentions CLAUDE_PLUGIN_ROOT must have :- fallback or :? assertion in the same block",
+        "States smoke findings count as eval failures"
+      ]
+    }
+  ]
+}

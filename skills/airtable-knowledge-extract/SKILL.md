@@ -26,8 +26,9 @@ This is a **Pattern B pipeline** (rationale: `{vault}/thinking/aha/2026-04-18-or
 Resolve the bases to process up-front via `scripts/active-bases.mts` (which internally calls `list-bases.mts`, applies the inclusion + exclusion rules from `references/base-selection-rules.md`, and emits the filtered set). Then chain the per-base pre-steps and the orchestrator inside one supaterm tab:
 
 ```bash
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/ 2>/dev/null | sort -V | tail -1)}"; PLUGIN_ROOT="${PLUGIN_ROOT%/}"
 RUN_ID="$(date -u +%Y-%m-%d)-airtable-extract"
-SKILL_DIR="${CLAUDE_PLUGIN_ROOT}/skills/airtable-knowledge-extract"
+SKILL_DIR="${PLUGIN_ROOT}/skills/airtable-knowledge-extract"
 sp tab new --script "env -u CLAUDECODE bash -c '
   set -euo pipefail
   cd \"$SKILL_DIR\"
@@ -87,11 +88,12 @@ Notes:
 Both are read-only one-shots — safe to Bash from a session when the user asks "how's it going?".
 
 ```bash
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/ 2>/dev/null | sort -V | tail -1)}"; PLUGIN_ROOT="${PLUGIN_ROOT%/}"
 # live snapshot (human-formatted)
-bun run ${CLAUDE_PLUGIN_ROOT}/skills/airtable-knowledge-extract/scripts/status.mts <run-id>
+bun run ${PLUGIN_ROOT}/skills/airtable-knowledge-extract/scripts/status.mts <run-id>
 
 # JSON snapshot for /improve / dashboards
-bun run ${CLAUDE_PLUGIN_ROOT}/skills/airtable-knowledge-extract/scripts/status.mts <run-id> --json
+bun run ${PLUGIN_ROOT}/skills/airtable-knowledge-extract/scripts/status.mts <run-id> --json
 
 # user-only — do NOT call from a session, it loops:
 # tail -f /tmp/airtable-extract-<run-id>.log

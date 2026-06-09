@@ -100,7 +100,8 @@ If you cannot extract User Story / Settled Decisions / Acceptance / Out of Scope
 File the parent story issue on `sonthanh/ai-brain` with the synthesized PRD as the body via the central filer (`create-task-issue.sh`), then flip to `status:in-progress` via the central transitioner (`transition-status.sh`). Two calls because the helper rejects `in-progress` as a creation status (creation accepts `ready|blocked|backlog`); a fresh parent enters active state the moment it's filed because work begins immediately on PRD approval. Labels carried: `type:plan`, `owner:human`, `status:in-progress` (after flip), area inherited from the grill scope (e.g. `plugin-brain-os`), priority + weight inherited from the grill's overall framing.
 
 ```bash
-PARENT_URL=$(bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/create-task-issue.sh" \
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/ 2>/dev/null | sort -V | tail -1)}"; PLUGIN_ROOT="${PLUGIN_ROOT%/}"
+PARENT_URL=$(bash "$PLUGIN_ROOT/scripts/gh-tasks/create-task-issue.sh" \
   --title "Story: <imperative — what this story delivers>" \
   --body "$(cat <<'EOF'
 ## User Story
@@ -139,7 +140,7 @@ EOF
   --type plan)
 
 PARENT_N="${PARENT_URL##*/}"
-bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/transition-status.sh" "$PARENT_N" --to in-progress
+bash "$PLUGIN_ROOT/scripts/gh-tasks/transition-status.sh" "$PARENT_N" --to in-progress
 
 # Capture parent GraphQL node ID once — Step 6's addSubIssue mutation needs it
 # as the issueId input for every child filed. One extra `gh issue view` here
@@ -280,7 +281,8 @@ Iterate until the user approves. Do NOT proceed to issue creation while the user
 For each approved child slice, in topological order (blockers first), run the central filer — every label axis is validated against canon (see `references/gh-task-labels.md` § 1):
 
 ```bash
-CHILD_URL=$(bash "$CLAUDE_PLUGIN_ROOT/scripts/gh-tasks/create-task-issue.sh" \
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/brain-os-marketplace/brain-os/*/ 2>/dev/null | sort -V | tail -1)}"; PLUGIN_ROOT="${PLUGIN_ROOT%/}"
+CHILD_URL=$(bash "$PLUGIN_ROOT/scripts/gh-tasks/create-task-issue.sh" \
   --title "<Title>" \
   --body "$(cat <<'EOF'
 ## Parent
