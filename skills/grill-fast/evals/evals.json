@@ -199,6 +199,26 @@
         "Mentions deferred_to optional field (with issue URL or backlog pointer)",
         "Mentions logging exactly once per session (no intermediate rows)"
       ]
+    },
+    {
+      "id": 19,
+      "prompt": "The grill-fast topic could legitimately be dropped entirely. What must the AskUserQuestion option set include?",
+      "expected_output": "An explicit null option — 'don't do this / drop it' — whenever not-doing-it is a live outcome. Never offer only sub-variants: that presupposes the action is settled and makes the question leading. A user in flow clicks the sensible sub-variant, and that click cannot bear the weight of reversing a prior considered decision.",
+      "expectations": [
+        "Mentions an explicit null/drop option when not-doing-it is a live outcome",
+        "Mentions offering only sub-variants presupposes the action is settled / is leading",
+        "Mentions a user in flow clicking a sub-variant cannot reverse a prior considered decision"
+      ]
+    },
+    {
+      "id": 20,
+      "prompt": "The grill-fast topic references GitHub issues shown in the SessionStart open-tasks list. What must grill-fast do before grilling them?",
+      "expected_output": "Run gh issue view N on each referenced issue FIRST — confirm it is still open and read its latest comments for prior decisions. The SessionStart open-tasks cache is stale; grilling an already-closed issue contaminates every downstream pick.",
+      "expectations": [
+        "Mentions gh issue view to verify live state before grilling",
+        "Mentions the SessionStart open-tasks cache is stale",
+        "Mentions reading latest comments for prior decisions"
+      ]
     }
   ]
 }
