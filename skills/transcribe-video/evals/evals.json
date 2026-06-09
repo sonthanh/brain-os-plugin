@@ -49,6 +49,17 @@
         "Mentions typo-fixes.json or replacement table",
         "Mentions scope hierarchy or topic tags"
       ]
+    },
+    {
+      "id": 6,
+      "prompt": "What does the skill log after a transcript is delivered, and where?",
+      "expected_output": "Appends a skill-spec § 11 outcome line to {vault}/daily/skill-outcomes/transcribe-video.log after the transcript is written — action=transcribe, result pass/partial/fail; auto-invokes /brain-os:improve transcribe-video when result != pass",
+      "expectations": [
+        "Mentions daily/skill-outcomes/transcribe-video.log",
+        "Mentions logging happens after the transcript is written, not after the caller's research step",
+        "Mentions pass/partial/fail result semantics",
+        "Mentions auto-invoking /brain-os:improve on non-pass result"
+      ]
     }
   ]
 }

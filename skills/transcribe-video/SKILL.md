@@ -136,3 +136,17 @@ bun scripts/transcribe-video.ts https://www.youtube.com/watch?v=96jN2OCOfLs \
 `references/typo-fixes.json` — keep current. When a transcript has a new misheard proper noun, add it. The file is sorted by precedence (longer phrases first to avoid partial-match collisions).
 
 When whisper-cli or yt-dlp behavior shifts (e.g. a new flag default), update the script. Keep the SKILL.md decision rules stable — those are the contract with calling skills.
+
+## Outcome log
+
+Follow `{vault}/skill-spec.md § 11`. After the transcript is written (the skill's own outcome — not after the caller's research/findings step), append to `{vault}/daily/skill-outcomes/transcribe-video.log`:
+
+```
+{date} | transcribe-video | transcribe | ~/work/brain-os-plugin | {out}/_transcript-verbatim.md | commit:none | {result}
+```
+
+- `result`: `pass` — transcript delivered (either path) with no repetition-zone splices needed; `partial` — delivered but whisper repetition zones were spliced or new typo-fix entries had to be added; `fail` — both auto-subs and whisper paths failed, no transcript written.
+- `commit:none` — transcripts land in findings dirs that are committed by the calling skill, not by this one.
+- Optional: `args="{url}"` (enables replay), `method=auto-subs|whisper`.
+
+If `result != pass`, auto-invoke `/brain-os:improve transcribe-video`.
