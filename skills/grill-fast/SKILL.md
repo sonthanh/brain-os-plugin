@@ -1,6 +1,6 @@
 ---
 name: grill-fast
-description: "Mode B grill: pre-grill internally, render ≥4 candidate decision-tree architectures side-by-side as ASCII (3 axis-aligned + 1 mandatory axis-challenger), batch parameter picks. Use for architecture / system-design topics where most LLM recommendations would just get 'ok' — converges in 2-3 turns vs /grill's question-by-question march. Falls back to /grill for single-decision or pure-exploration topics where multiple trees would be artificial."
+description: "Mode B grill: render ≥4 decision-tree architectures as ASCII (3 axis-aligned + 1 axis-challenger). Use for architecture / system-design topics where recommendations would just get 'ok' — locks in 2-3 turns vs /grill's question-by-question march. Single-decision or pure-exploration → /grill."
 ---
 
 ## Vault Location

@@ -4,9 +4,9 @@
     {
       "id": 1,
       "prompt": "How does grill-fast differ from /grill in how it asks the user?",
-      "expected_output": "Pre-grills internally then renders 3 candidate decision-tree architectures side-by-side as ASCII for the user to pick — instead of asking question-by-question linearly.",
+      "expected_output": "Pre-grills internally then renders ≥4 candidate decision-tree architectures side-by-side as ASCII for the user to pick — instead of asking question-by-question linearly.",
       "expectations": [
-        "Mentions 3 candidate architectures or trees rendered side-by-side",
+        "Mentions ≥4 candidate architectures or trees rendered side-by-side",
         "Mentions ASCII diagrams as the rendering format",
         "Contrasts with linear question-by-question march"
       ]
