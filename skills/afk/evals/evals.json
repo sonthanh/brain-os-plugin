@@ -1,0 +1,62 @@
+[
+  {
+    "id": "single-dispatcher-rule",
+    "description": "The skill must never dispatch workers itself — pickup-auto is the single dispatcher; a second dispatch path causes claim/label races. This is the invariant most tempting to 'optimize' away.",
+    "args": "afk",
+    "expect": "Never spawn workers yourself"
+  },
+  {
+    "id": "spine-check-is-the-point",
+    "description": "The differentiator over a bare /slice is the spine health-check — must state WHY (dead schedulers = issues sit forever) so a future editor doesn't trim it as redundant ceremony.",
+    "args": "afk",
+    "expect": "filed issues sit forever if the schedulers are dead"
+  },
+  {
+    "id": "live-e2e-gate-before-slice",
+    "description": "Must require the (LIVE E2E) acceptance marker before proceeding to /slice — failing slice's hard gate later just wastes a step.",
+    "args": "afk",
+    "expect": "(LIVE E2E)"
+  },
+  {
+    "id": "interactive-head-preserved",
+    "description": "The grill stage is the human-judgment head of the loop and must stay interactive — the skill must forbid shortcutting it into an auto-answered clarification.",
+    "args": "afk",
+    "expect": "do not shortcut it"
+  },
+  {
+    "id": "no-autonomy-on-dead-spine",
+    "description": "When any spine check is red the skill must log partial and say which component is down — claiming autonomy on a dead spine is the lie this skill exists to prevent.",
+    "args": "afk",
+    "expect": "never claim autonomy on a dead spine"
+  },
+  {
+    "id": "issues-survive-dead-spine",
+    "description": "A red spine check must NOT roll back the filed issues — they wait safely in the queue until the spine is revived. Without this, a future editor might add destructive cleanup.",
+    "args": "afk",
+    "expect": "they wait safely in the queue"
+  },
+  {
+    "id": "delegate-not-reimplement",
+    "description": "Thin-glue contract: grill owns clarification, slice owns issue hygiene, schedulers own execution. The skill must forbid duplicating their gates (e2e AC, AC coverage, rung-0).",
+    "args": "afk",
+    "expect": "Delegate, don't reimplement"
+  },
+  {
+    "id": "hitl-stays-hitl",
+    "description": "Must forbid relabeling owner:human children to inflate the autonomy number — honest partial-autonomy reporting depends on it.",
+    "args": "afk",
+    "expect": "Don't relabel `owner:human`"
+  },
+  {
+    "id": "grill-fast-routing",
+    "description": "Routing rule between the two grill flavours must be concrete: architecture topics with ≥3 open decisions go to /grill-fast, everything else to /grill.",
+    "args": "afk",
+    "expect": "≥3 open decisions"
+  },
+  {
+    "id": "outcome-log-path",
+    "description": "Outcome log section must point at the real per-skill log path so /improve can pick up afk's failure signals (skill-spec § 11).",
+    "args": "afk",
+    "expect": "daily/skill-outcomes/afk.log"
+  }
+]

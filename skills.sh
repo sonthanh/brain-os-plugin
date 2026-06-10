@@ -17,7 +17,7 @@ INSTALL_DIR="$HOME/.claude/skills"
 CLONE_DIR="$HOME/.brain-os"
 
 ALL_SKILLS=(
-  absorb aha airtable-knowledge-extract audit debug eval gmail gmail-bootstrap grill grill-fast handover impl improve ingest
+  absorb afk aha airtable-knowledge-extract audit debug eval gmail gmail-bootstrap grill grill-fast handover impl improve ingest
   journal pickup pr-close refactor research self-learn slice status study tdd think transcribe-video vault-lint verify
 )
 
