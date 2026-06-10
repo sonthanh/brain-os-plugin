@@ -106,7 +106,7 @@ Karpathy is building something similar with "LLM Knowledge Bases." Same directio
 | `/journal` | End of day — aggregates your journey into content material, surfaces what's missing |
 | `/handover` | When you're stopping a session — creates a summary for next time |
 | `/pickup` | When you're starting a new session — resumes where you left off (HITL: handover, owner:human, autogrill) |
-| `/afk` | Goal → autonomy entry point: `/grill` to clarify, `/slice` into AFK issues, health-check the dispatcher + recovery spine, hand off — the work finishes while you're away |
+| `/afk` | Goal/task/issue → autonomy entry point: triage the input (fuzzy goal → `/grill`+`/slice`; clear task → file one issue; issue # → relabel for AFK), health-check the dispatcher + recovery spine, hand off — the work finishes while you're away |
 | `/slice` | After a settled `/grill`, breaks the plan into a parent story issue (PRD body) + tracer-bullet child issues |
 | `/impl` | AFK executor — picks one `owner:bot` issue, runs `/tdd`, commits, pushes, closes |
 | `/impl auto` | Drains the `owner:bot` Ready queue serial (or with `-p N` for N worktrees in parallel) |

@@ -1,11 +1,11 @@
 ---
 name: afk
-description: "Turn a goal into autonomous work — clarify via /grill, /slice into AFK issues, health-check the loop spine, hand off to the schedulers. Triggers: '/afk <goal>', 'make this AFK', 'finish this while I'm away', 'run this autonomously'. Single issue → /impl N; queue drain → /impl auto."
+description: "Turn a goal, task, or existing issue into autonomous work — grill when fuzzy, file/relabel AFK issues, health-check the loop spine, hand off to the schedulers. Triggers: '/afk <goal|task|N>', 'make this AFK', 'finish this while I'm away'. Execute NOW instead → /impl N or cox N."
 ---
 
-# /afk — Goal → autonomous-loop entry point
+# /afk — Goal/task → autonomous-loop entry point
 
-One command from fuzzy goal to "the machine finishes it while you're away." This skill is thin glue: it owns NO clarifying, slicing, or implementing logic — it routes between the skills that do, then verifies the autonomous spine is alive before promising autonomy.
+One command from "here's what I want" to "the machine finishes it while you're away." This skill is thin glue: it owns NO clarifying, slicing, or implementing logic — it routes between the skills that do, then verifies the autonomous spine is alive before promising autonomy.
 
 The spine it hands off to (what runs after you walk away):
 
@@ -15,9 +15,23 @@ The spine it hands off to (what runs after you walk away):
 | Recovery | "Story doctor (loop closer)" Orca automation — finds `AFK gave up` dead-ends, runs `/debug`, files fix issues, re-queues | 3×/day |
 | Learning | `/impl` auto-invokes `/improve` on `result != pass` + "Improve skills (daily)" Orca automation | per-failure + nightly |
 
+## Input triage
+
+Classify the argument FIRST — the three modes share the spine check and report but differ in how work reaches the queue:
+
+| Input shape | Mode | Path |
+|-------------|------|------|
+| Issue number (`/afk 123`, `/afk #123`) | **issue** | relabel for AFK → spine check → handoff |
+| Clear task — single deliverable, no open design decisions, a verifiable done-check, known repo | **task** | file one issue → spine check → handoff |
+| Fuzzy goal, multi-decision, architectural, or you're unsure | **goal** | `/grill` → `/slice` → spine check → handoff |
+
+Default to **goal mode** whenever classification is uncertain. A wrongly-skipped grill ships the wrong thing autonomously; a wrongly-run grill costs a few questions. Never silently guess task-shaped.
+
 ## Workflow
 
-### 1. Clarify (interactive — stays interactive)
+### Goal mode
+
+#### 1. Clarify (interactive — stays interactive)
 
 Route by topic shape:
 
@@ -26,11 +40,36 @@ Route by topic shape:
 
 The grill is the human-judgment head of the loop — do not shortcut it. Proceed to step 2 only when the session is settled (`status: pass|settled`) and has ≥1 acceptance bullet with the `(LIVE E2E)` marker (that's `/slice`'s hard gate — failing it later just wastes a step). If the grill ends `reflection` or `working`, stop and report: no autonomy possible yet, the goal isn't clarified.
 
-### 2. Slice
+#### 2. Slice
 
 Invoke `/slice` on the settled grill session → parent story + tracer-bullet child issues on the tracker. Do not duplicate or pre-check `/slice`'s gates (e2e AC existence, AC coverage, rung-0) — it enforces them itself and aborts loudly when they fail.
 
-### 3. Spine health-check (deterministic, read-only)
+### Task mode (clear task, no issue yet)
+
+Skip grill and slice — but NOT issue hygiene. Draft the issue, show it, file it:
+
+1. Draft: title, Problem (1-2 sentences), `## Acceptance` (verifiable observables — if you can't write a concrete done-check, the task wasn't task-shaped; fall back to goal mode), `## Files`, `Observable:` line.
+2. **Depth gate:** if any declared file matches a trunk path (CLAUDE.md, RESOLVER.md, working-rules.md, hooks/, references/, skill-spec.md, plugin.json) → the issue is `owner:human`; tell the user the machine won't take it and it routes through `/pickup`.
+3. Show the draft once for confirmation (one turn — this replaces the grill, don't skip it), then file via the central filer (it owns label assembly — never inline `gh issue create`):
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/gh-tasks/create-task-issue.sh" \
+  --title "..." --body "..." --area <area> --owner bot \
+  --priority p2 --weight <quick|heavy> --status ready
+```
+
+### Issue mode (existing issue number)
+
+The differentiator vs `/impl <N>`: `/impl N` executes the issue NOW in this session; `/afk N` queues it for the schedulers and walks away.
+
+1. `gh issue view <N>` — read body + labels fresh.
+2. Mid-flow HITL content (handover, unsettled grill, mid-draft writing) stays `owner:human` — refuse to relabel, point at `/pickup <N>`.
+3. Otherwise confirm with the user, then flip to `owner:bot` + `status:ready` (apply the same trunk-path depth gate as task mode before flipping).
+4. If the body lacks `## Acceptance`, add one (confirmed with the user) — an AFK worker without a done-check just guesses.
+
+### All modes converge here
+
+#### 3. Spine health-check (deterministic, read-only)
 
 The whole point of `/afk` over a bare `/slice` is this check — filed issues sit forever if the schedulers are dead:
 
@@ -48,13 +87,14 @@ All green → proceed to step 4. Any check red → still keep the filed issues (
 
 Log `partial` in that case — never claim autonomy on a dead spine.
 
-### 4. Report: autonomy engaged
+#### 4. Report: autonomy engaged
 
 End with a compact handoff report:
 
-- N children filed: X AFK (`owner:bot`) / Y HITL (`owner:human`) — list the HITL ones explicitly; the machine will NOT touch them, they wait for `/pickup`
-- Rung-0 child number + first expected dispatch tick (≤2h from now)
-- Where to watch: the parent issue, `~/.local/state/impl-story/<parent>.status`, or `/status`
+- Goal mode: N children filed, X AFK (`owner:bot`) / Y HITL (`owner:human`) — list the HITL ones explicitly; the machine will NOT touch them, they wait for `/pickup`. Include the rung-0 child number.
+- Task/issue mode: the one issue number queued, its labels.
+- First expected dispatch tick (≤2h from now)
+- Where to watch: the parent/queued issue, `~/.local/state/impl-story/<parent>.status`, or `/status`
 
 Be honest about partial autonomy: if most children are HITL, say so — "autonomy engaged" on a 90%-human story is a lie.
 
@@ -63,15 +103,19 @@ Be honest about partial autonomy: if most children are HITL, say so — "autonom
 - **Never spawn workers yourself.** `pickup-auto` is the single dispatcher; a second dispatch path causes claim/label races. If the user wants one issue done NOW and visibly, point them at `cox <N>` or `/impl <N>` instead.
 - **Delegate, don't reimplement.** Grill owns clarification, slice owns issue hygiene, the schedulers own execution. This skill adds routing + the spine check + the report, nothing else.
 - **HITL stays HITL.** Don't relabel `owner:human` children to inflate the autonomy number.
+- **Triage errs toward grill.** Task mode is an earned shortcut, not the default — a task without a writable done-check goes back through goal mode.
+- **One filer.** Task mode files through `create-task-issue.sh` only — it validates the label canon; inline `gh issue create` re-introduces label drift.
 
 ## Outcome log
 
 Append one line to `{vault}/daily/skill-outcomes/afk.log` (per `skill-spec.md § 11`):
 
 ```
-{date} | afk | engage | ~/work/brain-os-plugin | daily/grill-sessions/{session-file} | commit:N/A | {result} | parent=ai-brain#{P} children={N} args="{goal}"
+{date} | afk | {action} | ~/work/brain-os-plugin | {output} | commit:N/A | {result} | parent=ai-brain#{P} children={N} args="{input}"
 ```
 
-- `pass` — grill settled, sliced, all three spine checks green
-- `partial` — sliced but spine degraded, or majority-HITL children
-- `fail` — grill didn't settle or `/slice` aborted on its gates
+- `action`: `engage` (goal mode), `task` (task mode), `issue` (issue mode)
+- `output`: goal mode → `daily/grill-sessions/{session-file}`; task/issue mode → `ai-brain#{N}`
+- `pass` — work queued (settled+sliced / filed / relabeled) and all three spine checks green
+- `partial` — work queued but spine degraded, or majority-HITL children, or trunk-gated to `owner:human`
+- `fail` — grill didn't settle, `/slice` aborted on its gates, or task draft rejected

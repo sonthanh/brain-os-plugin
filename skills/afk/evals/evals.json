@@ -58,5 +58,41 @@
     "description": "Outcome log section must point at the real per-skill log path so /improve can pick up afk's failure signals (skill-spec § 11).",
     "args": "afk",
     "expect": "daily/skill-outcomes/afk.log"
+  },
+  {
+    "id": "triage-defaults-to-goal",
+    "description": "Input triage must default to goal mode (grill) on uncertainty — a wrongly-skipped grill ships the wrong thing autonomously. Task mode is an earned shortcut, never a silent guess.",
+    "args": "afk",
+    "expect": "Never silently guess task-shaped"
+  },
+  {
+    "id": "task-mode-depth-gate",
+    "description": "Task mode must apply the trunk-path depth gate before labeling owner:bot — trunk-class files (CLAUDE.md, hooks/, references/...) never go AFK.",
+    "args": "afk",
+    "expect": "matches a trunk path"
+  },
+  {
+    "id": "afk-n-vs-impl-n",
+    "description": "Issue mode must state the differentiator: /impl N executes now in-session, /afk N queues for the schedulers — without it the two skills blur and double-dispatch.",
+    "args": "afk",
+    "expect": "queues it for the schedulers"
+  },
+  {
+    "id": "midflow-hitl-refused",
+    "description": "Issue mode must refuse to relabel mid-flow HITL content (handover, unsettled grill, mid-draft) — same mid-flow rule /impl codifies; relabeling lets an autonomous worker pick up work mid-thought.",
+    "args": "afk",
+    "expect": "refuse to relabel"
+  },
+  {
+    "id": "acceptance-required-for-afk",
+    "description": "Issue mode must add an Acceptance section when missing — an AFK worker without a done-check just guesses. This is the minimum issue hygiene task/issue modes keep after skipping grill.",
+    "args": "afk",
+    "expect": "an AFK worker without a done-check just guesses"
+  },
+  {
+    "id": "central-filer-only",
+    "description": "Task mode files only through create-task-issue.sh (label-canon validation) — inlining gh issue create re-introduces the label drift the central filer exists to kill.",
+    "args": "afk",
+    "expect": "never inline `gh issue create`"
   }
 ]
