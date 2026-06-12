@@ -151,5 +151,5 @@ Follow `skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/journal.lo
 ```
 
 - `action`: `journal` (single day) or `backfill` (catch-up)
-- `result`: `pass` if journal written with all data sources, `partial` if some sources missing, `fail` if no data found
+- `result`: `pass` if journal written covering all **available** sources faithfully (absent source files for that date are not penalized), `partial` if available sources were skipped or output quality was poor, `fail` if no data found
 - Optional: `args="{date-or-day}"`, `score={days_written}/{days_attempted}` (for backfill)
