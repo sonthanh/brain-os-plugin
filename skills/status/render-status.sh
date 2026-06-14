@@ -419,6 +419,26 @@ if [ -f "$SLA_FILE" ]; then
     echo "All clear — no open items." >> "$TMP_FILE"
     [ "$B_AWARE_DROPPED" -gt 0 ] && echo "_($B_AWARE_DROPPED awareness row(s) hidden — no reply required.)_" >> "$TMP_FILE"
     [ "$SUPPRESSED_COUNT" -gt 0 ] && echo "_+ $SUPPRESSED_COUNT auto-suppressed by semantic classifier (full ledger: [[business/intelligence/emails/sla-open]])_" >> "$TMP_FILE"
+    # Liveness guard (ai-brain#299): "0 open + 0 breached" can mean a healthy
+    # inbox OR a frozen ledger that stopped gaining rows. If the ledger holds
+    # rows but the newest one is >14 days old, surface a soft staleness hint —
+    # this is the signature of the 2026-05-16 silent-drain regression. Gated on
+    # SUPPRESSED_COUNT>0 so a genuinely empty/new ledger never false-alarms.
+    if [ "$SUPPRESSED_COUNT" -gt 0 ]; then
+      NEWEST_ROW_DATE=$(awk -F'|' '
+        /^\| (fast|normal|slow) / {
+          for (i=1; i<=NF; i++) if (match($i, /[0-9]{4}-[0-9]{2}-[0-9]{2}/)) {
+            d = substr($i, RSTART, 10); if (d > mx) mx = d
+          }
+        } END { print mx }' "$SLA_FILE")
+      if [ -n "$NEWEST_ROW_DATE" ]; then
+        NEWEST_EPOCH=$(date -j -f "%Y-%m-%d" "$NEWEST_ROW_DATE" "+%s" 2>/dev/null || date -d "$NEWEST_ROW_DATE" "+%s" 2>/dev/null || echo "")
+        if [ -n "$NEWEST_EPOCH" ]; then
+          DAYS_AGO=$(( ( $(date "+%s") - NEWEST_EPOCH ) / 86400 ))
+          [ "$DAYS_AGO" -gt 14 ] && echo "⚠️ SLA ledger may be stale — newest tracked item is ${DAYS_AGO}d old. If the inbox isn't truly quiet, the append path may be broken (ai-brain#299)." >> "$TMP_FILE"
+        fi
+      fi
+    fi
   else
     # mine = user_category=r-user (user owes reply)
     # team = user_category=team-sla-at-risk (team owes reply, user awareness)
