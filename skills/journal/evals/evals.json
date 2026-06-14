@@ -71,6 +71,16 @@
         "Checks {vault}/daily/journal/ for the earliest file to determine Day 1",
         "Counts sequentially from Day 1 date"
       ]
+    },
+    {
+      "id": 7,
+      "prompt": "When should /journal log `partial` on an automated-crons-only day?",
+      "expected_output": "Never — automated-only day with all available sources covered = `pass`, regardless of output quality",
+      "expectations": [
+        "automated-only day with journal from git logs + automated reports = `pass`",
+        "absence of session/aha/grill/handover sources on automated-only days is not penalized",
+        "partial only applies when available sources were skipped or quality was poor despite human-session sources being present"
+      ]
     }
   ]
 }
