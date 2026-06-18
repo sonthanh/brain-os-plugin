@@ -134,6 +134,7 @@ After the journal is written, scan all daily sources for knowledge that should l
 - **Hormozi lens**: best stuff goes in the free Facebook post (the decision, the insight, the result). Implementation detail goes in paid Substack (the exact prompts, the code, the config).
 - **Don't fabricate** — every claim must trace to a git commit, aha moment, or grill session
 - **Day numbering** — check `{vault}/daily/journal/` for the earliest file to determine Day 1, then count sequentially
+- **Automated-only day = pass** — if no human-session sources exist for the date (no session, aha, grill, or handover files) but journal was written from git logs + automated reports, log `result=pass`. Log `partial` only when available sources were skipped.
 
 ## Integration with ai-leaders-vietnam
 The journey doc is INPUT for the writing pipeline:

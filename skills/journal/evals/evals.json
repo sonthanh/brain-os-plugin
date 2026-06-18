@@ -29,7 +29,7 @@
     {
       "id": 3,
       "prompt": "What sections does the journal output format contain?",
-      "expected_output": "7 sections: Story, Key Decisions, Aha Moments, Real Examples, Numbers, What Broke, What I'd Do Differently, Content Angles",
+      "expected_output": "7 sections: Story, Key Decisions, Aha Moments, Real Examples, Numbers, what Broke, What I'd Do Differently, Content Angles",
       "expectations": [
         "Has The Story section with narrative arc (2-3 paragraphs)",
         "Has Key Decisions table with columns: Decision, What I chose, Why, What I rejected",
@@ -80,6 +80,16 @@
         "automated-only day with journal from git logs + automated reports = `pass`",
         "absence of session/aha/grill/handover sources on automated-only days is not penalized",
         "partial only applies when available sources were skipped or quality was poor despite human-session sources being present"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "A /journal run completes on an automated-crons-only day. Sources found: git logs (15 commits across 2 repos), daily improve-report. Sources absent: session summaries, aha moments, grill sessions, handovers, email. The journal is written covering all found sources. What result should be logged?",
+      "expected_output": "pass",
+      "expectations": [
+        "result = `pass`",
+        "absent sources are not penalized when they simply did not exist that day",
+        "automated-only day with journal written = `pass`"
       ]
     }
   ]
