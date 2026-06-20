@@ -1,0 +1,16 @@
+{
+  "skill_name": "think",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Is the think skill eligible for /improve auto-patching from its correction log?",
+      "expected_output": "No. think carries auto_improve: false — it is a divergent/introspective skill whose value is keeping mode diversity and a perspective different from the user's. Auto-patching it from corrections assimilates it to the user's taste and destroys its ability to expose blind spots (thinking/aha/2026-04-12-thin-skills-must-not-auto-improve.md). It evolves only by deliberate manual decision.",
+      "expectations": [
+        "Says No / think is exempt from auto-improve",
+        "Mentions the auto_improve: false flag",
+        "Says auto-patching would assimilate it to the user's taste / kill mode diversity",
+        "Says it evolves by manual decision only"
+      ]
+    }
+  ]
+}

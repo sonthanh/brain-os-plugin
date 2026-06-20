@@ -1,6 +1,7 @@
 ---
 name: grill-fast
 description: "Mode B grill: render ≥4 decision-tree architectures as ASCII (3 axis-aligned + 1 axis-challenger). Use for architecture / system-design topics where recommendations would just get 'ok' — locks in 2-3 turns vs /grill's question-by-question march. Single-decision or pure-exploration → /grill."
+auto_improve: false  # adversarial skill (grill variant) — never auto-patch from corrections (thinking/aha/2026-04-12-thin-skills-must-not-auto-improve.md). Evolve by manual decision only.
 ---
 
 ## Vault Location

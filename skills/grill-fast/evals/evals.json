@@ -219,6 +219,17 @@
         "Mentions the SessionStart open-tasks cache is stale",
         "Mentions reading latest comments for prior decisions"
       ]
+    },
+    {
+      "id": 21,
+      "prompt": "Is grill-fast eligible for /improve auto-patching from its correction log?",
+      "expected_output": "No. grill-fast carries auto_improve: false (it is a grill variant — an adversarial skill). Auto-patching it from corrections would converge it on the user's taste and kill its function of surfacing the framing axis the user can't see. It evolves only by deliberate manual decision (thinking/aha/2026-04-12-thin-skills-must-not-auto-improve.md).",
+      "expectations": [
+        "Says No / grill-fast is exempt from auto-improve",
+        "Mentions the auto_improve: false flag",
+        "Says auto-patching would converge it on the user's taste",
+        "Says it evolves by manual decision only"
+      ]
     }
   ]
 }

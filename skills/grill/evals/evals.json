@@ -177,6 +177,17 @@
                 "Says do NOT micro-edit phrasing mid-grill",
                 "Mentions wording is the writer's territory or that micro-editing erases voice"
             ]
+        },
+        {
+            "id": 19,
+            "prompt": "Is the grill skill eligible for /improve auto-patching from its correction log?",
+            "expected_output": "No. Grill carries auto_improve: false — it is an adversarial skill whose value is keeping a perspective different from the user's. Auto-patching it from corrections assimilates it to the user's taste and destroys its blind-spot-exposing function (thinking/aha/2026-04-12-thin-skills-must-not-auto-improve.md). It evolves only by deliberate manual decision.",
+            "expectations": [
+                "Says No / grill is exempt from auto-improve",
+                "Mentions the auto_improve: false flag",
+                "Says auto-patching would assimilate it to the user's taste / kill its blind-spot function",
+                "Says it evolves by manual decision only"
+            ]
         }
     ]
 }

@@ -95,9 +95,11 @@ For each `*.md`: parse `last_validated:` (ISO). If `> EXPIRY_DAYS` days old: fil
 
 ## Phase 1 — Collect signals
 
-When invoked without a skill name: scan all outcome logs, rank by `partial` + `fail` rate, recommend top candidate. Stop and report.
+When invoked without a skill name: scan all outcome logs, rank by `partial` + `fail` rate, recommend top candidate. Stop and report. **Exclude `auto_improve: false` skills from the candidate list** — they are never auto-patched (eligibility gate below), so ranking them wastes a cron cycle.
 
 When invoked with a skill name:
+
+0. **Auto-improve eligibility gate — runs FIRST.** Read the target skill's frontmatter at `{source_repo}/skills/{skill}/SKILL.md` (resolve `source_repo` from the latest outcome-log line; default to this plugin). If it carries `auto_improve: false`, the skill is **adversarial/divergent** (`grill`, `grill-fast`, `think`, `brainstorm`) — its value is keeping a perspective *different* from the user's, and pattern-extracting from its correction log assimilates it to the user's taste and destroys its blind-spot-exposing function (`{vault}/thinking/aha/2026-04-12-thin-skills-must-not-auto-improve.md`). Do **NOT** run Phase 2–4 mutation on it — auto OR manual. Instead: collect the Phase 1 signals, surface them to the user as a manual-evolution prompt (`"Skill {skill} is auto-improve-protected; N correction signals found — evolve it by hand if warranted, I won't pattern-extract"`), log `pass | action=skip-protected` (a correct no-op per `skill-spec.md § 11`), and exit. This gate also blocks the description-hygiene trim — even a frontmatter edit to an adversarial skill is the user's deliberate call.
 
 1. **Read outcome log** at `{vault}/daily/skill-outcomes/{skill}.log`
    - Format: `date | skill | action | source_repo | output_path | commit:hash | result [| key=value ...]`

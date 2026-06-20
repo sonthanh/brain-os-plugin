@@ -615,5 +615,15 @@
       "no-new-patterns supersedes size-gate-blocked"
     ],
     "type": "skill-content-check"
+  },
+  {
+    "name": "auto-improve-eligibility-gate",
+    "description": "/improve must refuse to auto-patch adversarial/divergent skills flagged auto_improve:false (grill, grill-fast, think, brainstorm) before collecting signals — pattern-extracting from their corrections assimilates them to the user's taste and kills their blind-spot function (thin-skills aha 2026-04-12).",
+    "expected_in_skill": [
+      "auto_improve: false",
+      "eligibility gate",
+      "skip-protected"
+    ],
+    "type": "skill-content-check"
   }
 ]

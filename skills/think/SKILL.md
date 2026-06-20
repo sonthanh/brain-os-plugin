@@ -1,6 +1,7 @@
 ---
 name: think
 description: "Use when entering deep thinking mode, exploring ideas, finding patterns, or reflecting on vault content. Also triggers on: challenge, stress-test, emerge, drift, trace, connect, ideas, ghost, brainstorm, what if, poke holes"
+auto_improve: false  # divergent/introspective skill — never auto-patch from corrections (thinking/aha/2026-04-12-thin-skills-must-not-auto-improve.md). Evolve by manual decision only.
 ---
 
 ## Pre-Think Check

@@ -1,6 +1,7 @@
 ---
 name: grill
 description: "Interview the user relentlessly about a topic until reaching a bulletproof, actionable plan. Use when user says 'grill me', 'stress-test this plan', 'poke holes in this', or wants to be challenged on every aspect of a design, strategy, or decision."
+auto_improve: false  # adversarial skill — never auto-patch from corrections (thinking/aha/2026-04-12-thin-skills-must-not-auto-improve.md). Evolve by manual decision only.
 ---
 
 ## Vault Location
