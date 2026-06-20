@@ -402,6 +402,18 @@
         "Says em-dash is U+2014 literal",
         "Says skip silently when `## Acceptance` absent or empty"
       ]
+    },
+    {
+      "id": 36,
+      "prompt": "Under what contract does every /impl run operate, and what does it forbid?",
+      "expected_output": "Every /impl run is an unattended autonomous worker (the user isn't watching), so it operates under the autonomous-run contract in working-rules §5: (1) ground each progress claim against a real tool result — reporting 'tests green' without a test run you can point to is a §5.1 violation; (2) never end a turn on a promise, question, or next-step — do the work now with tool calls, and don't ask permission for reversible actions; (3) ignore context-budget anxiety. The SKILL.md carries a one-line pointer to §5 so the worker's context loads it.",
+      "expectations": [
+        "Says every /impl run is an unattended/autonomous worker",
+        "Cites the autonomous-run contract in working-rules §5",
+        "Says ground progress claims against a real tool result ('tests green' without a test run = §5.1 violation)",
+        "Says don't end a turn on a promise/question — do the work now with tool calls",
+        "Says ignore context-budget anxiety"
+      ]
     }
   ]
 }

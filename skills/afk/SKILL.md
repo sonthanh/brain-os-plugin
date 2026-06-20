@@ -15,6 +15,8 @@ The spine it hands off to (what runs after you walk away):
 | Recovery | "Story doctor (loop closer)" Orca automation — finds `AFK gave up` dead-ends, runs `/debug`, files fix issues, re-queues | 3×/day |
 | Learning | `/impl` auto-invokes `/improve` on `result != pass` + "Improve skills (daily)" Orca automation | per-failure + nightly |
 
+The spine runs under the **autonomous-run contract** (`working-rules.md §5`): every worker grounds progress claims against real tool results, never stalls a turn on a promise/question (does the work now), and ignores context-budget anxiety. Promising autonomy means promising §5 behavior — if the spine can't carry it, don't promise the loop.
+
 ## Input triage
 
 Classify the argument FIRST — the three modes share the spine check and report but differ in how work reaches the queue:

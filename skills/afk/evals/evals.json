@@ -94,5 +94,11 @@
     "description": "Task mode files only through create-task-issue.sh (label-canon validation) — inlining gh issue create re-introduces the label drift the central filer exists to kill.",
     "args": "afk",
     "expect": "never inline `gh issue create`"
+  },
+  {
+    "id": "autonomous-run-contract-pointer",
+    "description": "The afk spine must point workers at the autonomous-run contract (working-rules §5) — every worker grounds progress claims against tool results, never stalls on a promise/question, ignores context-budget anxiety. Without this pointer a future editor can trim the load-path that carries §5 into unattended runs.",
+    "args": "afk",
+    "expect": "autonomous-run contract"
   }
 ]

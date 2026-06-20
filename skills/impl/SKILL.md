@@ -7,6 +7,8 @@ description: "Per-issue implementation executor — grab next AFK issue, run /td
 
 Wraps "grab next AFK issue → run /tdd → commit + push + close." Designed in the Pocock skill-process grill (`{vault}/daily/grill-sessions/2026-04-25-skill-process-pocock-adoption.md`) as Phase C of the new pipeline. Replaces `/develop`'s role as the "build it" skill.
 
+> **Autonomous-run contract.** Every `/impl` run is an unattended worker — the user isn't watching. Operate under `working-rules.md §5`: (1) ground each progress claim against a real tool result, (2) never end a turn on a promise/question/next-step — do the work now, and don't ask permission for reversible actions, (3) ignore context-budget anxiety. "tests green" without a test run that you can point to is a §5.1 violation.
+
 ## Modes
 
 | Mode | Invocation | Behavior |
