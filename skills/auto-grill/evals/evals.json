@@ -1,0 +1,60 @@
+{
+    "skill_name": "auto-grill",
+    "evals": [
+        {
+            "id": 1,
+            "prompt": "What is the load-bearing step of auto-grill, and why?",
+            "expected_output": "The grounding-verify step — it re-reads each citation and reclassifies any answer without real evidence as a surfaced gap, because the worst failure is a confidently fabricated answer that buries a real gap.",
+            "expectations": [
+                "Names the grounding / verify step as load-bearing",
+                "Mentions re-reading or checking citations",
+                "Says fabricated/ungrounded answers become gaps instead of being accepted"
+            ]
+        },
+        {
+            "id": 2,
+            "prompt": "How does auto-grill decide whether to ask the human a question?",
+            "expected_output": "It self-answers from vault/code/web first; only decisions that evidence cannot ground are surfaced to the human.",
+            "expectations": [
+                "Mentions searching/self-answering before asking",
+                "Says only genuine gaps (ungrounded decisions) are surfaced to the human"
+            ]
+        },
+        {
+            "id": 3,
+            "prompt": "What does auto-grill do with gaps in --unattended mode?",
+            "expected_output": "Files each gap as an issue on the task repo plus a report; never calls AskUserQuestion or blocks on a human.",
+            "expectations": [
+                "Says gaps become GitHub issues (and/or a report)",
+                "Says it does NOT use AskUserQuestion / does not block on a human in unattended mode"
+            ]
+        },
+        {
+            "id": 4,
+            "prompt": "When should you use /grill instead of /auto-grill?",
+            "expected_output": "For pure taste, strategy, or topics with no vault/code grounding — where the human is the evidence and every decision would just become a gap anyway.",
+            "expectations": [
+                "Mentions taste/strategy or topics with no vault/code grounding",
+                "Explains auto-grill resolves nothing there, so every decision becomes a gap"
+            ]
+        },
+        {
+            "id": 5,
+            "prompt": "Where does auto-grill save its output and what metric does it log?",
+            "expected_output": "daily/grill-sessions/ with date and topic slug; logs the grounding metric resolved=R total=T gaps=G.",
+            "expectations": [
+                "Mentions daily/grill-sessions/ as output path",
+                "Mentions the resolved/total/gaps grounding metric in the outcome log"
+            ]
+        },
+        {
+            "id": 6,
+            "prompt": "Why must the date be passed into the auto-grill Workflow as an argument?",
+            "expected_output": "Workflow scripts cannot call new Date()/Date.now(), so the caller computes the date and passes it via args.date.",
+            "expectations": [
+                "Says Workflow scripts cannot call new Date()/Date.now()/Math.random()",
+                "Says the caller passes the date in via args"
+            ]
+        }
+    ]
+}
