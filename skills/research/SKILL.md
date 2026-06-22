@@ -245,3 +245,4 @@ Follow `skill-spec.md § 11`. Append one line to `{vault}/daily/skill-outcomes/r
 - `action`: `quick`, `deep`, or `add-voice`
 - `result`: `pass` if report written with citations, `partial` if low signal, few sources, or some platforms failed, `fail` if search errors
 - Optional: `args="{topic}"`, `score={sources_found}`
+- **Conflict recovery**: if `git pull --rebase` fails, run `git rebase --abort`. Log `partial` if the report file was written to disk, `fail` if no report was produced. Use `commit:conflict` in the log line.

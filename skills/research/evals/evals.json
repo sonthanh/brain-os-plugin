@@ -38,6 +38,16 @@
         "Mentions primary or verbatim source tag",
         "Mentions quotes must come from transcript or grep into verbatim file"
       ]
+    },
+    {
+      "id": 5,
+      "prompt": "What should /research do when git pull --rebase fails with a conflict during the commit step?",
+      "expected_output": "Run git rebase --abort immediately. Log partial if the report file was written to disk, fail if no report was produced. Use commit:conflict in the log line.",
+      "expectations": [
+        "SKILL.md contains git rebase --abort",
+        "SKILL.md mentions partial if report written to disk",
+        "SKILL.md contains commit:conflict"
+      ]
     }
   ]
 }
