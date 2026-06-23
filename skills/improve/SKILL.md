@@ -167,6 +167,7 @@ Append to `evals/evals.json` in skill's source directory. Don't overwrite existi
 ## Phase 4 — Improve the skill via variant generation
 
 1. **Locate skill source** — read `source_repo` from outcome log. SKILL.md: `{source_repo}/skills/{skill}/SKILL.md`.
+   If the local path does not exist, try GitHub MCP: `mcp__github__get_file_contents` (repo = `source_repo`, path = `skills/{skill}/SKILL.md`). If both fail → log `note=phase4-blocked-source-repo-inaccessible` and exit Phase 4.
 2. **Run existing evals** as "before" baseline. Record pass count.
 3. **Git tag** `pre-improve-vN` in source repo.
 4. **Save original SKILL.md** content for revert and diff sizing.

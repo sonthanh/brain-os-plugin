@@ -625,5 +625,14 @@
       "skip-protected"
     ],
     "type": "skill-content-check"
+  },
+  {
+    "name": "phase4-source-repo-github-mcp-fallback",
+    "description": "Phase 4 must attempt GitHub MCP (mcp__github__get_file_contents) when source_repo is not accessible locally — not silently block. Covers the 2026-06-21 partial where 3 patterns + 9 corrections from social-image-generator were lost.",
+    "expected_in_skill": [
+      "mcp__github__get_file_contents",
+      "note=phase4-blocked-source-repo-inaccessible"
+    ],
+    "type": "skill-content-check"
   }
 ]
