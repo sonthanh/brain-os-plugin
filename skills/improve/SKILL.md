@@ -95,7 +95,7 @@ For each `*.md`: parse `last_validated:` (ISO). If `> EXPIRY_DAYS` days old: fil
 
 ## Phase 1 — Collect signals
 
-When invoked without a skill name: scan all outcome logs, rank by `partial` + `fail` rate, recommend top candidate. Stop and report. **Exclude `auto_improve: false` skills from the candidate list** — they are never auto-patched (eligibility gate below), so ranking them wastes a cron cycle.
+When invoked without a skill name: scan all outcome logs, rank by `partial` + `fail` rate, recommend top candidate. Stop and report. **Exclude `auto_improve: false` skills from the candidate list** — they are never auto-patched (eligibility gate below), so ranking them wastes a cron cycle. Also exclude skills with `phase4-blocked-source-repo-inaccessible` in their two most recent consecutive entries.
 
 When invoked with a skill name:
 

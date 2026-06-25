@@ -634,5 +634,14 @@
       "note=phase4-blocked-source-repo-inaccessible"
     ],
     "type": "skill-content-check"
+  },
+  {
+    "name": "phase1-exclude-consecutive-blocked-source-repo",
+    "description": "Phase 1 ranking must exclude skills with phase4-blocked-source-repo-inaccessible in consecutive recent entries — re-scheduling them wastes cron cycles when corrections can't be applied (pattern from 2026-06-21 and 2026-06-24 partials on social-image-generator)",
+    "expected_in_skill": [
+      "consecutive",
+      "phase4-blocked-source-repo-inaccessible"
+    ],
+    "type": "skill-content-check"
   }
 ]
