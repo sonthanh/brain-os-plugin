@@ -643,5 +643,13 @@
       "phase4-blocked-source-repo-inaccessible"
     ],
     "type": "skill-content-check"
+  },
+  {
+    "name": "phase1-exclude-blocked-check-improve-log",
+    "description": "Phase 1 consecutive-blocked exclusion must clarify to check improve.log filtered by args=<skill>, not the target skill's own outcome log — phase4-blocked note only appears in improve.log, so 'their entries' without a source hint is a no-op",
+    "expected_in_skill": [
+      "filtered by args=<skill>"
+    ],
+    "type": "skill-content-check"
   }
 ]
