@@ -1,0 +1,20 @@
+{
+  "_note": "Synthetic fixture — neutral content, structurally faithful to a real CLOSED story whose every AC bullet is ticked AND carries a matching '## §3.3 Acceptance verified: AC#N' parent comment. AC ids intentionally skip 9 (1-8,10) to mirror the real-world case where one AC was dropped from the body. Expected verdict: PROVEN, 9/9 verified. Do NOT put real issue bodies here — this repo is public.",
+  "number": 9001,
+  "title": "Story: widget pipeline hardening (synthetic-proven)",
+  "url": "https://example.test/issues/9001",
+  "state": "CLOSED",
+  "body": "## User Story\n\nAs a maintainer I want the widget pipeline hardened.\n\n## Acceptance\n\n- [x] **AC#1** — gate A refuses malformed input — [evidence ↗](https://example.test/issues/9001#issuecomment-1) covered by #9101\n- [x] **AC#2** — gate B blocks start when mapping missing — [evidence ↗](https://example.test/issues/9001#issuecomment-2) covered by #9102\n- [x] **AC#3** — close gate verifies every criterion — [evidence ↗](https://example.test/issues/9001#issuecomment-3) covered by #9103\n- [x] **AC#4** — auto-fill retries up to K then escalates — [evidence ↗](https://example.test/issues/9001#issuecomment-4) covered by #9103\n- [x] **AC#5** — runner rejects skipped live tests — [evidence ↗](https://example.test/issues/9001#issuecomment-5) covered by #9104\n- [x] **AC#6** — child wrapped in evaluator gate — [evidence ↗](https://example.test/issues/9001#issuecomment-6) covered by #9105\n- [x] **AC#7** — spec doc exists and is the SSOT — [evidence ↗](https://example.test/issues/9001#issuecomment-7) covered by #9106\n- [x] **AC#8** — runner accepts prior-failure hint — [evidence ↗](https://example.test/issues/9001#issuecomment-8) covered by #9104\n- [x] **AC#10** — instrumentation row appended per run — [evidence ↗](https://example.test/issues/9001#issuecomment-9) covered by #9105\n\n## Out of Scope\n\n- the v2 redesign\n",
+  "comments": [
+    { "body": "Acceptance verified: AC#1 — gate-a.test.ts: 6 pass, 0 fail; commit aaa1111", "url": "https://example.test/issues/9001#issuecomment-1" },
+    { "body": "Acceptance verified: AC#2 — precheck.test.ts: 4 pass; commit aaa2222", "url": "https://example.test/issues/9001#issuecomment-2" },
+    { "body": "Acceptance verified: AC#3 — close-gate.test.ts: 9 pass; commit aaa3333", "url": "https://example.test/issues/9001#issuecomment-3" },
+    { "body": "Acceptance verified: AC#4 — autofill.test.ts: 3 pass; commit aaa3333", "url": "https://example.test/issues/9001#issuecomment-4" },
+    { "body": "Acceptance verified: AC#5 — runner.test.ts skip-rejection: 2 pass; commit aaa4444", "url": "https://example.test/issues/9001#issuecomment-5" },
+    { "body": "Acceptance verified: AC#6 — wrapper.test.ts: 5 pass; commit aaa5555", "url": "https://example.test/issues/9001#issuecomment-6" },
+    { "body": "Acceptance verified: AC#7 — spec.md exists (file inspection); commit aaa6666", "url": "https://example.test/issues/9001#issuecomment-7" },
+    { "body": "Acceptance verified: AC#8 — runner.test.ts hint-arg: 2 pass; commit aaa4444", "url": "https://example.test/issues/9001#issuecomment-8" },
+    { "body": "Acceptance verified: AC#10 — instrumentation.log appended (grep -c: 12); commit aaa5555", "url": "https://example.test/issues/9001#issuecomment-9" }
+  ],
+  "labels": [{ "name": "type:plan" }, { "name": "status:in-progress" }]
+}

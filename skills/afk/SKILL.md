@@ -1,6 +1,6 @@
 ---
 name: afk
-description: "Turn a goal, task, or existing issue into autonomous work — grill when fuzzy, file/relabel AFK issues, health-check the loop spine, hand off to the schedulers. Triggers: '/afk <goal|task|N>', 'make this AFK', 'finish this while I'm away'. Execute NOW instead → /impl N or cox N."
+description: "Turn a goal, task, or existing issue into autonomous work — grill when fuzzy, file/relabel AFK issues, health-check the loop spine, hand off to the schedulers. Add --auto to drive the whole goal→proof loop in one run and return a proof report (delegates to /autodev) instead of queuing-and-handing-off. Triggers: '/afk <goal|task|N>', '/afk --auto <goal>', 'make this AFK', 'finish this while I'm away'. Execute NOW instead → /impl N or cox N."
 ---
 
 # /afk — Goal/task → autonomous-loop entry point
@@ -29,7 +29,20 @@ Classify the argument FIRST — the three modes share the spine check and report
 
 Default to **goal mode** whenever classification is uncertain. A wrongly-skipped grill ships the wrong thing autonomously; a wrongly-run grill costs a few questions. Never silently guess task-shaped.
 
+**`--auto` flag — drive-to-proof instead of queue-and-handoff.** When the argument carries `--auto` (e.g. `/afk --auto <goal>`), do NOT run the interactive grill→slice→handoff path. Delegate the entire run to **`/autodev`** (the autonomous sibling): auto-grill the goal → escalate ungrounded gaps as HITL → slice → impl+evaluate → **proof report**. `/autodev` drives the work to completion in one detached Workflow run and ends with per-AC proof; `/afk` without `--auto` only queues and hands off to the schedulers. `--auto` is an explicit opt-in: the default goal mode below stays interactive. See § Goal mode `--auto`.
+
 ## Workflow
+
+### Goal mode `--auto` (autonomous — delegates to /autodev)
+
+This is the only afk path that drives work to completion and returns a proof report rather than queuing. It does NOT run here — it hands off wholesale:
+
+1. Resolve `CLAUDE_PLUGIN_ROOT` and the goal text (strip the `--auto` token).
+2. Invoke the **`autodev`** Skill with the goal as its argument (pass `--dry-run` through if the user added it). `/autodev` owns the whole loop: auto-grill (decompose → self-answer → verify-grounding) → escalate-not-break seam (ungrounded gaps → HITL issues, never guessed) → slice → impl+evaluate (TDD + evaluator regenerate, K=3) → proof report.
+3. Do NOT also run the interactive grill, `/slice`, or the spine check — `/autodev` is a synchronous drive-to-done, not a queue handoff, so the scheduler-spine check (which exists because *queued* issues sit forever on a dead spine) does not apply.
+4. Surface `/autodev`'s returned proof verdict (`PROVEN`/`PARTIAL`/`UNPROVEN`) + report path to the user. Honest partial-autonomy reporting still applies: escalated children and unverified ACs are stated, never hidden.
+
+Why a separate flag instead of making goal mode auto by default: the default goal mode's interactive grill is the human-judgment head of the loop. Swapping it for auto-grill is an explicit, deliberate choice (the user trusts the vault has enough grounding) — not a silent shortcut. `--auto` makes that choice visible; the default below stays interactive.
 
 ### Goal mode
 

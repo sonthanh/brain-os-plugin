@@ -100,5 +100,23 @@
     "description": "The afk spine must point workers at the autonomous-run contract (working-rules §5) — every worker grounds progress claims against tool results, never stalls on a promise/question, ignores context-budget anxiety. Without this pointer a future editor can trim the load-path that carries §5 into unattended runs.",
     "args": "afk",
     "expect": "autonomous-run contract"
+  },
+  {
+    "id": "auto-flag-delegates-to-autodev",
+    "description": "The --auto flag must delegate the whole goal→proof loop to /autodev (drive-to-completion + proof report) instead of the default queue-and-handoff. This is what makes afk able to satisfy 'finish AND prove this while I'm away' without bloating afk's thin-glue body.",
+    "args": "afk",
+    "expect": "drive-to-proof instead of queue-and-handoff"
+  },
+  {
+    "id": "auto-flag-skips-spine-check",
+    "description": "Under --auto, afk must NOT run the scheduler-spine check — that check exists because queued issues sit forever on a dead spine, but /autodev drives synchronously to done, so the check does not apply. A future editor must not re-add it.",
+    "args": "afk",
+    "expect": "synchronous drive-to-done, not a queue handoff"
+  },
+  {
+    "id": "auto-is-explicit-optin-default-interactive",
+    "description": "--auto is an explicit opt-in; the default goal mode stays interactive (the grill is the human-judgment head). The skill must keep them distinct so auto-grill never silently replaces the interactive clarify head.",
+    "args": "afk",
+    "expect": "explicit opt-in"
   }
 ]

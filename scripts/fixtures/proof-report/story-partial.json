@@ -1,0 +1,14 @@
+{
+  "_note": "Synthetic fixture — neutral content. 7 AC bullets; AC#1/2/4 ticked AND carry a matching parent evidence comment; AC#3/5/6/7 unticked with NO evidence comment. Expected verdict: PARTIAL, verified=[1,2,4]. Do NOT put real issue bodies here — this repo is public.",
+  "number": 9301,
+  "title": "Story: harden the report pipeline (synthetic-partial)",
+  "url": "https://example.test/issues/9301",
+  "state": "CLOSED",
+  "body": "## User Story\n\nAs a maintainer I want the report pipeline hardened.\n\n## Acceptance\n\n- [x] **AC#1** — linter exists and is green — [evidence ↗](https://example.test/issues/9301#issuecomment-1) covered by #9401\n- [x] **AC#2** — guideline edits land in the spec — [evidence ↗](https://example.test/issues/9301#issuecomment-2) covered by #9402\n- [ ] **AC#3** — semantic checks land and re-run clean\n- [x] **AC#4** — rewrite memo addresses every failing item — [evidence ↗](https://example.test/issues/9301#issuecomment-3) covered by #9403\n- [ ] **AC#5** — second rewrite memo names per-team commitments\n- [ ] **AC#6** — third rewrite memo drafted\n- [ ] **AC#7** — all memos reviewed and merged\n\n## Out of Scope\n\n- the quarterly rollup\n",
+  "comments": [
+    { "body": "Acceptance verified: AC#1 — lint.test.ts: 14 pass, 0 fail; commit bbb1111", "url": "https://example.test/issues/9301#issuecomment-1" },
+    { "body": "Acceptance verified: AC#2 — guideline section landed (file inspection); commit bbb2222", "url": "https://example.test/issues/9301#issuecomment-2" },
+    { "body": "Acceptance verified: AC#4 — rewrite memo at docs/memo-1.md (file inspection); commit bbb3333", "url": "https://example.test/issues/9301#issuecomment-3" }
+  ],
+  "labels": [{ "name": "type:plan" }, { "name": "status:in-progress" }]
+}

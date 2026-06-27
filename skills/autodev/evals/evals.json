@@ -1,0 +1,86 @@
+[
+  {
+    "id": "escalate-not-break-seam",
+    "description": "The autonomy crux: ungrounded gaps are escalated as HITL, never guessed-and-built. This is the one invariant the whole goal→proof loop exists to protect; a future editor must not 'optimize' it into auto-answering gaps.",
+    "args": "autodev",
+    "expect": "escalate-not-break"
+  },
+  {
+    "id": "never-guess-and-build",
+    "description": "Must state explicitly that the loop never fabricates answers for ungrounded decisions — a fabricated answer that buries a real gap is the worst failure mode.",
+    "args": "autodev",
+    "expect": "never guesses-and-builds"
+  },
+  {
+    "id": "gaps-become-hitl-not-guesses",
+    "description": "Ungrounded gaps must be filed as HITL issues, not answered by the loop. Without this the seam collapses into silent guessing.",
+    "args": "autodev",
+    "expect": "gaps become HITL issues, not guesses"
+  },
+  {
+    "id": "proof-is-the-deliverable",
+    "description": "The terminal deliverable is a per-AC proof report, not a queue handoff — this is the entire difference from /afk and must not be trimmed.",
+    "args": "autodev",
+    "expect": "Proof is the deliverable, not a handoff"
+  },
+  {
+    "id": "proof-report-is-ssot",
+    "description": "proof-report.ts is the single source of truth renderer; the Workflow shells it and agents must never hand-write a proof report (re-introduces drift).",
+    "args": "autodev",
+    "expect": "proof-report.ts is the SSOT renderer"
+  },
+  {
+    "id": "opus-everywhere",
+    "description": "Every agent runs Opus — the grounding gate and evaluator are only as good as the model; downgrading to Sonnet silently weakens both.",
+    "args": "autodev",
+    "expect": "All agents run Opus"
+  },
+  {
+    "id": "dry-run-files-nothing",
+    "description": "--dry-run must file and edit nothing — it proves chain wiring + renders a DRY proof report. Without the guarantee, the validation path becomes destructive.",
+    "args": "autodev",
+    "expect": "--dry-run files and edits nothing"
+  },
+  {
+    "id": "afk-auto-delegates-here",
+    "description": "Documents that /afk --auto is the entry point that routes into /autodev, while /afk goal mode without --auto stays interactive. Keeps the two skills' boundary explicit.",
+    "args": "autodev",
+    "expect": "/afk --auto delegates here"
+  },
+  {
+    "id": "reflection-tier-stops",
+    "description": "A reflection-tier goal (no implementation surface) must stop after grill — no slice, no impl. Prevents the loop from manufacturing build work for pure-analysis goals.",
+    "args": "autodev",
+    "expect": "Reflection-tier goal"
+  },
+  {
+    "id": "live-e2e-ac-required",
+    "description": "The sliced parent must carry a (LIVE E2E) acceptance criterion — the empirical anchor /slice and the evaluator depend on.",
+    "args": "autodev",
+    "expect": "(LIVE E2E)"
+  },
+  {
+    "id": "args-json-object-not-string",
+    "description": "Workflow args must be passed as an actual JSON object, never a stringified one — the 2026-06-20 geo-dev lesson (a stringified object makes every args.x undefined).",
+    "args": "autodev",
+    "expect": "never a JSON string"
+  },
+  {
+    "id": "no-agent-turn-orchestration",
+    "description": "The Workflow is the control loop and runs detached; the session must not poll it by agent-turn (the expensive anti-pattern from the orchestration-on-script aha).",
+    "args": "autodev",
+    "expect": "orchestrates by agent-turn"
+  },
+  {
+    "id": "central-filer-only",
+    "description": "Issues are filed via create-task-issue.sh to sonthanh/ai-brain — never inline gh issue create, never the plugin repo (hook-enforced label canon).",
+    "args": "autodev",
+    "expect": "never inline `gh issue create`"
+  },
+  {
+    "id": "outcome-log-path",
+    "description": "Outcome log section must point at the real per-skill log path so /improve can mine autodev's grounding + escalation signals (skill-spec § 11).",
+    "args": "autodev",
+    "expect": "daily/skill-outcomes/autodev.log"
+  }
+]

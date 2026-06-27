@@ -100,7 +100,7 @@ export async function getChildIssues(
 // directly without sectioning — bullets matching the pattern outside the
 // ## Acceptance section are vanishingly rare and would themselves be a
 // filer bug surfaced by the gate.
-const ACCEPTANCE_AC_RE = /^- \[[ x]\] \*\*AC#(\d+)\*\* — (.+)$/gm;
+export const ACCEPTANCE_AC_RE = /^- \[[ x]\] \*\*AC#(\d+)\*\* — (.+)$/gm;
 
 export function parseAcceptance(body: string): Map<number, string> {
   const acs = new Map<number, string>();
@@ -217,7 +217,7 @@ export function appendAutoFiledChild(body: string, child: number): string {
 // Applied per-line within a comment body — the regex is line-anchored so the
 // caller MUST split on \n and match each line individually. matchAll-on-block
 // won't work even with /m because `.+` would greedily eat across lines.
-const PARENT_COMMENT_EVIDENCE_RE = /^Acceptance verified: AC#(\d+) — (.+)$/;
+export const PARENT_COMMENT_EVIDENCE_RE = /^Acceptance verified: AC#(\d+) — (.+)$/;
 
 export function parseParentCommentEvidence(commentBody: string): number[] {
   const ids: number[] = [];
