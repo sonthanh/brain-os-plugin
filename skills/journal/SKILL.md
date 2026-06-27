@@ -14,15 +14,20 @@ Aggregates everything from today (or a specified date) into structured content m
 
 Scan ALL of these (skip any that don't exist):
 
-1. **Git logs** across all repos:
+1. **Git logs** across **every** repo under `~/work` (auto-discover, don't hardcode — this is what makes the journal cover *all* sessions, not just the core repos):
    ```bash
-   for repo in ~/work/brain ~/work/brain-ops ~/work/brain-os-plugin ~/work/brain-os-marketplace; do
-     echo "=== $(basename $repo) ==="
-     git -C "$repo" log --oneline --since="YYYY-MM-DDT00:00" --until="YYYY-MM-DDT23:59" 2>/dev/null
+   # Iterate every git repo one level under ~/work. Keep the day bounds —
+   # this is calendar-day backfill, not the hook's rolling 2h window.
+   for repo in "$HOME"/work/*/; do
+     [ -d "$repo/.git" ] || continue
+     COMMITS=$(git -C "$repo" log --oneline \
+       --since="YYYY-MM-DDT00:00" --until="YYYY-MM-DDT23:59" 2>/dev/null)
+     [ -n "$COMMITS" ] && printf '=== %s ===\n%s\n' "$(basename "$repo")" "$COMMITS"
    done
    ```
+   This catches work in **any** repo, not just the core brain repos. A day with commits only in a non-core repo must NOT be reported as a rest day.
 
-2. **Aha moments**: `{vault}/daily/sessions/YYYY-MM-DD-aha.md`
+2. **Aha moments**: `{vault}/thinking/aha/YYYY-MM-DD-*.md` (current location) **and** `{vault}/daily/sessions/YYYY-MM-DD-aha.md` (legacy, pre-2026-05). Check both.
 
 3. **Grill sessions**: `{vault}/daily/grill-sessions/YYYY-MM-DD-*.md`
 
@@ -30,7 +35,11 @@ Scan ALL of these (skip any that don't exist):
 
 5. **Email intelligence**: `{vault}/business/intelligence/emails/YYYY-MM-DD-daily-summary.md`
 
-6. **Session summaries**: `{vault}/daily/sessions/YYYY-MM-DD-*.md` (from Stop hook)
+6. **Session summaries** (the canonical per-session record — one file per session, per repo, written by the `session-end.sh` hook): `{vault}/daily/sessions/YYYY-MM-DD*.md`
+   - **Glob must be `YYYY-MM-DD*.md` (no separator after the date)** — real filenames are `YYYY-MM-DDThh-mm-{repo}.md` (e.g. `2026-06-27T12-34-brain.md`). A `YYYY-MM-DD-*.md` pattern silently matches nothing because the real separator after the date is `T`, not `-`.
+   - These already aggregate cross-repo commits and name the repo each session ran in, so they are how sessions in non-core repos reach the journal even when that day had no aha/grill/handover.
+
+> **Why no raw transcripts:** local session transcript JSONL files are intentionally **not** a source. `session-end.sh` already distills every session into a vault summary (source #6), so parsing raw transcripts would be redundant machinery. The vault session summary is the canonical per-session record.
 
 ## Output
 

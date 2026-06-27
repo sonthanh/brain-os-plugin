@@ -18,12 +18,12 @@
       "prompt": "What are the 6 data sources the journal skill aggregates?",
       "expected_output": "Git logs, aha moments, grill sessions, handovers, email intelligence, session summaries",
       "expectations": [
-        "Mentions git logs across multiple repos (brain, brain-ops, brain-os-plugin, brain-os-marketplace)",
-        "Mentions aha moments from daily/sessions/YYYY-MM-DD-aha.md",
+        "Mentions git logs auto-discovered across EVERY git repo under ~/work (not a hardcoded list)",
+        "Mentions aha moments from thinking/aha/ (current) and legacy daily/sessions/*-aha.md",
         "Mentions grill sessions from daily/grill-sessions/",
         "Mentions handovers from daily/handovers/",
         "Mentions email intelligence from business/intelligence/emails/",
-        "Mentions session summaries from daily/sessions/"
+        "Mentions session summaries from daily/sessions/ (one file per session per repo, written by session-end.sh)"
       ]
     },
     {
@@ -90,6 +90,17 @@
         "result = `pass`",
         "absent sources are not penalized when they simply did not exist that day",
         "automated-only day with journal written = `pass`"
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "On the target day, the only commits were 22 commits in a non-core repo under ~/work (none in brain/brain-ops/brain-os-plugin/brain-os-marketplace). How must the journal git scan handle this, and what filename glob does it use for session summaries?",
+      "expected_output": "The git scan auto-discovers every ~/work/*/ repo so the 22 non-core commits are captured (not a rest day); session summaries are globbed with YYYY-MM-DD*.md",
+      "expectations": [
+        "Git scan loops over every git repo under ~/work (for repo in \"$HOME\"/work/*/; .git check), not a hardcoded 4-repo list",
+        "The non-core repo's commits ARE surfaced — the day is NOT reported as a rest day",
+        "Keeps calendar-day bounds (--since YYYY-MM-DDT00:00 --until YYYY-MM-DDT23:59), not the hook's rolling 2h window",
+        "Session-summary glob is YYYY-MM-DD*.md with no separator after the date (real files are YYYY-MM-DDThh-mm-{repo}.md, so YYYY-MM-DD-*.md matches nothing)"
       ]
     }
   ]
