@@ -45,6 +45,16 @@ describe("parseAcceptanceBullets", () => {
     expect(b[1].evidenceUrl).toBeUndefined();
   });
 
+  test("a literal [x] inside an unticked AC description does NOT flip the tick", () => {
+    // Regression: tick must read the checkbox, not includes("[x]"). Realistic in this
+    // checkbox-tooling repo (ac-coverage-spec.md writes ACs containing `[x]`).
+    const body = "- [ ] **AC#3** — leaf body shows AC#1, #2 ticked [x]; AC#4 stays";
+    const b = parseAcceptanceBullets(body);
+    expect(b.length).toBe(1);
+    expect(b[0].ticked).toBe(false);
+    expect(classifyAc(b[0], [])).toBe("unverified"); // NOT ticked-no-evidence
+  });
+
   test("rejects hyphen-instead-of-emdash and bare AC# (per §3.1)", () => {
     const body = [
       "- [ ] **AC#1** - hyphen not em-dash",

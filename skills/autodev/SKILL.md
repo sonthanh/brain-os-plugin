@@ -86,10 +86,17 @@ Do NOT poll the Workflow with Bash/Monitor loops — that re-introduces orchestr
 
 ## Phase 3 — Finalize (after the Workflow returns)
 
-1. Read the Workflow's returned summary (`resolved / gaps / children / implemented / escalated / reportPath / verdict`).
-2. Surface the proof verdict to the user in plain English — lead with `PROVEN` / `PARTIAL` / `UNPROVEN`, the report path, and any escalated children or filed gaps. Be honest: a PARTIAL with 2 escalated children is not "done."
-3. If the Workflow crashed before its Report phase, write the `fail` outcome line yourself (`reason=workflow-crash`).
-4. Notify the user (long-running orchestrator alert): `sp tab` banner, falling back to `osascript display notification`, with the verdict + report path.
+Branch on the returned summary's shape FIRST — a clean early exit is NOT a crash:
+
+- **Early exit (`summary.stoppedAfter` is set).** The Workflow stopped honestly before the Report phase and carries `reason`, not a `reportPath`/verdict. Surface the honest no-op, do NOT call it a crash:
+  - `stoppedAfter:'grill', reason:'reflection-tier'` → "Goal is reflection-only — no build surface. Decisions surfaced; nothing to implement." Outcome `pass | reason=reflection-tier`.
+  - `stoppedAfter:'grill', reason:'all-gaps'` → "Evidence couldn't ground any decision — every one became a HITL gap; nothing built autonomously." Outcome `pass | reason=all-gaps`.
+  - `stoppedAfter:'slice', error:'ac-coverage' | 'no-live-e2e-ac' | 'slice-synth-failed'` → state which gate stopped it. Outcome `partial | reason=<error>`.
+  - `stoppedAfter:'grill', error:'…'` (no decisions) → `partial | reason=<error>`.
+- **Full run (no `stoppedAfter`).** The summary carries `resolved / gaps / children / implemented / escalated / reportPath`, and `summary.report` holds the report agent's one-line return **including the PROVEN/PARTIAL/UNPROVEN verdict** (the verdict is computed by `proof-report.ts` and lives in the report file + that line — it is NOT a separate top-level summary key). Lead with the verdict, the `reportPath`, and any escalated children / filed gaps. Be honest: a PARTIAL with 2 escalated children is not "done."
+- **Hard crash (a thrown error, no structured summary).** Only here write the `fail` outcome line yourself (`reason=workflow-crash`) — distinct from the clean early exits above.
+
+Then notify the user (long-running orchestrator alert): `sp tab` banner, falling back to `osascript display notification`, with the verdict (or the honest no-op reason) + report path.
 
 ## Gotchas
 

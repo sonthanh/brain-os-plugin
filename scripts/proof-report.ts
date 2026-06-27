@@ -72,7 +72,9 @@ export type OverallVerdict = "PROVEN" | "PARTIAL" | "UNPROVEN";
 export interface ChildRef {
   number: number;
   title?: string;
-  state?: "closed" | "open" | "escalated";
+  // "pr-open" = passed eval, PR opened, awaiting human merge (autodev never self-merges
+  // logic). "planned" = dry-run, not built. "closed" = replay of an already-closed story.
+  state?: "closed" | "open" | "escalated" | "pr-open" | "planned";
   coversAc?: number[];
 }
 
@@ -115,7 +117,11 @@ export function parseAcceptanceBullets(body: string): AcBullet[] {
     const line = m[0];
     const id = Number(m[1]);
     const raw = m[2];
-    const ticked = line.includes("[x]");
+    // Tick state from the checkbox POSITION, not a free substring — ACCEPTANCE_AC_RE
+    // anchors `^- \[[ x]\]`, so m[0] always begins with "- [ ]" or "- [x]". A literal
+    // "[x]" inside the AC description (common in this checkbox-tooling repo) must NOT
+    // flip the tick.
+    const ticked = line.startsWith("- [x]");
     const evMatch = raw.match(
       /\[evidence ↗\]\(([^)]+)\)/,
     );
@@ -342,7 +348,12 @@ export function buildResultsToStory(args: {
     children.push({
       number: r.issue,
       title: r.title,
-      state: r.status === "escalated" ? "escalated" : "closed",
+      state:
+        r.status === "escalated"
+          ? "escalated"
+          : r.status === "pass(dry)"
+            ? "planned"
+            : "pr-open",
       coversAc: r.coversAc,
     });
     if (r.status === "escalated") continue;

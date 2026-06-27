@@ -82,5 +82,11 @@
     "description": "Outcome log section must point at the real per-skill log path so /improve can mine autodev's grounding + escalation signals (skill-spec § 11).",
     "args": "autodev",
     "expect": "daily/skill-outcomes/autodev.log"
+  },
+  {
+    "id": "early-exit-is-not-a-crash",
+    "description": "Phase 3 must branch on the Workflow's return shape FIRST: a clean early exit (stoppedAfter — reflection-tier / all-gaps / slice-gate) is an honest no-op, NOT a crash. Without this the session mislabels a legitimate zero-build run as fail/workflow-crash and tries to read a verdict/reportPath those returns never carry.",
+    "args": "autodev",
+    "expect": "a clean early exit is NOT a crash"
   }
 ]

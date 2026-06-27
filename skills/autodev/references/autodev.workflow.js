@@ -168,11 +168,13 @@ ${RULES}
 Return ONLY the structured object.`
 
 const filePrompt = (slice, rung0Title) => `FILE the /autodev story to ${TASK_REPO} via the central filer, following skills/slice/SKILL.md Steps 2.4 + 6 + 7. PLUGIN_ROOT=${PLUGIN_ROOT}.
-1. File the PARENT: bash "${PLUGIN_ROOT}/scripts/gh-tasks/create-task-issue.sh" --title "${slice.parent.title}" --body "<the parent body>" --area "${AREA}" --owner human --priority p2 --weight heavy --status ready --type plan ; then bash "${PLUGIN_ROOT}/scripts/gh-tasks/transition-status.sh" <parent-N> --to in-progress. Capture parent number + node id.
-2. File CHILDREN in topological order — RUNG-0 FIRST ("${rung0Title}"), then siblings (each "## Blocked by" the rung-0 number). Use create-task-issue.sh --owner bot --status ready (rung-0) / --status blocked (siblings) --area "${AREA}". After each, addSubIssue GraphQL link to the parent.
-3. Edit parent ## Sub-issues to list the real child numbers.
-Children specs: ${JSON.stringify(slice.children.map((c) => ({ title: c.title, coversAc: c.coversAc, rung0: c.rung0, weight: c.weight })))}
-Parent body: pass through verbatim. Return {parent:{number,url,title,body}, children:[{number,url,title,coversAc,rung0}]}.`
+CRITICAL: file the EXACT bodies below VERBATIM. They already passed the deterministic AC-coverage + (LIVE E2E) gates — do NOT re-synthesize, rewrite, or "improve" them, or you ship content the gates never validated. Write each body to a temp file and pass it with --body-file to preserve backticks/newlines.
+1. File the PARENT (title "${slice.parent.title}"): bash "${PLUGIN_ROOT}/scripts/gh-tasks/create-task-issue.sh" --title "<title>" --body-file <parent-body-tmpfile> --area "${AREA}" --owner human --priority p2 --weight heavy --status ready --type plan ; then bash "${PLUGIN_ROOT}/scripts/gh-tasks/transition-status.sh" <parent-N> --to in-progress. Capture parent number + node id.
+2. File CHILDREN topologically — RUNG-0 FIRST ("${rung0Title}"), then siblings (each child's "## Blocked by" must reference the rung-0 number). create-task-issue.sh --owner bot --status ready (rung-0) / --status blocked (siblings) --area "${AREA}", --body-file per child. After each, addSubIssue GraphQL link to the parent.
+3. Edit the parent's ## Sub-issues to list the real child numbers.
+PARENT BODY (verbatim): ${JSON.stringify(slice.parent.body)}
+CHILDREN (file in this order; body verbatim): ${JSON.stringify((slice.children || []).map((c) => ({ title: c.title, coversAc: c.coversAc, rung0: c.rung0, weight: c.weight, body: c.body })))}
+Return {parent:{number,url,title,body}, children:[{number,url,title,coversAc,rung0}]} — body = the verbatim parent body you filed.`
 
 const implementPrompt = (c, branch) => `Implement /autodev child #${c.number} ("${c.title}") in repo ${AREA_REPO} on branch ${branch}.
 1. git -C ${AREA_REPO} checkout main && git -C ${AREA_REPO} checkout -b ${branch} (checkout if exists).
@@ -251,7 +253,14 @@ const answered = await pipeline(
 const ok = answered.filter(Boolean)
 const resolved = ok.filter((a) => a.verdict && a.verdict.grounded)
 const gaps = ok.filter((a) => !a.verdict || !a.verdict.grounded)
-log(`Grounding gate: ${resolved.length}/${ok.length} grounded · ${gaps.length} gaps`)
+// escalate-not-break: a decision whose auto-answer/verify agent DIED (null entry,
+// terminal API error after retries) was never evaluated — it is neither grounded nor
+// a surfaced gap. Silently dropping it would build on an incomplete picture. Treat it
+// as a gap so it is escalated to a human, never silently lost.
+decisions.forEach((d, i) => {
+  if (!answered[i]) gaps.push({ decision: d, answer: null, verdict: { grounded: false, reason: 'auto-answer/verify agent failed (no verdict) — escalated to human', surfacedQuestion: d.question } })
+})
+log(`Grounding gate: ${resolved.length}/${ok.length} grounded · ${gaps.length} gaps (${decisions.length - answered.filter(Boolean).length} died→escalated)`)
 
 // ── SEAM: escalate-not-break ────────────────────────────────────────────────
 if (!decomposition.storyTier) {
@@ -270,6 +279,12 @@ if (resolved.length === 0) {
 
 phase('Slice')
 const slice = await agent(slicePrompt(decomposition, resolved), { label: 'slice:synth', phase: 'Slice', model: MODEL, schema: SLICE_SCHEMA })
+// null-guard: the slice agent can die (terminal API error / session limit) and return
+// null. Fail to the report gracefully rather than deref slice.parent.
+if (!slice || !slice.parent) {
+  log('Slice synthesis returned null (agent died) — cannot build. Stopping before any filing.')
+  return { stoppedAfter: 'slice', error: 'slice-synth-failed', resolved: resolved.length, gaps: gaps.length }
+}
 // deterministic AC-coverage gate (slice/SKILL.md Step 2.5)
 const parentAcIds = (slice.parent.acIds || [])
 const coveredAc = new Set((slice.children || []).flatMap((c) => c.coversAc || []))
@@ -282,9 +297,19 @@ if (!(slice.parent.liveE2eAcIds || []).length) {
   log('Slice missing a (LIVE E2E) AC — refusing to build an unfalsifiable story.')
   return { stoppedAfter: 'slice', error: 'no-live-e2e-ac' }
 }
-const rung0 = (slice.children || []).find((c) => c.rung0) || (slice.children || [])[0]
-const ordered = [rung0, ...(slice.children || []).filter((c) => c !== rung0)]
-log(`Slice: parent "${slice.parent.title}" + ${slice.children.length} children (rung-0: "${rung0 ? rung0.title : '?'}")`)
+// rung-0 MUST cover the (LIVE E2E) AC (slice/SKILL.md §4.5) — don't blindly trust the
+// LLM-set rung0 flag. Prefer a child that the flag marks AND that actually covers a
+// live-e2e AC; fall back to any child covering a live-e2e AC; only then to the flag.
+const liveSet = new Set(slice.parent.liveE2eAcIds || [])
+const coversLive = (c) => (c.coversAc || []).some((a) => liveSet.has(a))
+const kids = slice.children || []
+const rung0 =
+  kids.find((c) => c.rung0 && coversLive(c)) ||
+  kids.find((c) => coversLive(c)) ||
+  kids.find((c) => c.rung0) ||
+  kids[0]
+const ordered = [rung0, ...kids.filter((c) => c !== rung0)]
+log(`Slice: parent "${slice.parent.title}" + ${kids.length} children (rung-0: "${rung0 ? rung0.title : '?'}"${rung0 && !coversLive(rung0) ? ' — WARN: rung-0 covers no live-e2e AC' : ''})`)
 
 let parentRef, childRefs
 if (DRY) {
@@ -300,6 +325,11 @@ if (DRY) {
   })
 }
 
+// Process rung-0 FIRST regardless of the filer's return order — its result gates
+// whether siblings are even attempted (slice/SKILL.md §4.5: if the architectural
+// anchor fails, don't burn work on a broken foundation; reframe cheaply instead).
+childRefs.sort((a, b) => (b.rung0 ? 1 : 0) - (a.rung0 ? 1 : 0))
+
 phase('Implement')
 const results = []
 for (const c of childRefs) {
@@ -308,7 +338,14 @@ for (const c of childRefs) {
     continue
   }
   if (budget.total && budget.remaining() < BUDGET_FLOOR) { log(`budget floor — deferring remaining ${childRefs.length - results.length} child(ren)`); break }
-  results.push(await implementWithEvaluator(c, parentRef.number))
+  const res = await implementWithEvaluator(c, parentRef.number)
+  results.push(res)
+  // rung-0 escalated → STOP. Siblings are all blocked-by rung-0; building them on a
+  // failed architectural anchor is exactly what §4.5 forbids. Leave them ready+OPEN.
+  if (c.rung0 && res.status === 'escalated') {
+    log(`rung-0 #${c.number} escalated — halting sibling implementation (cheap reframe per §4.5). ${childRefs.length - results.length} sibling(s) left ready for human.`)
+    break
+  }
 }
 
 phase('Report')
