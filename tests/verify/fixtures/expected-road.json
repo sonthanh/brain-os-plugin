@@ -1,0 +1,9 @@
+{
+  "flag": "true",
+  "last_audit": "2026-04-04T14:27:24.244387",
+  "audit_score": "159/159 at >=95 (avg 97.0)",
+  "changed_by": "user",
+  "pipeline_completed": "2026-04-04T12:00:00",
+  "ingested": true,
+  "absorbed": true
+}

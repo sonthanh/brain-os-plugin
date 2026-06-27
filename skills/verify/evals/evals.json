@@ -33,6 +33,18 @@
         "Mentions >=95 scoring threshold",
         "States 100% pass leads to audited: true, any fail to audited: false"
       ]
+    },
+    {
+      "id": 4,
+      "prompt": "How does verify fan out the 50-question audit, and how does it stay context-isolated and reusable by self-learn?",
+      "expected_output": "Per-question Workflow fan-out with inline oracle answers, a sequential oracle batch outside the fan-out, and a threshold parameter shared with self-learn",
+      "expectations": [
+        "Mentions one judge agent per question via references/verify.workflow.js (parallel fan-out)",
+        "States each worker reads only its own scoped notes plus its single inline oracle answer, so no other question's oracle or notes leak in",
+        "States the oracle batch (run_validation.py) runs sequentially OUTSIDE the fan-out because NotebookLM is rate-limited",
+        "Mentions threshold is a parameter — 95 for verify, reused at 90 by /self-learn",
+        "States audited=true only when every question scores >=95"
+      ]
     }
   ]
 }

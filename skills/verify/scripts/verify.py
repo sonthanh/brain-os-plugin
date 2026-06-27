@@ -67,15 +67,22 @@ def read_flag(book_dir):
 
 
 def write_flag(book_dir, flag, changed_by="user", audit_score=None):
-    """Write audit flag for a book."""
+    """Write audit flag for a book.
+
+    Merges into any existing audit-flag.json: refreshes the managed keys
+    (flag/last_audit/audit_score/changed_by) and preserves every other key the
+    self-learn pipeline writes (pipeline_completed/ingested/absorbed/notebook_id).
+    Rebuilding the dict from scratch would silently clobber those keys.
+    """
     flag_path = os.path.join(book_dir, FLAG_FILE)
     os.makedirs(os.path.dirname(flag_path), exist_ok=True)
-    data = {
+    data = read_flag(book_dir)
+    data.update({
         "flag": flag,
         "last_audit": datetime.now().isoformat(),
-        "audit_score": audit_score or read_flag(book_dir).get("audit_score"),
+        "audit_score": audit_score or data.get("audit_score"),
         "changed_by": changed_by,
-    }
+    })
     json.dump(data, open(flag_path, 'w'), indent=2)
     return data
 

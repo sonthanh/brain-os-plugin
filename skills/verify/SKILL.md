@@ -41,12 +41,30 @@ python3 ${PLUGIN_ROOT}/skills/verify/scripts/verify.py {vault}/knowledge/raw --s
 
 ## How Verify Runs
 
-1. Fuzzy match book name against `knowledge/raw/` folders
-2. Generate 50 fresh questions (25 topic, 15 cross-cutting, 10 adversarial)
-3. Agent answers from Obsidian notes only
-4. NotebookLM answers via `notebooklm ask`
-5. LLM-as-judge scores at ≥95 threshold
-6. 100% pass → `audited: true`. Any fail → `audited: false`, report to inbox
+A 5-phase flow. NotebookLM is rate-limited, so the oracle batch stays **sequential and OUTSIDE** the fan-out; only the per-question judge + reduce run inside the Workflow (the Workflow runtime has no `fs`/subprocess). The judge runner is shared — `references/verify.workflow.js` is parameterized by `threshold` so `/self-learn` consumes the same file at 90 while verify runs at 95.
+
+```
+[0] Bash/agent  gen 50 fresh Qs (25 topic / 15 cross-cutting / 10 adversarial) → questions.json
+[1] Bash        run_validation.py → oracle answers   (sequential, backoff — REUSED verbatim, rate-limited)
+                  load items: {qid, question, topic, oracleAnswer, noteScope}
+                  └── args (oracle answer INLINE per item) ──▶
+[2] Workflow    references/verify.workflow.js · parallel(50): one judge agent per question —
+                  reads ONLY its scoped notes, forms its own answer, compares vs its INLINE
+                  oracleAnswer at ≥95 → {qid, score, pass, gap}
+[3] reduce      (pure JS, in-workflow) passRate · weakClusters (fails clustered by topic) ·
+                  audited = (every score ≥ threshold)
+                  ◀── result: {passRate, audited, perQuestion, weakClusters} ──┘
+[4] Bash        write audit-results-{date}.jsonl from perQuestion · set flag via
+                  `verify.py --set-flag <true|false>` (merges — preserves pipeline_completed /
+                  ingested / absorbed / notebook_id) · on any fail write the inbox report ·
+                  append the outcome-log line
+```
+
+1. **Generate questions** — fuzzy match the book against `knowledge/raw/`, generate 50 fresh questions, write `questions.json` (`{id, q, type, topic}`, the self-learn format).
+2. **Oracle batch** — `run_validation.py` (reused verbatim) asks NotebookLM each question via `notebooklm ask` sequentially with exponential backoff, producing one oracle answer per question. Assemble the items `{qid, question, topic, oracleAnswer, noteScope}`.
+3. **Judge fan-out** — invoke the Workflow tool on `references/verify.workflow.js` with `{items, bookPath, threshold: 95}`. Each worker is handed its single `oracleAnswer` inline and reads only its own note scope — no other question's oracle answer or notes enter its context.
+4. **Reduce** — the workflow returns `{passRate, audited, perQuestion, weakClusters}`. `audited` is true ONLY when every question scored ≥95 (and every question was judged).
+5. **Write outputs** — write `{book_vault}/_validation/audit-results-{date}.jsonl` from `perQuestion`; set the flag with `verify.py --set-flag true|false` (the writer merges, preserving non-managed keys); on any fail, write the inbox report naming the `weakClusters`.
 
 Results saved to `{book_vault}/_validation/audit-results-{date}.jsonl`.
 
