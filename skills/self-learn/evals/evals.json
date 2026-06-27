@@ -77,6 +77,18 @@
         "Mentions /verify follows ingest",
         "Mentions Phase 2 must reach 100% pass at ≥95 before /ingest triggers"
       ]
+    },
+    {
+      "id": 8,
+      "prompt": "How does Phase 1 EXTRACT keep chapter text out of the main context, and how does it avoid category drift across chapters?",
+      "expected_output": "A multi-agent Workflow: Phase 0 derives a closed taxonomy + temp files, Phase 1 fans out one agent per chapter, Phase 1b back-links",
+      "expectations": [
+        "Mentions Phase 1 runs as a Workflow (references/self-learn.workflow.js), one agent per chapter in parallel",
+        "States Phase 0 parses the epub, writes each chapter to a temp file, and derives a closed category taxonomy",
+        "States each Phase-1 worker Reads only its own chapter file so chapter text never enters the main context",
+        "States categories are constrained to the Phase-0 enum so they don't fragment (decision-making vs decisions)",
+        "Mentions Phase 1b back-links each note's ## Related block from the global slug list"
+      ]
     }
   ]
 }

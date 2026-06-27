@@ -20,20 +20,31 @@ scripts_dir: ${CLAUDE_PLUGIN_ROOT}/skills/self-learn/scripts
 
 ## Phase 1: EXTRACT
 
-**Goal:** Read the book → identify atomic concepts → write Obsidian notes.
+**Goal:** Read the book → identify atomic concepts → write Obsidian notes. Run as a multi-agent Workflow (`ultracode`) — one agent per chapter, in parallel — so chapter text stays OUT of the main context.
 
-1. Parse epub via `scripts/lib/epub_parser.py` to get chapter text
-2. For EACH chapter sequentially:
-   a. Identify atomic concepts — look for:
-      - Named frameworks (e.g., "The Four Hats", "Thinking Time")
-      - Core principles (e.g., "minimize dumb tax")
-      - Processes/rituals (step-by-step methods)
-      - Mental models (2nd-order consequences, checking assumptions)
-      - Distinctions (operator vs owner, revenue vs profit)
-      - Actionable tools (specific questions, decision frameworks)
-   b. Create one note per concept (~100 words) using `scripts/lib/note_writer.py`
-   c. Categorize into topic folders, link to related concepts from previous chapters
-3. After all chapters: report total topics extracted and category breakdown
+Invoke the Workflow tool on `references/self-learn.workflow.js`:
+
+```
+Workflow({
+  scriptPath: "${CLAUDE_PLUGIN_ROOT}/skills/self-learn/references/self-learn.workflow.js",
+  args: { bookSlug, epubPath, vaultPath, bookTitle, author }
+})
+```
+
+Three phases run inside the workflow:
+
+- **Phase 0 (one agent)** — parse the epub via `scripts/lib/epub_parser.py`, write each chapter to a temp file, and derive a CLOSED category taxonomy from the chapter bodies. Only the manifest (`{index, title, path, wordCount}`) + the category enum leave this agent — the book text never enters the main context.
+- **Phase 1 (parallel — one agent per chapter)** — each worker Reads ONLY its own chapter file and extracts atomic concepts:
+   - Named frameworks (e.g., "The Four Hats", "Thinking Time")
+   - Core principles (e.g., "minimize dumb tax")
+   - Processes/rituals (step-by-step methods)
+   - Mental models (2nd-order consequences, checking assumptions)
+   - Distinctions (operator vs owner, revenue vs profit)
+   - Actionable tools (specific questions, decision frameworks)
+   Each concept becomes one note (~100 words) written via `scripts/lib/note_writer.py` (guarantees the frontmatter + `## Key Insight` + `## Related` structure). Categories are constrained to the Phase-0 enum so they never fragment (`decision-making` vs `decisions`).
+- **Phase 1b (one barrier agent)** — with the global slug list, back-link each note's `## Related` block with same-category / cross-chapter connections.
+
+The workflow returns the per-category breakdown; report total topics extracted and the category counts.
 
 ### Knowledge Path
 ```
