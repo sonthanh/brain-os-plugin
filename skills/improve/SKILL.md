@@ -14,7 +14,7 @@ description: |
 /improve memory              # Triage memory feedback inbox via 5-tier rubric (Phase 0 — Step 0.0/0.5/0.7 only)
 ```
 
-Description hygiene is integrated into the per-skill flow — Phase 1 detects bloated frontmatter as one signal source, Phase 4 generates a "description trim" mutation strategy alongside the other strategies, and the existing semantic-judge gate verifies trigger preservation. There is no separate `/improve descriptions` sub-mode; every per-skill run includes the hygiene check.
+Description hygiene is integrated into the per-skill flow — Phase 1 detects bloated frontmatter, Phase 4 generates a "description trim" variant, the semantic judge verifies trigger preservation. There is no separate `/improve descriptions` sub-mode.
 
 ## Clarifications
 
@@ -27,19 +27,11 @@ Three modes:
 
 ### Signals — what counts as evidence?
 
-Six sources, processed in Phase 1 in this order:
-1. **Outcome logs** (primary) — `corrections=N` and `interrupt="..."` are strongest signals
-2. **Trace JSONL files** — behavioral patterns; supplementary weight
-3. **Grill sessions** — clarifying questions as underspec signals
-4. **Aha moments** — supplementary context, NOT a priority hint
-5. **User corrections via git diff** — substantive content changes only; filter cosmetic diffs
-6. **Frontmatter description bloat** — static check via `scripts/scan-skill-descriptions.py`. Always runs; no outcome data needed.
+Six sources, processed in Phase 1 in this order (full definitions there): **Outcome logs** (primary — `corrections=N` and `interrupt="..."` are strongest), **Trace JSONL** files, **Grill sessions**, **Aha moments**, **User corrections** via git diff, **Frontmatter description bloat**.
 
 ### Auto-apply vs review
 
-**Full auto. No human-in-loop by default.** Safety relies on the Phase 4 eval gate. Manual review mode is NOT supported — the eval gate is the safety net.
-
-**Description trim variants follow the same Phase 4 gate as every other variant.** The semantic-preservation judge verifies trigger routing via the trigger-preservation gate. No separate carve-out — the existing eval gate is the safety net.
+**Full auto. No human-in-loop.** Safety relies on the Phase 4 eval gate. Manual review mode is NOT supported. Description trim variants follow the same Phase 4 gate as every other variant — the semantic-preservation judge verifies routing via the trigger-preservation gate. No separate carve-out.
 
 ### Scope
 
@@ -95,7 +87,7 @@ For each `*.md`: parse `last_validated:` (ISO). If `> EXPIRY_DAYS` days old: fil
 
 ## Phase 1 — Collect signals
 
-When invoked without a skill name: scan all outcome logs, rank by `partial` + `fail` rate, recommend top candidate. Stop and report. **Exclude `auto_improve: false` skills from the candidate list** — they are never auto-patched (eligibility gate below), so ranking them wastes a cron cycle. Also exclude skills with `phase4-blocked-source-repo-inaccessible` in their two most recent consecutive entries (check improve.log, filtered by args=<skill>).
+When invoked without a skill name: scan all outcome logs, rank by `partial` + `fail` rate, recommend top candidate. Stop and report. **Exclude `auto_improve: false` skills from the candidate list** — they are never auto-patched (eligibility gate below), so ranking them wastes a cron cycle. Also exclude skills with `phase4-blocked-source-repo-inaccessible` in their two most recent consecutive entries (check improve.log, filtered by args=<skill>) — but only after re-checking the block is still true: if `test -d {source_repo}/skills/{skill}` succeeds now, the blocked rows are stale (logged from a constrained env) and the skill is eligible again. Without this re-check, social-image-generator (error rate 0.75) stayed orphaned two weeks after the cron moved local (2026-06-21→07-06).
 
 When invoked with a skill name:
 
@@ -167,7 +159,7 @@ Append to `evals/evals.json` in skill's source directory. Don't overwrite existi
 ## Phase 4 — Improve the skill via variant generation
 
 1. **Locate skill source** — read `source_repo` from outcome log. SKILL.md: `{source_repo}/skills/{skill}/SKILL.md`.
-   If the local path does not exist, try GitHub MCP: `mcp__github__get_file_contents` (repo = `source_repo`, path = `skills/{skill}/SKILL.md`). If both fail → log `note=phase4-blocked-source-repo-inaccessible` and exit Phase 4.
+   If the local path does not exist, try GitHub MCP: `mcp__github__get_file_contents` (repo = `source_repo`, path = `skills/{skill}/SKILL.md`). If both fail, don't let the collected signal die: file or update (search open issues first) a GH issue on the configured task repo titled `local /improve {skill} needed — source repo inaccessible`, carrying the Phase 2 patterns + correction counts, then log `note=phase4-blocked-source-repo-inaccessible issue=N` and exit Phase 4.
 2. **Run existing evals** as "before" baseline. Record pass count.
 3. **Git tag** `pre-improve-vN` in source repo.
 4. **Save original SKILL.md** content for revert and diff sizing.

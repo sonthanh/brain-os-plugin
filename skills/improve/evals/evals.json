@@ -651,5 +651,23 @@
       "filtered by args=<skill>"
     ],
     "type": "skill-content-check"
+  },
+  {
+    "name": "phase1-blocked-exclusion-staleness-recheck",
+    "description": "Phase 1 consecutive-blocked exclusion must re-verify the block is still true (test -d the source repo) before excluding — a permanent exclusion orphaned social-image-generator (error rate 0.75) for two weeks after the cron moved to a local env where the repo was accessible (2026-06-21→07-06)",
+    "expected_in_skill": [
+      "re-checking the block is still true",
+      "the blocked rows are stale"
+    ],
+    "type": "skill-content-check"
+  },
+  {
+    "name": "phase4-blocked-files-handoff-issue",
+    "description": "Phase 4 step 1 must hand off collected signal when the source repo is inaccessible — file/update a GH issue carrying the Phase 2 patterns + correction counts instead of just logging and exiting. Prevents the 2026-06-24 loss where patterns=4 corrections=25 died with the run",
+    "expected_in_skill": [
+      "local /improve {skill} needed — source repo inaccessible",
+      "issue=N"
+    ],
+    "type": "skill-content-check"
   }
 ]
