@@ -94,5 +94,35 @@
     "description": "A4 must specify explicit recovery for script execution failure (non-zero exit or corrupt output): revert uncommitted changes and treat as context-constrained skip — result pass, not partial. Prevents the 2026-05-30 Linux stat-mismatch partial.",
     "args": "vault-lint",
     "expect": "revert any uncommitted changes"
+  },
+  {
+    "id": "d2-bare-result-token",
+    "description": "D2 must require the result field to be the bare token pass/partial/fail, with run detail in a trailing note=\"...\" key=value field. Prevents the 2026 Q2 drift where runs wrote 200-1000 char prose narratives into field 7, breaking every field-7 parser.",
+    "args": "vault-lint",
+    "expect": "bare result token"
+  },
+  {
+    "id": "a1-self-referential-sources-excluded",
+    "description": "A1 must exclude daily/organize-reports/ and daily/skill-outcomes/ as link sources — lint artifacts quote broken links verbatim, so scanning them re-finds each run's own prior findings (the recurring 7k+ raw-broken explosions).",
+    "args": "vault-lint",
+    "expect": "self-referential"
+  },
+  {
+    "id": "a1-email-artifact-sources-excluded",
+    "description": "A1 must exclude business/intelligence/emails/ as link sources — auto-generated dated artifacts linking to rotated gmail-triage files, broken by design (~216 stable noise links per run before encoding).",
+    "args": "vault-lint",
+    "expect": "applied here to files as link sources"
+  },
+  {
+    "id": "a1-url-pseudo-links-excluded",
+    "description": "A1 must exclude [[https://...]] URL pseudo-links — URLs in wiki-link syntax are not file references and can never resolve.",
+    "args": "vault-lint",
+    "expect": "URL pseudo-links"
+  },
+  {
+    "id": "a1-code-fence-links-excluded",
+    "description": "A1 must strip fenced code blocks before scanning — wikilinks inside code fences are quoted examples/data, not graph edges. Encodes the code-block-aware resolver that the best local runs already applied ad hoc.",
+    "args": "vault-lint",
+    "expect": "fenced code blocks"
   }
 ]

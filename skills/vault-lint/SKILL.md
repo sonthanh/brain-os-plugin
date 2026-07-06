@@ -46,7 +46,16 @@ If the tag already exists (re-run same day), append `-N` suffix: `pre-vault-lint
 
 ### A1. Broken wiki-links
 
-Scan all `.md` files in the vault for `[[...]]` wiki-links. For each link:
+**Scan exclusions** — apply before link resolution. These four categories are structural noise, not graph damage; past runs re-classified them by hand every night:
+
+- **Source files under `daily/organize-reports/` and `daily/skill-outcomes/`** — lint reports and outcome logs quote broken links verbatim, so scanning them is self-referential: each run re-finds its own prior findings (the recurring 7k+ raw-broken explosions).
+- **Source files under `business/intelligence/emails/`** — auto-generated dated artifacts whose links point at rotated/compacted gmail-triage files; broken by design. Same rationale as the A2 orphan exclusion, applied here to files as link sources.
+- **`[[https://...]]` URL pseudo-links** — URLs inside wiki-link syntax are not file references and can never resolve.
+- **Links inside fenced code blocks** — code fences quote link syntax as examples/data, not graph edges. Strip fenced blocks before scanning.
+
+Report excluded-category counts as a single footnote line in `## Broken Links` (`Excluded: N self-referential + N email-artifact + N URL + N code-fence`), not as findings.
+
+Scan all remaining `.md` files in the vault for `[[...]]` wiki-links. For each link:
 1. **Exclude `[[@...]]` Obsidian @-mention links** — links whose target starts with `@` are person-mention syntax, not file references; skip them.
 2. Resolve the target path (Obsidian rules: shortest match, case-insensitive filename, `.md` extension optional)
 3. Check if the target file exists
@@ -208,6 +217,12 @@ Follow `{vault}/skill-spec.md § 11`. Append to `{vault}/daily/skill-outcomes/va
 
 ```
 {date} | vault-lint | lint | ~/work/brain-os-plugin | daily/organize-reports/{date}.md | commit:{hash} | {result}
+```
+
+**The `{result}` field is the bare result token — `pass`, `partial`, or `fail` — and nothing else.** Run detail (phase counts, skips, supersession notes) goes in an optional trailing `note="..."` field, ≤200 chars, per skill-spec § 11 optional key=value fields. The full narrative belongs in the report file, never in the log row — prose inside the result field breaks every field-7 parser (the /improve scanner buckets each unique annotation as a distinct result value).
+
+```
+2026-07-06 | vault-lint | lint | ~/work/brain-os-plugin | daily/organize-reports/2026-07-06.md | commit:abc1234 | pass | note="local full run; A1 89 actionable; supersedes same-day cloud run"
 ```
 
 Result logic:
