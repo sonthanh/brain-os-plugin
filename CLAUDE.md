@@ -23,6 +23,9 @@ Claude Code plugin for managing a second brain powered by Obsidian. 29 skills ac
 # Local install (symlinks skills to ~/.claude/skills/)
 ./install.sh
 
+# Install git hooks (pre-commit eval gap + pre-push CI gate) — once per clone
+./scripts/install-hooks.sh
+
 # Install with force (replace existing symlinks)
 ./install.sh --force
 

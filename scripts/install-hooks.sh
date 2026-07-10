@@ -17,7 +17,8 @@ install_hook() {
 
 echo "Installing git hooks..."
 install_hook "pre-commit" "hooks/pre-commit-eval-gap.sh"
+install_hook "pre-push" "hooks/pre-push-ci-gate.sh"
 
 echo ""
-echo "Done. To bypass the pre-commit check (only for cosmetic changes):"
-echo "  git commit --no-verify"
+echo "Done. To bypass a hook (only for cosmetic changes / emergencies):"
+echo "  git commit --no-verify  /  git push --no-verify"

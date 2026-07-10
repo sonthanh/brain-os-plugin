@@ -1,33 +1,25 @@
 name: Autofix
 
-# Listens for CI / Release failures on main and lets Claude (Opus) diagnose +
-# fix the root cause, gated by an inline run of the same checks CI enforces
-# (shellcheck + tsc --noEmit + bun test). Adapted from the proven ai-brain
-# Gmail Triage autofix (grill: daily/grill-sessions/2026-06-03-gmail-triage-
-# autofix-monitoring.md, Tree C — automerge-on-green, user pick 2026-06-03).
+# Infra-flake auto-rerun for CI / Release failures on main.
 #
-# Failure anchors for THIS repo (why each branch exists):
-#   - run 26893809218 (2026-06-03): real bun-test failure on main  → Claude path
-#   - runs 24579320270, 25458995995: Release push races             → fixed
-#     deterministically in release.yml (rebase-retry); leftovers HOLD here
-#   - run 25131019778: gitleaks finding                             → always HOLD
-#     (a leaked credential needs human rotation, never a silent patch)
-#   - infra class (runner never acquired / VM lost; ai-brain run 29019035006):
-#     nothing in-repo to fix → rerun the failed jobs instead
+# Division of labor (user decision 2026-07-10 — no Claude OAuth token on a
+# public repo, so the fix agent lives on the local machine instead):
+#   - PREVENTION: hooks/pre-push-ci-gate.sh runs the CI-equivalent checks
+#     (shellcheck + tsc + bun test) before any push leaves a dev checkout.
+#   - THIS LISTENER: the one thing only GitHub can do fast — when a run fails
+#     because GitHub infra never ran it (runner never acquired / VM lost;
+#     class first seen ai-brain run 29019035006), rerun the failed jobs
+#     within a minute. Nothing in-repo to fix, so no fixer needed.
+#   - REMEDIATION: brain-ops/scripts/ci-watchdog.ts (launchd, every 30 min,
+#     Mac mini) sees any still-red latest run on main and files an AFK issue
+#     on sonthanh/ai-brain — the existing autonomous loop fixes it locally.
+#   - ALERTING: ci.yml / release.yml already Telegram on their own failures;
+#     this listener only speaks when it reruns (or fails to).
 #
-# Public-repo safety:
-#   - Fires ONLY for push-to-main runs of this repo. pull_request runs —
-#     including fork PRs — never reach this listener, so untrusted CI logs
-#     can never enter the fix agent's prompt.
-#   - First failure only (run_attempt == 1): our own rerun produces attempt 2
-#     events which the job filter drops, so the rerun path is self-limiting.
-#   - Claude gets edit-only tools (no Bash/git/gh); the workflow owns VCS.
-#   - Auto-merge only when the inline gate is green AND the diff stays out of
-#     .github/ (workflow edits can't be pushed with GITHUB_TOKEN and always
-#     need human review). Everything else waits as a PR.
-#   - Open-PR guard + daily cap bound token spend and PR stacking.
-#   - GITHUB_TOKEN pushes don't trigger workflows, so the inline gate IS the
-#     gate (no PR-CI will run on the autofix branch) and merges can't loop.
+# Public-repo safety: fires ONLY for first-attempt failures of push-to-main
+# runs of this repo — fork/PR events never reach it. Our own rerun produces a
+# run_attempt=2 event which the job filter drops, so each failed run gets at
+# most one rerun (no loops, no caps needed).
 
 on:
   workflow_run:
@@ -35,13 +27,10 @@ on:
     types: [completed]
 
 permissions:
-  contents: write
-  pull-requests: write
-  actions: write    # read failed logs + rerun failed jobs + dispatch Release
-  id-token: write   # claude-code-action@v1 mints its GitHub token via OIDC
+  contents: read
+  actions: write    # read failed logs + rerun failed jobs
 
 concurrency:
-  # Never run two autofix attempts at once — they would race on main + stack PRs.
   group: autofix
   cancel-in-progress: false
 
@@ -55,68 +44,25 @@ jobs:
       github.event.workflow_run.head_branch == 'main' &&
       github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
     env:
       REPO: ${{ github.repository }}
       RUN_ID: ${{ github.event.workflow_run.id }}
       RUN_URL: ${{ github.event.workflow_run.html_url }}
       WF_NAME: ${{ github.event.workflow_run.name }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      DAILY_CAP: "3"
-      # Secrets can't appear in step `if:` directly — surface presence via env.
-      HAS_CLAUDE_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
     steps:
-      - name: Checkout main
-        uses: actions/checkout@v4
-        with:
-          ref: main
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.3.11"
-
-      - name: Loop-safety guard (open-PR + per-day cap)
-        id: guard
-        run: |
-          set -euo pipefail
-          TODAY=$(date -u +%Y-%m-%d)
-
-          OPEN=$(gh pr list --repo "$REPO" --state open --json headRefName \
-            --jq '[.[] | select(.headRefName | startswith("autofix/"))] | length')
-          if [ "$OPEN" -gt 0 ]; then
-            echo "proceed=false" >> "$GITHUB_OUTPUT"
-            echo "reason=an autofix PR is already open — not stacking another" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          DAYCOUNT=$(gh pr list --repo "$REPO" --state all --search "created:>=$TODAY" --json headRefName \
-            --jq '[.[] | select(.headRefName | startswith("autofix/"))] | length')
-          if [ "$DAYCOUNT" -ge "$DAILY_CAP" ]; then
-            echo "proceed=false" >> "$GITHUB_OUTPUT"
-            echo "reason=daily autofix cap ($DAILY_CAP) reached" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          echo "proceed=true" >> "$GITHUB_OUTPUT"
-          echo "reason=ok" >> "$GITHUB_OUTPUT"
-
-      - name: Collect failed log
-        id: log
-        if: steps.guard.outputs.proceed == 'true'
+      - name: Detect infra-class failure
+        id: detect
         run: |
           set -euo pipefail
           gh run view "$RUN_ID" --repo "$REPO" --log-failed > /tmp/failed.log 2>&1 || \
             gh run view "$RUN_ID" --repo "$REPO" --log > /tmp/failed.log 2>&1 || true
-          # Trim to the tail so the prompt stays small; the error is at the end.
           tail -c 12000 /tmp/failed.log > /tmp/failed.tail.log || cp /tmp/failed.log /tmp/failed.tail.log
           echo "=== failed log tail ==="; cat /tmp/failed.tail.log
 
-          # Infra-class detection: GitHub sometimes never acquires a runner or
-          # kills the VM — the run shows "failure" but there is nothing in-repo
-          # to fix, and the evidence lives in job ANNOTATIONS, not step logs.
+          # Infra evidence lives in job ANNOTATIONS, not step logs (which are
+          # empty when the runner never ran anything).
           ANNOTATIONS=$(gh api "repos/$REPO/actions/runs/$RUN_ID/jobs" \
             --jq '[.jobs[].id] | @tsv' 2>/dev/null | tr '\t' '\n' | while read -r JOB; do
               gh api "repos/$REPO/check-runs/$JOB/annotations" --jq '.[].message' 2>/dev/null || true
@@ -130,216 +76,25 @@ jobs:
             INFRA=true
           fi
           echo "infra=$INFRA" >> "$GITHUB_OUTPUT"
+          if [ "$INFRA" != true ]; then
+            echo "real failure — ci-watchdog on the Mac mini files the fix issue; nothing to do here"
+          fi
 
-      - name: Rerun failed jobs (infra failure — nothing to fix in-repo)
+      - name: Rerun failed jobs
         id: rerun
-        if: steps.guard.outputs.proceed == 'true' && steps.log.outputs.infra == 'true'
+        if: steps.detect.outputs.infra == 'true'
         run: |
           set -euo pipefail
-          # Self-limiting: the rerun is attempt 2 of the same run, and this
-          # listener only fires on run_attempt == 1 — so each failed run gets
-          # at most ONE rerun from us. If attempt 2 fails again, the failing
-          # workflow's own notify-on-failure step alerts the human.
           gh run rerun "$RUN_ID" --repo "$REPO" --failed
           echo "reran failed jobs of $WF_NAME run $RUN_ID after infra-class failure"
 
-      - name: Claude diagnose + fix (Opus)
-        if: >-
-          steps.guard.outputs.proceed == 'true' &&
-          steps.log.outputs.infra != 'true' &&
-          env.HAS_CLAUDE_TOKEN == 'true'
-        uses: anthropics/claude-code-action@v1
-        with:
-          prompt: |
-            You are the brain-os-plugin auto-fix agent. The "${{ github.event.workflow_run.name }}"
-            workflow (run ${{ github.event.workflow_run.id }}) just FAILED on a
-            push to main. Diagnose and apply the smallest correct fix.
-
-            ## The failure
-            Read /tmp/failed.tail.log — the tail of the failed-step log. The
-            actual error is near the end (look for `##[error]`, a stack trace,
-            or a failing test name).
-
-            ## This repo (read before fixing)
-            Public Claude Code plugin, TypeScript + bun. The failed workflow is:
-            - CI — three jobs: lint (`shellcheck install.sh`), secret-scan
-              (gitleaks), test (`bunx tsc --noEmit` + `bun test`).
-            - Release — bumps .claude-plugin/plugin.json patch version, commits
-              with [skip ci], tags, creates a GitHub release.
-
-            ## Your job — smallest correct fix
-            1. Diagnose the root cause from the log. The breaking commit is
-               usually the most recent one — inspect the files it touched.
-            2. Typecheck / test failures: fix the code at the root cause and
-               add or extend a regression test where the failure class allows.
-               NEVER delete or weaken an assertion just to go green — if a test
-               itself encodes a wrong expectation introduced by the breaking
-               commit, correct the test and say so in the summary.
-            3. Shellcheck failures: fix the shell code properly. A disable
-               directive is only acceptable for a genuine false positive, and
-               must be justified in the summary.
-            4. HOLD — make NO code change and write the single line
-               `HOLD: <one-sentence reason>` to /tmp/autofix-verdict.txt — for
-               any of:
-               - a gitleaks / secret-scan finding (a leaked credential needs
-                 human rotation and history rewrite, never a silent patch)
-               - a transient git push race, network error, or API rate-limit
-               - a fix that would require editing anything under .github/
-                 (workflow changes can't be pushed by this bot and always need
-                 human review)
-               - any fix you are NOT confident is safe and correct
-
-            ## Hard rules
-            - Edit files ONLY. Do NOT run git, gh, or any push/commit/merge —
-              the workflow handles version control and the test gate after you.
-            - Keep the diff minimal and scoped to the failing class.
-            - Write a one-line summary of your change to /tmp/autofix-summary.txt
-              (e.g. `fix off-by-one in build-stories-tree sort`).
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          # Opus + edit-only tools (no Bash/gh) so the agent can't touch git.
-          claude_args: "--model opus --allowedTools Read,Write,Edit,Glob,Grep"
-
-      - name: Apply fix — auto-merge on green+confined, else open PR
-        id: apply
-        if: >-
-          steps.guard.outputs.proceed == 'true' &&
-          steps.log.outputs.infra != 'true' &&
-          env.HAS_CLAUDE_TOKEN == 'true' &&
-          success()
-        run: |
-          set -uo pipefail
-
-          # 1) Claude declined to auto-fix -> hold for a human.
-          if [ -f /tmp/autofix-verdict.txt ] && grep -q '^HOLD:' /tmp/autofix-verdict.txt; then
-            REASON=$(sed -n 's/^HOLD:[[:space:]]*//p' /tmp/autofix-verdict.txt | head -1)
-            echo "outcome=held" >> "$GITHUB_OUTPUT"
-            echo "detail=$REASON" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          # 2) No edits produced -> nothing to do.
-          if git diff --quiet; then
-            echo "outcome=nofix" >> "$GITHUB_OUTPUT"
-            echo "detail=Claude produced no code change" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          # Scope check (BEFORE commit, while the working tree is dirty).
-          # The inline gate below runs the same checks as CI, so a green gate
-          # is merge-grade for anything CI covers — EXCEPT .github/, which
-          # GITHUB_TOKEN can't push and which always needs human review.
-          CHANGED=$(git diff --name-only | tr '\n' ' ')
-          OUTOFSCOPE=$(git diff --name-only | grep -E '^\.github/' || true)
-          if [ -z "$OUTOFSCOPE" ]; then CONFINED=true; else CONFINED=false; fi
-
-          SUMMARY=$(head -1 /tmp/autofix-summary.txt 2>/dev/null || echo "auto-fix ${WF_NAME} failure")
-          BRANCH="autofix/run-${RUN_ID}"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git checkout -b "$BRANCH"
-          git add -A
-          git commit -m "autofix(${WF_NAME}): ${SUMMARY}
-
-          Auto-generated fix for failed run ${RUN_URL}.
-          Diagnosed + patched by Claude (Opus)."
-          if ! git push origin "$BRANCH"; then
-            echo "outcome=error" >> "$GITHUB_OUTPUT"
-            echo "detail=could not push autofix branch" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          BODY="Auto-fix for failed **${WF_NAME}** run: ${RUN_URL}
-
-          **Change:** ${SUMMARY}
-          **Files:** ${CHANGED}
-
-          Diagnosed and patched by Claude (Opus) from the failed log. Auto-merges
-          only when the inline CI-equivalent gate (shellcheck + tsc + bun test)
-          passes AND the change stays out of \`.github/\`; otherwise this PR
-          waits for human review."
-          PR_URL=$(gh pr create --repo "$REPO" --base main --head "$BRANCH" \
-            --title "autofix(${WF_NAME}): ${SUMMARY}" --body "$BODY")
-          echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
-
-          # 3) Inline gate — the same checks CI runs (GITHUB_TOKEN pushes don't
-          # trigger PR-CI, so this inline run IS the gate).
-          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg shellcheck > /dev/null
-          if ! { shellcheck install.sh && bun install --frozen-lockfile && bunx tsc --noEmit && bun test; } > /tmp/gate.log 2>&1; then
-            tail -c 4000 /tmp/gate.log
-            echo "outcome=pr-tests-red" >> "$GITHUB_OUTPUT"
-            echo "detail=fix written but the CI-equivalent gate is RED — review needed" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          # 4) Gate green. Auto-merge only if confined (nothing under .github/).
-          if [ "$CONFINED" != true ]; then
-            OOS=$(echo "$OUTOFSCOPE" | tr '\n' ' ')
-            echo "outcome=pr-outofscope" >> "$GITHUB_OUTPUT"
-            echo "detail=gate green but fix touches ${OOS} — review before merge" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          # Mergeability is computed async after create — retry a few times.
-          MERGED=false
-          for attempt in 1 2 3 4; do
-            if gh pr merge "$BRANCH" --repo "$REPO" --squash --delete-branch; then MERGED=true; break; fi
-            echo "merge attempt ${attempt} not ready — retrying"; sleep 5
-          done
-          if [ "$MERGED" != true ]; then
-            echo "outcome=merge-failed" >> "$GITHUB_OUTPUT"
-            echo "detail=gate green + confined but merge failed — merge manually: $PR_URL" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          echo "outcome=merged" >> "$GITHUB_OUTPUT"
-          echo "detail=$SUMMARY" >> "$GITHUB_OUTPUT"
-
-          # 5) A GITHUB_TOKEN merge push does NOT trigger Release — dispatch it
-          # explicitly when the fix touches release-relevant paths, so plugin
-          # users actually receive the fixed version.
-          if echo "$CHANGED" | tr ' ' '\n' | grep -qE '^(skills/|install\.sh$|brain-os\.config\.md$)'; then
-            gh workflow run release.yml --repo "$REPO" || echo "release dispatch failed — run manually"
-          fi
-
-      - name: Compose notification
-        id: msg
-        if: always()
-        env:
-          PROCEED: ${{ steps.guard.outputs.proceed }}
-          GUARD_REASON: ${{ steps.guard.outputs.reason }}
-          INFRA: ${{ steps.log.outputs.infra }}
-          RERUN: ${{ steps.rerun.outcome }}
-          OUTCOME: ${{ steps.apply.outputs.outcome }}
-          DETAIL: ${{ steps.apply.outputs.detail }}
-          PR_URL: ${{ steps.apply.outputs.pr_url }}
-        run: |
-          set -uo pipefail
-          if [ "${PROCEED:-}" != "true" ]; then
-            MSG="🟡 ${WF_NAME} autofix skipped — ${GUARD_REASON:-unknown}. Failed run: ${RUN_URL}"
-          elif [ "${INFRA:-}" = "true" ]; then
-            if [ "${RERUN:-}" = "success" ]; then
-              MSG="♻️ ${WF_NAME} failed on GitHub infra (runner never acquired / VM lost) — reran the failed jobs. Failed run: ${RUN_URL}"
-            else
-              MSG="❌ ${WF_NAME} failed on GitHub infra AND the rerun errored — rerun manually: gh run rerun ${RUN_ID} --failed. Failed run: ${RUN_URL}"
-            fi
-          elif [ "${HAS_CLAUDE_TOKEN:-}" != "true" ]; then
-            MSG="🔑 ${WF_NAME} failed but autofix has no CLAUDE_CODE_OAUTH_TOKEN secret — one-time setup: claude setup-token, then gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo ${REPO}. Failed run: ${RUN_URL}"
-          else
-            case "${OUTCOME:-error}" in
-              merged)        MSG="✅ ${WF_NAME} AUTO-FIXED + merged: ${DETAIL}. PR: ${PR_URL}" ;;
-              merge-failed)  MSG="⚠️ ${WF_NAME} autofix: gate green + confined but merge failed — merge manually: ${PR_URL:-<no PR>}" ;;
-              pr-outofscope) MSG="🔎 ${WF_NAME} autofix: gate green but fix touches .github/ — review before merge: ${PR_URL}. (${DETAIL})" ;;
-              pr-tests-red)  MSG="⚠️ ${WF_NAME} autofix wrote a fix but the gate is RED — review: ${PR_URL:-<no PR>}. Failed run: ${RUN_URL}" ;;
-              held)          MSG="✋ ${WF_NAME} autofix HELD (not safe to auto-fix): ${DETAIL}. Failed run: ${RUN_URL}" ;;
-              nofix)         MSG="❓ ${WF_NAME} autofix produced no change. Needs a human: ${RUN_URL}" ;;
-              *)             MSG="❌ ${WF_NAME} autofix step errored. Check ${RUN_URL} and the autofix run." ;;
-            esac
-          fi
-          echo "text=$MSG" >> "$GITHUB_OUTPUT"
-
-      - name: Notify (Telegram, always)
-        if: always()
+      - name: Notify (Telegram — only when we acted or failed to)
+        if: always() && steps.detect.outputs.infra == 'true'
         uses: sonthanh/brain-ops/actions/telegram-send@v0
         with:
           bot-token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           chat-id: ${{ secrets.TELEGRAM_CHAT_ID }}
-          message: ${{ steps.msg.outputs.text }}
+          message: >-
+            ${{ steps.rerun.outcome == 'success'
+              && format('♻️ {0} failed on GitHub infra (runner never acquired / VM lost) — reran the failed jobs. Failed run: {1}', github.event.workflow_run.name, github.event.workflow_run.html_url)
+              || format('❌ {0} failed on GitHub infra AND the rerun errored — rerun manually: gh run rerun {1} --failed. Failed run: {2}', github.event.workflow_run.name, github.event.workflow_run.id, github.event.workflow_run.html_url) }}
