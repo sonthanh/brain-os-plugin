@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Shellcheck install.sh
-        run: shellcheck install.sh || true
+        run: shellcheck install.sh
 
       - name: Notify on failure
         if: failure()

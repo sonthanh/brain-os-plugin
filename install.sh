@@ -41,7 +41,7 @@ SELECTED_SKILLS=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --plugin-only) PLUGIN_ONLY=true; shift ;;
-    --vault) VAULT_PATH="${2:-}"; [ -n "$VAULT_PATH" ] && shift 2 || { echo "Error: --vault requires a path"; exit 1; } ;;
+    --vault) VAULT_PATH="${2:-}"; if [ -n "$VAULT_PATH" ]; then shift 2; else echo "Error: --vault requires a path"; exit 1; fi ;;
     --uninstall|-u) UNINSTALL=true; shift ;;
     --force|-f) FORCE=true; shift ;;
     --list|-l)

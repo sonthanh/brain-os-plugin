@@ -33,7 +33,7 @@ jobs:
           NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
 
           jq --arg v "$NEW_VERSION" '.version = $v' .claude-plugin/plugin.json > tmp.json && mv tmp.json .claude-plugin/plugin.json
-          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
           echo "Bumped: $CURRENT → $NEW_VERSION"
 
       - name: Commit version bump
@@ -43,6 +43,14 @@ jobs:
           git add .claude-plugin/plugin.json
           # [skip ci] prevents this commit from re-triggering the workflow
           git commit -m "release: v${{ steps.version.outputs.version }} [skip ci]"
+          # Retry with rebase: concurrent sessions push to main mid-release
+          # (failed runs 24579320270, 25458995995 were exactly this race).
+          for attempt in 1 2 3; do
+            if git push; then exit 0; fi
+            echo "push attempt ${attempt} rejected — rebasing on fresh main"
+            git pull --rebase origin main
+            sleep 3
+          done
           git push
 
       - name: Create tag and release
@@ -53,3 +61,11 @@ jobs:
           git tag "$TAG"
           git push origin "$TAG"
           gh release create "$TAG" --generate-notes --title "$TAG"
+
+      - name: Notify on failure
+        if: failure()
+        uses: sonthanh/brain-ops/actions/telegram-send@v0
+        with:
+          bot-token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          chat-id: ${{ secrets.TELEGRAM_CHAT_ID }}
+          message: "Release failed. Check https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
