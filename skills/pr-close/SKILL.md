@@ -1,6 +1,6 @@
 ---
 name: pr-close
-description: "Close or merge a pull request the right way — run the 4-step hygiene sequence in order: reviewer-summary comment → squash-merge (PR title as the commit subject) → delete the remote branch → close linked tracker issues. Use whenever the user closes, merges, wraps up, lands, or finishes a PR, or says things like 'close this PR', 'merge and clean up', 'land this', 'wrap up the PR' — even if they don't spell out all four steps. The order is load-bearing; don't improvise it."
+description: "Close or merge a pull request the right way via a 4-step hygiene sequence whose order is load-bearing. Use when the user closes, merges, wraps up, lands, or finishes a PR — 'close this PR', 'merge and clean up', 'land this', 'wrap up the PR' — even if they don't spell out all four steps."
 ---
 
 # pr-close — Land a PR with full hygiene
