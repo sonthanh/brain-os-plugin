@@ -65,9 +65,9 @@ Glob `~/.claude*/projects/*/memory/feedback_*.md` across all Claude account dirs
 
 5. **Default — none of the above?** → **MEMORY-STAY**. Leave file in place; stamp `last_validated: <today>`.
 
-**Confidence routing:** output `tier: <tier>` + `confidence: high` → encode immediately. OR `tier: ambiguous` → file `type:human-review` issue with a rubric trace + proposal. Treat as ambiguous when two tiers both fit, the rule is too vague, or encoding requires design judgment.
+**Confidence routing:** output `tier: <tier>` + `confidence: high` → encode immediately. OR `tier: ambiguous` → file `type:human-review` issue with a rubric trace + proposal. Treat as ambiguous when two tiers both fit, the rule is too vague, or encoding requires design judgment — exception: open issue reference → skip rubric, classify `memory-stay` directly.
 
-**Encoding execution:** stage the encoding artifact, then Delete the source memory feedback file (`rm <canonical_path>`). Commit with `improve: encoded memory feedback — <slug> → <tier>`. The rationale survives source deletion because the commit body quotes the original rule + Why + How-to-apply.
+**Encoding execution:** Delete the source memory feedback file (`rm <canonical_path>`). Commit with `improve: encoded memory feedback — <slug> → <tier>`. The rationale survives source deletion because the commit body quotes the original rule + Why + How-to-apply.
 
 **Failure handling:** encoding error → leave source file in place; file `type:human-review` issue; continue.
 
