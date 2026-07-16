@@ -55,17 +55,17 @@ Glob `~/.claude*/projects/*/memory/feedback_*.md` across all Claude account dirs
 
 **Walk the rubric per file** (top-to-bottom, first match wins):
 
-1. **Deterministic tool-input/output violation?** → **HOOK** (`PreToolUse`/`PostToolUse`). Write `~/.claude/hooks/<name>.sh` + register in `~/.claude/settings.json`. Compliance: hard.
+1. **Deterministic tool-input/output violation?** → **HOOK** (`PreToolUse`/`PostToolUse`). Write `~/.claude/hooks/<name>.sh` + register in `~/.claude/settings.json`.
 
-2. **Multi-step workflow or behavioral procedure?** → **SKILL** (with evals). Edit `skills/{name}/SKILL.md` + add matching evals. Compliance: encoded steps.
+2. **Multi-step workflow or behavioral procedure?** → **SKILL** (with evals). Edit `skills/{name}/SKILL.md` + add matching evals.
 
-3. **Path-scoped rule (only relevant in certain dirs/file types)?** → **`.claude/rules/<topic>.md`** with `paths:` frontmatter. Compliance: soft.
+3. **Path-scoped rule (only relevant in certain dirs/file types)?** → **`.claude/rules/<topic>.md`** with `paths:` frontmatter.
 
-4. **Cross-cutting global guidance, long-term?** → **CLAUDE.md** (project or user). Compliance: soft.
+4. **Cross-cutting global guidance, long-term?** → **CLAUDE.md** (project or user).
 
 5. **Default — none of the above?** → **MEMORY-STAY**. Leave file in place; stamp `last_validated: <today>`.
 
-**Confidence routing:** output `tier: <tier>` + `confidence: high` → encode immediately. OR `tier: ambiguous` → file `type:human-review` issue with a rubric trace + proposal. Treat as ambiguous when two tiers both fit, the rule is too vague, or encoding requires design judgment — exception: open issue reference → skip rubric, classify `memory-stay` directly.
+**Confidence routing:** output `tier: <tier>` + `confidence: high` → encode immediately. OR `tier: ambiguous` → file `type:human-review` issue with a rubric trace + proposal. Treat as ambiguous when two tiers both fit, the rule is too vague, or encoding requires design judgment — exception: open issue reference → skip rubric, classify `memory-stay` directly (not `ambiguous=N`).
 
 **Encoding execution:** Delete the source memory feedback file (`rm <canonical_path>`). Commit with `improve: encoded memory feedback — <slug> → <tier>`. The rationale survives source deletion because the commit body quotes the original rule + Why + How-to-apply.
 

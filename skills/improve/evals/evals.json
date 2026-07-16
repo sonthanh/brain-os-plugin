@@ -678,5 +678,13 @@
             "open issue",
             "skip rubric"
         ]
+    },
+    {
+        "name": "memory-tracked-not-ambiguous",
+        "description": "Phase 0 exception clause must explicitly state that memory-stayed items (open-issue shortcut) are NOT counted in ambiguous=N — prevents tracked=N and ambiguous=N overlap that produces spurious partials",
+        "type": "skill-content-check",
+        "expected_in_skill": [
+            "not `ambiguous=N`"
+        ]
     }
 ]
